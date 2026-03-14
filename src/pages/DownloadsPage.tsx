@@ -9,7 +9,7 @@ function formatDuration(seconds: number) {
 }
 
 export default function DownloadsPage() {
-  const { downloads } = useMusicStore();
+  const { downloads, startDownload } = useMusicStore();
 
   const completed = downloads.filter(d => d.status === 'completed');
   const active = downloads.filter(d => d.status === 'downloading');
