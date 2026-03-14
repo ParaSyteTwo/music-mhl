@@ -9,7 +9,6 @@ class AudioEngine {
 
   constructor() {
     this.audio = new Audio();
-    this.audio.crossOrigin = 'anonymous';
     this.audio.preload = 'auto';
 
     this.audio.addEventListener('timeupdate', () => {
