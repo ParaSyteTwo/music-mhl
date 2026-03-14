@@ -16,7 +16,7 @@ function formatDuration(seconds: number) {
 export default function TrackDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { searchResults, library, setCurrentTrack, addToLibrary, startDownload } = useMusicStore();
+  const { searchResults, library, playTrack, playTrackWithYouTube, addToLibrary, startDownload } = useMusicStore();
   const [selectedFormat, setSelectedFormat] = useState<AudioFormat>('AUTO');
   const [showFormats, setShowFormats] = useState(false);
 

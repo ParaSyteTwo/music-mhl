@@ -37,7 +37,7 @@ export function TrackRow({ track, index, showIndex = true }: TrackRowProps) {
           </span>
         )}
         <button
-          onClick={(e) => { e.stopPropagation(); isCurrentTrack ? togglePlay() : setCurrentTrack(track); }}
+          onClick={(e) => { e.stopPropagation(); isCurrentTrack ? togglePlay() : playTrack(track); }}
           className={`${showIndex ? 'hidden group-hover:block' : 'block'}`}
         >
           {isCurrentTrack && player.isPlaying ? (
