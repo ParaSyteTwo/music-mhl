@@ -3,26 +3,114 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
+// Updated working instances
 const PIPED_INSTANCES = [
+  'https://api.piped.private.coffee',
   'https://pipedapi.kavin.rocks',
-  'https://pipedapi.adminforge.de',
-  'https://api.piped.yt',
 ];
 
-async function fetchWithFallback(path: string): Promise<any> {
+const INVIDIOUS_INSTANCES = [
+  'https://inv.nadeko.net',
+  'https://invidious.nerdvpn.de',
+  'https://invidious.jing.rocks',
+];
+
+async function pipedSearch(query: string): Promise<any[]> {
   for (const instance of PIPED_INSTANCES) {
     try {
-      const response = await fetch(`${instance}${path}`, {
-        headers: { 'User-Agent': 'MHL/1.0' },
+      const res = await fetch(`${instance}/search?q=${encodeURIComponent(query)}&filter=music_songs`, {
+        signal: AbortSignal.timeout(8000),
       });
-      if (response.ok) {
-        return await response.json();
+      if (res.ok) {
+        const data = await res.json();
+        return (data.items || []).filter((i: any) => i.type === 'stream').slice(0, 10).map((item: any) => ({
+          videoId: item.url?.replace('/watch?v=', '') || '',
+          title: item.title || '',
+          artist: item.uploaderName?.replace(' - Topic', '') || item.uploaderName || '',
+          duration: item.duration || 0,
+          thumbnail: item.thumbnail || '',
+        }));
       }
+      await res.text(); // consume body
     } catch (e) {
-      console.log(`Instance ${instance} failed, trying next...`);
+      console.log(`Piped ${instance} failed: ${e}`);
     }
   }
-  throw new Error('All Piped instances failed');
+  return [];
+}
+
+async function invidiousSearch(query: string): Promise<any[]> {
+  for (const instance of INVIDIOUS_INSTANCES) {
+    try {
+      const res = await fetch(`${instance}/api/v1/search?q=${encodeURIComponent(query)}&type=video&sort_by=relevance`, {
+        signal: AbortSignal.timeout(8000),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return (data || []).slice(0, 10).map((item: any) => ({
+          videoId: item.videoId || '',
+          title: item.title || '',
+          artist: item.author?.replace(' - Topic', '') || item.author || '',
+          duration: item.lengthSeconds || 0,
+          thumbnail: item.videoThumbnails?.[0]?.url || '',
+        }));
+      }
+      await res.text();
+    } catch (e) {
+      console.log(`Invidious ${instance} search failed: ${e}`);
+    }
+  }
+  return [];
+}
+
+async function getStreamUrl(videoId: string): Promise<{ url: string; mimeType: string; bitrate: number; quality: string } | null> {
+  // Try Piped first
+  for (const instance of PIPED_INSTANCES) {
+    try {
+      const res = await fetch(`${instance}/streams/${videoId}`, {
+        signal: AbortSignal.timeout(10000),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const audioStreams = (data.audioStreams || [])
+          .filter((s: any) => s.mimeType?.startsWith('audio/'))
+          .sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0));
+        if (audioStreams.length > 0) {
+          const best = audioStreams[0];
+          return { url: best.url, mimeType: best.mimeType, bitrate: best.bitrate, quality: best.quality };
+        }
+      } else {
+        await res.text();
+      }
+    } catch (e) {
+      console.log(`Piped stream ${instance} failed: ${e}`);
+    }
+  }
+
+  // Fallback: Invidious
+  for (const instance of INVIDIOUS_INSTANCES) {
+    try {
+      const res = await fetch(`${instance}/api/v1/videos/${videoId}`, {
+        signal: AbortSignal.timeout(10000),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const audioStreams = (data.adaptiveFormats || [])
+          .filter((s: any) => s.type?.startsWith('audio/'))
+          .sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0));
+        if (audioStreams.length > 0) {
+          const best = audioStreams[0];
+          return { url: best.url, mimeType: best.type?.split(';')[0], bitrate: best.bitrate, quality: `${best.bitrate}bps` };
+        }
+      } else {
+        await res.text();
+      }
+    } catch (e) {
+      console.log(`Invidious stream ${instance} failed: ${e}`);
+    }
+  }
+
+  return null;
 }
 
 Deno.serve(async (req) => {
@@ -42,18 +130,20 @@ Deno.serve(async (req) => {
       }
 
       const sanitizedQuery = query.trim().slice(0, 200);
-      const data = await fetchWithFallback(`/search?q=${encodeURIComponent(sanitizedQuery)}&filter=music_songs`);
 
-      const results = (data.items || [])
-        .filter((item: any) => item.type === 'stream')
-        .slice(0, 10)
-        .map((item: any) => ({
-          videoId: item.url?.replace('/watch?v=', '') || '',
-          title: item.title || '',
-          artist: item.uploaderName?.replace(' - Topic', '') || item.uploaderName || '',
-          duration: item.duration || 0,
-          thumbnail: item.thumbnail || '',
-        }));
+      // Try Piped, fallback to Invidious
+      let results = await pipedSearch(sanitizedQuery);
+      if (results.length === 0) {
+        console.log('Piped search failed, trying Invidious...');
+        results = await invidiousSearch(sanitizedQuery);
+      }
+
+      if (results.length === 0) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'No results found from any instance' }),
+          { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
 
       return new Response(
         JSON.stringify({ success: true, results }),
@@ -70,39 +160,17 @@ Deno.serve(async (req) => {
       }
 
       const sanitizedId = videoId.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 20);
-      const data = await fetchWithFallback(`/streams/${sanitizedId}`);
+      const stream = await getStreamUrl(sanitizedId);
 
-      // Find best audio stream
-      const audioStreams = (data.audioStreams || [])
-        .filter((s: any) => s.mimeType?.startsWith('audio/'))
-        .sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0));
-
-      const bestStream = audioStreams[0];
-
-      if (!bestStream) {
+      if (!stream) {
         return new Response(
-          JSON.stringify({ success: false, error: 'No audio stream found' }),
-          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          JSON.stringify({ success: false, error: 'No audio stream found from any instance' }),
+          { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
       return new Response(
-        JSON.stringify({
-          success: true,
-          stream: {
-            url: bestStream.url,
-            mimeType: bestStream.mimeType,
-            bitrate: bestStream.bitrate,
-            quality: bestStream.quality,
-            codec: bestStream.codec,
-          },
-          metadata: {
-            title: data.title,
-            artist: data.uploader?.replace(' - Topic', '') || data.uploader,
-            duration: data.duration,
-            thumbnail: data.thumbnailUrl,
-          },
-        }),
+        JSON.stringify({ success: true, stream }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
