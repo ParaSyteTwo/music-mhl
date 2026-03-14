@@ -1,11 +1,8 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useMusicStore } from '@/store/musicStore';
-import { Play, Download, Plus, ArrowLeft, ChevronDown } from 'lucide-react';
-import { motion } from 'framer-motion';
-import { useState } from 'react';
-import { AudioFormat } from '@/types/music';
-
-const formats: AudioFormat[] = ['AUTO', 'MP3', 'AAC', 'FLAC', 'OPUS'];
+import { Play, Download, Plus, ArrowLeft, Check, ListPlus } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useState, useRef, useEffect } from 'react';
 
 function formatDuration(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -16,9 +13,17 @@ function formatDuration(seconds: number) {
 export default function TrackDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { searchResults, library, playTrack, playTrackWithYouTube, addToLibrary, startDownload } = useMusicStore();
-  const [selectedFormat, setSelectedFormat] = useState<AudioFormat>('AUTO');
-  const [showFormats, setShowFormats] = useState(false);
+  const { searchResults, library, playTrack, playTrackWithYouTube, addToLibrary, startDownload, playlists, addToPlaylist } = useMusicStore();
+  const [showPlaylistPicker, setShowPlaylistPicker] = useState(false);
+  const pickerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) setShowPlaylistPicker(false);
+    };
+    if (showPlaylistPicker) document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showPlaylistPicker]);
 
   const allTracks = [...searchResults, ...library];
   const track = allTracks.find(t => t.id === id);
@@ -68,100 +73,106 @@ export default function TrackDetailPage() {
           {/* Metadata */}
           <div className="flex items-center gap-4 text-xs text-muted-foreground timer-font mb-6">
             <span>{formatDuration(track.duration)}</span>
-            {track.bitrate && <><span>·</span><span>{track.bitrate}</span></>}
-            {track.format && <><span>·</span><span>{track.format}</span></>}
-            {track.fileSize && <><span>·</span><span>{track.fileSize}</span></>}
+            <span>·</span>
+            <span>MP3 128kbps</span>
+            {track.preview && <><span>·</span><span className="text-primary">Preview disponible</span></>}
           </div>
 
           {/* Actions */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <button
               onClick={() => playTrackWithYouTube(track)}
               className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
             >
               <Play className="w-4 h-4" />
-              Reproducir
+              Reproducir completo
             </button>
 
-            {/* Download segmented control */}
-            <div className="flex items-center rounded-lg ring-1 ring-inset ring-white/10 overflow-hidden">
+            {track.preview && (
               <button
-                onClick={() => startDownload(track, selectedFormat)}
-                className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium hover:bg-white/5 transition-colors"
+                onClick={() => playTrack(track)}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-lg ring-1 ring-inset ring-white/10 text-sm font-medium hover:bg-white/5 transition-colors"
               >
-                <Download className="w-4 h-4" />
-                Descargar
+                <Play className="w-4 h-4" />
+                Preview 30s
               </button>
-              <div className="w-px h-6 bg-border" />
-              <div className="relative">
-                <button
-                  onClick={() => setShowFormats(!showFormats)}
-                  className="flex items-center gap-1 px-3 py-2.5 text-sm font-mono hover:bg-white/5 transition-colors"
-                >
-                  {selectedFormat}
-                  <ChevronDown className="w-3 h-3" />
-                </button>
-                {showFormats && (
+            )}
+
+            <button
+              onClick={() => startDownload(track, 'MP3')}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg ring-1 ring-inset ring-white/10 text-sm font-medium hover:bg-white/5 transition-colors"
+            >
+              <Download className="w-4 h-4" />
+              Descargar MP3
+            </button>
+
+            {/* Add to library / playlist */}
+            <div className="relative" ref={pickerRef}>
+              <button
+                onClick={() => {
+                  if (playlists.length === 0) {
+                    addToLibrary(track);
+                  } else {
+                    setShowPlaylistPicker(!showPlaylistPicker);
+                  }
+                }}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-lg ring-1 ring-inset ring-white/10 text-sm font-medium hover:bg-white/5 transition-colors"
+              >
+                {isInLibrary ? (
+                  <><Check className="w-4 h-4 text-primary" /> En biblioteca</>
+                ) : playlists.length > 0 ? (
+                  <><ListPlus className="w-4 h-4" /> Añadir a...</>
+                ) : (
+                  <><Plus className="w-4 h-4" /> Añadir a biblioteca</>
+                )}
+              </button>
+              <AnimatePresence>
+                {showPlaylistPicker && (
                   <motion.div
                     initial={{ opacity: 0, y: -5 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="absolute right-0 top-full mt-1 glass-panel rounded-lg py-1 min-w-[100px] z-10"
+                    exit={{ opacity: 0, y: -5 }}
+                    className="absolute left-0 top-full mt-1 glass-panel rounded-lg py-1 min-w-[180px] z-10"
                   >
-                    {formats.map((f) => (
+                    <button
+                      onClick={() => { addToLibrary(track); setShowPlaylistPicker(false); }}
+                      className="w-full text-left px-4 py-2 text-sm hover:bg-white/5 transition-colors flex items-center gap-2"
+                    >
+                      <Plus className="w-3 h-3 text-primary" />
+                      Biblioteca
+                      {isInLibrary && <Check className="w-3 h-3 text-primary ml-auto" />}
+                    </button>
+                    <div className="h-px bg-border my-1" />
+                    {playlists.map((pl) => (
                       <button
-                        key={f}
-                        onClick={() => { setSelectedFormat(f); setShowFormats(false); }}
-                        className={`w-full text-left px-4 py-2 text-sm font-mono hover:bg-white/5 transition-colors ${
-                          selectedFormat === f ? 'text-primary' : 'text-foreground'
-                        }`}
+                        key={pl.id}
+                        onClick={() => { addToPlaylist(pl.id, track); setShowPlaylistPicker(false); }}
+                        className="w-full text-left px-4 py-2 text-sm hover:bg-white/5 transition-colors truncate"
                       >
-                        {f}
+                        {pl.name}
                       </button>
                     ))}
                   </motion.div>
                 )}
-              </div>
+              </AnimatePresence>
             </div>
-
-            {!isInLibrary && (
-              <button
-                onClick={() => addToLibrary(track)}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-lg ring-1 ring-inset ring-white/10 text-sm font-medium hover:bg-white/5 transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-                Añadir a biblioteca
-              </button>
-            )}
           </div>
         </div>
       </motion.div>
 
-      {/* Lyrics split view */}
-      {(track.lyrics || track.translatedLyrics) && (
+      {/* Lyrics */}
+      {track.lyrics && (
         <motion.section
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2, duration: 0.4 }}
         >
           <h2 className="text-xs font-mono uppercase tracking-widest text-muted-foreground mb-6">Letras</h2>
-          <div className="grid grid-cols-2 gap-8 glass-panel rounded-lg p-8">
-            {/* Original */}
-            <div>
-              <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest mb-4">Original</p>
-              <div className="space-y-2">
-                {(track.lyrics || '').split('\n').map((line, i) => (
-                  <p key={i} className="text-sm text-foreground/80 leading-relaxed">{line || '\u00A0'}</p>
-                ))}
-              </div>
-            </div>
-            {/* Translated */}
-            <div>
-              <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest mb-4">Traducción</p>
-              <div className="space-y-2">
-                {(track.translatedLyrics || '').split('\n').map((line, i) => (
-                  <p key={i} className="text-sm text-foreground/60 leading-relaxed">{line || '\u00A0'}</p>
-                ))}
-              </div>
+          <div className="glass-panel rounded-lg p-8 max-w-2xl">
+            <div className="space-y-2">
+              {track.lyrics.split('\n').map((line, i) => (
+                <p key={i} className="text-sm text-foreground/80 leading-relaxed">{line || '\u00A0'}</p>
+              ))}
             </div>
           </div>
         </motion.section>

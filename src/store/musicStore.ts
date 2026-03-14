@@ -1,8 +1,19 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import { Track, Playlist, Download, AudioFormat, AudioSource } from '@/types/music';
 import { audioEngine } from '@/lib/audioEngine';
 import { searchDeezer, searchYouTube, getYouTubeStream, fetchLyrics } from '@/lib/api/musicApi';
 import { writeID3Tags } from '@/lib/id3Writer';
+
+// ─── Settings ───
+export type FileNameFormat = 'title-artist' | 'artist-title' | 'title';
+export type DownloadQuality = 'auto' | 'high' | 'medium' | 'low';
+export type RepeatMode = 'off' | 'all' | 'one';
+
+export interface AppSettings {
+  downloadQuality: DownloadQuality;
+  fileNameFormat: FileNameFormat;
+}
 
 interface PlayerState {
   currentTrack: Track | null;
@@ -14,6 +25,10 @@ interface PlayerState {
   showLyrics: boolean;
   audioSource: AudioSource;
   error: string | null;
+  queue: Track[];
+  queueIndex: number;
+  shuffle: boolean;
+  repeat: RepeatMode;
 }
 
 interface MusicStore {
@@ -26,6 +41,11 @@ interface MusicStore {
   seekTo: (time: number) => void;
   setProgress: (p: number) => void;
   toggleLyrics: () => void;
+  playQueue: (tracks: Track[], startIndex?: number) => void;
+  skipNext: () => void;
+  skipPrev: () => void;
+  toggleShuffle: () => void;
+  toggleRepeat: () => void;
 
   // Library
   library: Track[];
@@ -35,12 +55,15 @@ interface MusicStore {
   // Playlists
   playlists: Playlist[];
   createPlaylist: (name: string) => void;
+  deletePlaylist: (id: string) => void;
+  renamePlaylist: (id: string, name: string) => void;
   addToPlaylist: (playlistId: string, track: Track) => void;
   removeFromPlaylist: (playlistId: string, trackId: string) => void;
 
   // Downloads
   downloads: Download[];
   startDownload: (track: Track, format: AudioFormat) => void;
+  removeDownload: (id: string) => void;
   updateDownloadProgress: (id: string, progress: number) => void;
 
   // Search
@@ -52,326 +75,443 @@ interface MusicStore {
 
   // Lyrics
   loadLyrics: (track: Track) => Promise<void>;
+
+  // Settings
+  settings: AppSettings;
+  updateSettings: (patch: Partial<AppSettings>) => void;
 }
 
-export const useMusicStore = create<MusicStore>((set, get) => {
-  // Wire up audio engine events
-  audioEngine.onTimeUpdate = (time) => {
-    set((s) => ({ player: { ...s.player, progress: time } }));
-  };
+function getFileName(track: Track, format: FileNameFormat): string {
+  let name = '';
+  switch (format) {
+    case 'artist-title': name = `${track.artist} - ${track.title}`; break;
+    case 'title': name = track.title; break;
+    case 'title-artist':
+    default: name = `${track.title} - ${track.artist}`; break;
+  }
+  return `${name}.mp3`.replace(/[/\\?%*:|"<>]/g, '');
+}
 
-  audioEngine.onEnded = () => {
-    set((s) => ({ player: { ...s.player, isPlaying: false, progress: 0 } }));
-  };
+export const useMusicStore = create<MusicStore>()(
+  persist(
+    (set, get) => {
+      // Wire up audio engine events
+      audioEngine.onTimeUpdate = (time) => {
+        set((s) => ({ player: { ...s.player, progress: time } }));
+      };
 
-  audioEngine.onCanPlay = () => {
-    set((s) => ({
-      player: {
-        ...s.player,
-        isLoading: false,
-        duration: audioEngine.duration || s.player.currentTrack?.duration || 0,
-      },
-    }));
-  };
-
-  audioEngine.onError = (error) => {
-    console.error('Audio error:', error);
-    set((s) => ({ player: { ...s.player, isLoading: false, error, isPlaying: false } }));
-  };
-
-  return {
-    player: {
-      currentTrack: null,
-      isPlaying: false,
-      isLoading: false,
-      volume: 0.8,
-      progress: 0,
-      duration: 0,
-      showLyrics: false,
-      audioSource: 'preview',
-      error: null,
-    },
-
-    // Play track - tries preview first, then YouTube
-    playTrack: async (track) => {
-      set((s) => ({
-        player: {
-          ...s.player,
-          currentTrack: track,
-          isPlaying: false,
-          isLoading: true,
-          progress: 0,
-          duration: track.duration,
-          audioSource: 'preview',
-          error: null,
-        },
-      }));
-
-      if (track.preview) {
-        try {
-          audioEngine.load(track.preview);
-          audioEngine.setVolume(get().player.volume);
-          await audioEngine.play();
-          set((s) => ({ player: { ...s.player, isPlaying: true, isLoading: false } }));
-        } catch (e) {
-          console.error('Preview play failed:', e);
-          set((s) => ({
-            player: { ...s.player, isLoading: false, error: 'Error al reproducir preview' },
-          }));
+      audioEngine.onEnded = () => {
+        const { repeat, queue, queueIndex } = get().player;
+        if (repeat === 'one') {
+          audioEngine.seek(0);
+          audioEngine.play();
+          return;
         }
-      } else {
-        // No preview available, try YouTube
-        await get().playTrackWithYouTube(track);
-      }
+        // Auto-advance queue
+        get().skipNext();
+      };
 
-      // Load lyrics in background
-      get().loadLyrics(track);
-    },
-
-    // Play full song via YouTube/Piped
-    playTrackWithYouTube: async (track) => {
-      set((s) => ({
-        player: {
-          ...s.player,
-          currentTrack: track,
-          isPlaying: false,
-          isLoading: true,
-          progress: 0,
-          duration: track.duration,
-          audioSource: 'youtube',
-          error: null,
-        },
-      }));
-
-      try {
-        // If we already have a youtubeId, use it directly
-        let videoId = track.youtubeId;
-
-        if (!videoId) {
-          // Search YouTube for this track
-          const results = await searchYouTube(`${track.title} ${track.artist}`);
-          if (results.length === 0) {
-            throw new Error('No se encontró en YouTube');
-          }
-          videoId = results[0].videoId;
-        }
-
-        // Get stream URL
-        const streamData = await getYouTubeStream(videoId!);
-        const streamUrl = streamData.stream?.url;
-
-        if (!streamUrl) {
-          throw new Error('No se pudo obtener el stream de audio');
-        }
-
-        audioEngine.load(streamUrl);
-        audioEngine.setVolume(get().player.volume);
-        await audioEngine.play();
+      audioEngine.onCanPlay = () => {
         set((s) => ({
           player: {
             ...s.player,
-            isPlaying: true,
             isLoading: false,
-            currentTrack: { ...track, youtubeId: videoId },
+            duration: audioEngine.duration || s.player.currentTrack?.duration || 0,
           },
         }));
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : 'YouTube playback failed';
-        console.error('YouTube playback error:', msg);
+      };
 
-        // Fallback to preview if available
-        if (track.preview) {
-          audioEngine.load(track.preview);
-          audioEngine.setVolume(get().player.volume);
-          await audioEngine.play();
+      audioEngine.onError = (error) => {
+        console.error('Audio error:', error);
+        set((s) => ({ player: { ...s.player, isLoading: false, error, isPlaying: false } }));
+      };
+
+      return {
+        // ─── Settings ───
+        settings: {
+          downloadQuality: 'auto',
+          fileNameFormat: 'title-artist',
+        },
+        updateSettings: (patch) => set((s) => ({
+          settings: { ...s.settings, ...patch },
+        })),
+
+        // ─── Player ───
+        player: {
+          currentTrack: null,
+          isPlaying: false,
+          isLoading: false,
+          volume: 0.8,
+          progress: 0,
+          duration: 0,
+          showLyrics: false,
+          audioSource: 'preview',
+          error: null,
+          queue: [],
+          queueIndex: -1,
+          shuffle: false,
+          repeat: 'off',
+        },
+
+        playQueue: (tracks, startIndex = 0) => {
+          set((s) => ({
+            player: { ...s.player, queue: tracks, queueIndex: startIndex },
+          }));
+          if (tracks[startIndex]) {
+            get().playTrack(tracks[startIndex]);
+          }
+        },
+
+        skipNext: () => {
+          const { queue, queueIndex, shuffle, repeat } = get().player;
+          if (queue.length === 0) {
+            set((s) => ({ player: { ...s.player, isPlaying: false, progress: 0 } }));
+            return;
+          }
+
+          let nextIndex: number;
+          if (shuffle) {
+            nextIndex = Math.floor(Math.random() * queue.length);
+          } else {
+            nextIndex = queueIndex + 1;
+          }
+
+          if (nextIndex >= queue.length) {
+            if (repeat === 'all') {
+              nextIndex = 0;
+            } else {
+              set((s) => ({ player: { ...s.player, isPlaying: false, progress: 0 } }));
+              return;
+            }
+          }
+
+          set((s) => ({ player: { ...s.player, queueIndex: nextIndex } }));
+          get().playTrack(queue[nextIndex]);
+        },
+
+        skipPrev: () => {
+          const { queue, queueIndex, progress } = get().player;
+          // If more than 3s into the song, restart it
+          if (progress > 3) {
+            audioEngine.seek(0);
+            set((s) => ({ player: { ...s.player, progress: 0 } }));
+            return;
+          }
+          if (queue.length === 0) return;
+          const prevIndex = Math.max(0, queueIndex - 1);
+          set((s) => ({ player: { ...s.player, queueIndex: prevIndex } }));
+          get().playTrack(queue[prevIndex]);
+        },
+
+        toggleShuffle: () => set((s) => ({
+          player: { ...s.player, shuffle: !s.player.shuffle },
+        })),
+
+        toggleRepeat: () => set((s) => {
+          const modes: RepeatMode[] = ['off', 'all', 'one'];
+          const idx = modes.indexOf(s.player.repeat);
+          return { player: { ...s.player, repeat: modes[(idx + 1) % 3] } };
+        }),
+
+        playTrack: async (track) => {
+          // Add to queue if not already there
+          const { queue } = get().player;
+          const trackInQueue = queue.findIndex(t => t.id === track.id);
+          if (trackInQueue === -1 && queue.length === 0) {
+            set((s) => ({ player: { ...s.player, queue: [track], queueIndex: 0 } }));
+          } else if (trackInQueue >= 0) {
+            set((s) => ({ player: { ...s.player, queueIndex: trackInQueue } }));
+          }
+
           set((s) => ({
             player: {
               ...s.player,
-              isPlaying: true,
-              isLoading: false,
+              currentTrack: track,
+              isPlaying: false,
+              isLoading: true,
+              progress: 0,
+              duration: track.duration,
               audioSource: 'preview',
-              error: `YouTube falló, usando preview · ${msg}`,
+              error: null,
             },
           }));
-        } else {
-          set((s) => ({
-            player: { ...s.player, isLoading: false, error: msg },
-          }));
-        }
-      }
 
-      get().loadLyrics(track);
-    },
+          if (track.preview) {
+            try {
+              audioEngine.load(track.preview);
+              audioEngine.setVolume(get().player.volume);
+              await audioEngine.play();
+              set((s) => ({ player: { ...s.player, isPlaying: true, isLoading: false } }));
+            } catch (e) {
+              console.error('Preview play failed:', e);
+              set((s) => ({
+                player: { ...s.player, isLoading: false, error: 'Error al reproducir preview' },
+              }));
+            }
+          } else {
+            await get().playTrackWithYouTube(track);
+          }
 
-    togglePlay: () => {
-      const { isPlaying, currentTrack } = get().player;
-      if (!currentTrack) return;
+          get().loadLyrics(track);
+        },
 
-      if (isPlaying) {
-        audioEngine.pause();
-      } else {
-        audioEngine.play();
-      }
-      set((s) => ({ player: { ...s.player, isPlaying: !isPlaying } }));
-    },
-
-    setVolume: (v) => {
-      audioEngine.setVolume(v);
-      set((s) => ({ player: { ...s.player, volume: v } }));
-    },
-
-    seekTo: (time) => {
-      audioEngine.seek(time);
-      set((s) => ({ player: { ...s.player, progress: time } }));
-    },
-
-    setProgress: (p) => set((s) => ({ player: { ...s.player, progress: p } })),
-
-    toggleLyrics: () => set((s) => ({ player: { ...s.player, showLyrics: !s.player.showLyrics } })),
-
-    // Library
-    library: [],
-    addToLibrary: (track) => set((s) => ({
-      library: s.library.find(t => t.id === track.id)
-        ? s.library
-        : [...s.library, { ...track, isDownloaded: true }],
-    })),
-    removeFromLibrary: (id) => set((s) => ({
-      library: s.library.filter(t => t.id !== id),
-    })),
-
-    // Playlists
-    playlists: [],
-    createPlaylist: (name) => set((s) => ({
-      playlists: [...s.playlists, { id: `p${Date.now()}`, name, tracks: [], createdAt: new Date() }],
-    })),
-    addToPlaylist: (playlistId, track) => set((s) => ({
-      playlists: s.playlists.map(p =>
-        p.id === playlistId && !p.tracks.find(t => t.id === track.id)
-          ? { ...p, tracks: [...p.tracks, track] }
-          : p
-      ),
-    })),
-    removeFromPlaylist: (playlistId, trackId) => set((s) => ({
-      playlists: s.playlists.map(p =>
-        p.id === playlistId ? { ...p, tracks: p.tracks.filter(t => t.id !== trackId) } : p
-      ),
-    })),
-
-    // Downloads
-    downloads: [],
-    startDownload: async (track, format) => {
-      const id = `d${Date.now()}`;
-      set((s) => ({
-        downloads: [...s.downloads, { id, track, format, progress: 0, status: 'downloading' }],
-      }));
-
-      const updateDl = (patch: Partial<import('@/types/music').Download>) =>
-        set((s) => ({
-          downloads: s.downloads.map(d => (d.id === id ? { ...d, ...patch } : d)),
-        }));
-
-      try {
-        // Step 1: Search YouTube for this track (20%)
-        updateDl({ progress: 10 });
-        let videoId = track.youtubeId;
-        if (!videoId) {
-          const results = await searchYouTube(`${track.title} ${track.artist}`);
-          if (!results.length) throw new Error('No se encontró en YouTube');
-          videoId = results[0].videoId;
-        }
-        updateDl({ progress: 30 });
-
-        // Step 2: Get MP3 URL via RapidAPI (60%)
-        const streamData = await getYouTubeStream(videoId!);
-        const mp3Url = streamData.stream?.url;
-        if (!mp3Url) throw new Error('No se pudo obtener el MP3');
-        updateDl({ progress: 70 });
-
-        // Step 3: Fetch MP3 and embed ID3 metadata
-        const fileName = `${track.title} - ${track.artist}.mp3`.replace(/[/\\?%*:|"<>]/g, '');
-        
-        const response = await fetch(mp3Url);
-        if (!response.ok) throw new Error('Error descargando el archivo MP3');
-        const mp3ArrayBuffer = await response.arrayBuffer();
-        updateDl({ progress: 85 });
-
-        // Step 4: Write ID3 tags (title, artist, album, cover art)
-        const taggedBlob = await writeID3Tags(mp3ArrayBuffer, {
-          title: track.title,
-          artist: track.artist,
-          album: track.album,
-          coverUrl: track.cover,
-        });
-        updateDl({ progress: 95 });
-
-        // Step 5: Trigger browser download
-        const blobUrl = URL.createObjectURL(taggedBlob);
-        const a = document.createElement('a');
-        a.href = blobUrl;
-        a.download = fileName;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
-
-        updateDl({ progress: 100, status: 'completed', downloadUrl: mp3Url });
-        get().addToLibrary(track);
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : 'Download failed';
-        console.error('Download error:', msg);
-        updateDl({ status: 'error', error: msg });
-      }
-    },
-    updateDownloadProgress: (id, progress) => set((s) => ({
-      downloads: s.downloads.map(d =>
-        d.id === id ? { ...d, progress, status: progress >= 100 ? 'completed' : 'downloading' } : d
-      ),
-    })),
-
-    // Search
-    searchQuery: '',
-    searchResults: [],
-    isSearching: false,
-    setSearchQuery: (q) => set({ searchQuery: q }),
-
-    performSearch: async (query) => {
-      if (!query.trim()) {
-        set({ searchResults: [], isSearching: false });
-        return;
-      }
-
-      set({ isSearching: true, searchQuery: query });
-
-      try {
-        const tracks = await searchDeezer(query);
-        set({ searchResults: tracks, isSearching: false });
-      } catch (error) {
-        console.error('Search error:', error);
-        set({ isSearching: false });
-      }
-    },
-
-    // Lyrics
-    loadLyrics: async (track) => {
-      try {
-        const result = await fetchLyrics(track.title, track.artist, track.album, track.duration);
-        if (result) {
-          const updatedTrack = {
-            ...track,
-            lyrics: result.lyrics,
-            syncedLyrics: result.syncedLyrics,
-          };
+        playTrackWithYouTube: async (track) => {
           set((s) => ({
             player: {
               ...s.player,
-              currentTrack: s.player.currentTrack?.id === track.id ? updatedTrack : s.player.currentTrack,
+              currentTrack: track,
+              isPlaying: false,
+              isLoading: true,
+              progress: 0,
+              duration: track.duration,
+              audioSource: 'youtube',
+              error: null,
             },
           }));
-        }
-      } catch (e) {
-        console.warn('Failed to load lyrics:', e);
-      }
+
+          try {
+            let videoId = track.youtubeId;
+            if (!videoId) {
+              const results = await searchYouTube(`${track.title} ${track.artist}`);
+              if (results.length === 0) throw new Error('No se encontró en YouTube');
+              videoId = results[0].videoId;
+            }
+
+            const streamData = await getYouTubeStream(videoId!);
+            const streamUrl = streamData.stream?.url;
+            if (!streamUrl) throw new Error('No se pudo obtener el stream de audio');
+
+            audioEngine.load(streamUrl);
+            audioEngine.setVolume(get().player.volume);
+            await audioEngine.play();
+            set((s) => ({
+              player: {
+                ...s.player,
+                isPlaying: true,
+                isLoading: false,
+                currentTrack: { ...track, youtubeId: videoId },
+              },
+            }));
+          } catch (error) {
+            const msg = error instanceof Error ? error.message : 'YouTube playback failed';
+            console.error('YouTube playback error:', msg);
+
+            if (track.preview) {
+              audioEngine.load(track.preview);
+              audioEngine.setVolume(get().player.volume);
+              await audioEngine.play();
+              set((s) => ({
+                player: {
+                  ...s.player,
+                  isPlaying: true,
+                  isLoading: false,
+                  audioSource: 'preview',
+                  error: `YouTube falló, usando preview · ${msg}`,
+                },
+              }));
+            } else {
+              set((s) => ({
+                player: { ...s.player, isLoading: false, error: msg },
+              }));
+            }
+          }
+
+          get().loadLyrics(track);
+        },
+
+        togglePlay: () => {
+          const { isPlaying, currentTrack } = get().player;
+          if (!currentTrack) return;
+          if (isPlaying) { audioEngine.pause(); } else { audioEngine.play(); }
+          set((s) => ({ player: { ...s.player, isPlaying: !isPlaying } }));
+        },
+
+        setVolume: (v) => {
+          audioEngine.setVolume(v);
+          set((s) => ({ player: { ...s.player, volume: v } }));
+        },
+
+        seekTo: (time) => {
+          audioEngine.seek(time);
+          set((s) => ({ player: { ...s.player, progress: time } }));
+        },
+
+        setProgress: (p) => set((s) => ({ player: { ...s.player, progress: p } })),
+        toggleLyrics: () => set((s) => ({ player: { ...s.player, showLyrics: !s.player.showLyrics } })),
+
+        // ─── Library ───
+        library: [],
+        addToLibrary: (track) => set((s) => ({
+          library: s.library.find(t => t.id === track.id)
+            ? s.library
+            : [...s.library, { ...track, isDownloaded: true }],
+        })),
+        removeFromLibrary: (id) => set((s) => ({
+          library: s.library.filter(t => t.id !== id),
+        })),
+
+        // ─── Playlists ───
+        playlists: [],
+        createPlaylist: (name) => set((s) => ({
+          playlists: [...s.playlists, { id: `p${Date.now()}`, name, tracks: [], createdAt: new Date() }],
+        })),
+        deletePlaylist: (id) => set((s) => ({
+          playlists: s.playlists.filter(p => p.id !== id),
+        })),
+        renamePlaylist: (id, name) => set((s) => ({
+          playlists: s.playlists.map(p => p.id === id ? { ...p, name } : p),
+        })),
+        addToPlaylist: (playlistId, track) => set((s) => ({
+          playlists: s.playlists.map(p =>
+            p.id === playlistId && !p.tracks.find(t => t.id === track.id)
+              ? { ...p, tracks: [...p.tracks, track] }
+              : p
+          ),
+        })),
+        removeFromPlaylist: (playlistId, trackId) => set((s) => ({
+          playlists: s.playlists.map(p =>
+            p.id === playlistId ? { ...p, tracks: p.tracks.filter(t => t.id !== trackId) } : p
+          ),
+        })),
+
+        // ─── Downloads ───
+        downloads: [],
+        startDownload: async (track, format) => {
+          const id = `d${Date.now()}`;
+          set((s) => ({
+            downloads: [...s.downloads, { id, track, format, progress: 0, status: 'downloading' }],
+          }));
+
+          const updateDl = (patch: Partial<Download>) =>
+            set((s) => ({
+              downloads: s.downloads.map(d => (d.id === id ? { ...d, ...patch } : d)),
+            }));
+
+          try {
+            updateDl({ progress: 10 });
+            let videoId = track.youtubeId;
+            if (!videoId) {
+              const results = await searchYouTube(`${track.title} ${track.artist}`);
+              if (!results.length) throw new Error('No se encontró en YouTube');
+              videoId = results[0].videoId;
+            }
+            updateDl({ progress: 30 });
+
+            const streamData = await getYouTubeStream(videoId!);
+            const mp3Url = streamData.stream?.url;
+            if (!mp3Url) throw new Error('No se pudo obtener el MP3');
+            updateDl({ progress: 70 });
+
+            const response = await fetch(mp3Url);
+            if (!response.ok) throw new Error('Error descargando el archivo MP3');
+            const mp3ArrayBuffer = await response.arrayBuffer();
+            updateDl({ progress: 85 });
+
+            const taggedBlob = await writeID3Tags(mp3ArrayBuffer, {
+              title: track.title,
+              artist: track.artist,
+              album: track.album,
+              coverUrl: track.cover,
+            });
+            updateDl({ progress: 95 });
+
+            const fileName = getFileName(track, get().settings.fileNameFormat);
+            const blobUrl = URL.createObjectURL(taggedBlob);
+            const a = document.createElement('a');
+            a.href = blobUrl;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+
+            updateDl({ progress: 100, status: 'completed', downloadUrl: mp3Url });
+            get().addToLibrary(track);
+          } catch (error) {
+            const msg = error instanceof Error ? error.message : 'Download failed';
+            console.error('Download error:', msg);
+            updateDl({ status: 'error', error: msg });
+          }
+        },
+        removeDownload: (id) => set((s) => ({
+          downloads: s.downloads.filter(d => d.id !== id),
+        })),
+        updateDownloadProgress: (id, progress) => set((s) => ({
+          downloads: s.downloads.map(d =>
+            d.id === id ? { ...d, progress, status: progress >= 100 ? 'completed' : 'downloading' } : d
+          ),
+        })),
+
+        // ─── Search ───
+        searchQuery: '',
+        searchResults: [],
+        isSearching: false,
+        setSearchQuery: (q) => set({ searchQuery: q }),
+
+        performSearch: async (query) => {
+          if (!query.trim()) {
+            set({ searchResults: [], isSearching: false });
+            return;
+          }
+          set({ isSearching: true, searchQuery: query });
+          try {
+            const tracks = await searchDeezer(query);
+            set({ searchResults: tracks, isSearching: false });
+          } catch (error) {
+            console.error('Search error:', error);
+            set({ isSearching: false });
+          }
+        },
+
+        // ─── Lyrics ───
+        loadLyrics: async (track) => {
+          try {
+            const result = await fetchLyrics(track.title, track.artist, track.album, track.duration);
+            if (result) {
+              const updatedTrack = {
+                ...track,
+                lyrics: result.lyrics,
+                syncedLyrics: result.syncedLyrics,
+              };
+              set((s) => ({
+                player: {
+                  ...s.player,
+                  currentTrack: s.player.currentTrack?.id === track.id ? updatedTrack : s.player.currentTrack,
+                },
+              }));
+            }
+          } catch (e) {
+            console.warn('Failed to load lyrics:', e);
+          }
+        },
+      };
     },
-  };
-});
+    {
+      name: 'mhl-store',
+      partialize: (state) => ({
+        library: state.library,
+        playlists: state.playlists,
+        downloads: state.downloads.filter(d => d.status === 'completed' || d.status === 'error'),
+        settings: state.settings,
+        player: {
+          volume: state.player.volume,
+          shuffle: state.player.shuffle,
+          repeat: state.player.repeat,
+        },
+      }),
+      merge: (persisted: any, current) => ({
+        ...current,
+        library: persisted?.library || [],
+        playlists: persisted?.playlists || [],
+        downloads: persisted?.downloads || [],
+        settings: { ...current.settings, ...(persisted?.settings || {}) },
+        player: {
+          ...current.player,
+          volume: persisted?.player?.volume ?? 0.8,
+          shuffle: persisted?.player?.shuffle ?? false,
+          repeat: persisted?.player?.repeat ?? 'off',
+        },
+      }),
+    }
+  )
+);

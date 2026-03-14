@@ -1,55 +1,94 @@
 import { useMusicStore } from '@/store/musicStore';
 import { TrackRow } from '@/components/music/TrackRow';
-import { Music, User, Disc } from 'lucide-react';
+import { Music, User, Disc, Play, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 
 type LibraryTab = 'songs' | 'artists' | 'albums';
 
 export default function LibraryPage() {
-  const { library } = useMusicStore();
+  const { library, removeFromLibrary, playQueue } = useMusicStore();
   const [tab, setTab] = useState<LibraryTab>('songs');
+  const [artistFilter, setArtistFilter] = useState<string | null>(null);
+  const [albumFilter, setAlbumFilter] = useState<string | null>(null);
 
   const artists = [...new Set(library.map(t => t.artist))];
   const albums = [...new Set(library.map(t => t.album))];
 
-  const tabs: { key: LibraryTab; label: string; icon: typeof Music }[] = [
-    { key: 'songs', label: 'Songs', icon: Music },
-    { key: 'artists', label: 'Artists', icon: User },
-    { key: 'albums', label: 'Albums', icon: Disc },
+  const filteredTracks = artistFilter
+    ? library.filter(t => t.artist === artistFilter)
+    : albumFilter
+    ? library.filter(t => t.album === albumFilter)
+    : library;
+
+  const tabs: { key: LibraryTab; label: string; icon: typeof Music; count: number }[] = [
+    { key: 'songs', label: 'Songs', icon: Music, count: library.length },
+    { key: 'artists', label: 'Artists', icon: User, count: artists.length },
+    { key: 'albums', label: 'Albums', icon: Disc, count: albums.length },
   ];
+
+  const clearFilters = () => { setArtistFilter(null); setAlbumFilter(null); };
 
   return (
     <div className="px-8 py-10">
-      <h1 className="text-2xl font-semibold tracking-tighter mb-6">Library</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-semibold tracking-tighter">Library</h1>
+        {library.length > 0 && tab === 'songs' && (
+          <button
+            onClick={() => playQueue(filteredTracks, 0)}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+          >
+            <Play className="w-3.5 h-3.5" />
+            Reproducir todo
+          </button>
+        )}
+      </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-1 mb-8">
+      <div className="flex items-center gap-1 mb-6">
         {tabs.map((t) => (
           <button
             key={t.key}
-            onClick={() => setTab(t.key)}
+            onClick={() => { setTab(t.key); clearFilters(); }}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               tab === t.key ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-white/5'
             }`}
           >
             <t.icon className="w-3.5 h-3.5" />
             {t.label}
+            <span className="timer-font text-xs ml-1 opacity-60">{t.count}</span>
           </button>
         ))}
       </div>
 
+      {/* Active filter */}
+      {(artistFilter || albumFilter) && (
+        <div className="flex items-center gap-2 mb-4">
+          <span className="text-xs text-muted-foreground">Filtrando:</span>
+          <span className="text-xs font-medium bg-primary/10 text-primary px-2 py-1 rounded">
+            {artistFilter || albumFilter}
+          </span>
+          <button onClick={clearFilters} className="text-xs text-muted-foreground hover:text-foreground">
+            × Limpiar
+          </button>
+        </div>
+      )}
+
       {/* Content */}
       {tab === 'songs' && (
         <div className="space-y-1">
-          {library.length > 0 ? (
-            library.map((track, i) => (
-              <TrackRow key={track.id} track={track} index={i} />
+          {filteredTracks.length > 0 ? (
+            filteredTracks.map((track, i) => (
+              <div key={track.id} className="group relative">
+                <TrackRow track={track} index={i} contextTracks={filteredTracks} />
+              </div>
             ))
           ) : (
             <div className="text-center py-20">
               <Music className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
-              <p className="text-muted-foreground text-sm">Tu biblioteca está vacía</p>
+              <p className="text-muted-foreground text-sm">
+                {library.length === 0 ? 'Tu biblioteca está vacía' : 'Sin resultados'}
+              </p>
               <p className="text-xs text-muted-foreground mt-1">Busca canciones y añádelas a tu colección</p>
             </div>
           )}
@@ -58,42 +97,74 @@ export default function LibraryPage() {
 
       {tab === 'artists' && (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-          {artists.map((artist, i) => (
-            <motion.div
-              key={artist}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.05 }}
-              className="glass-panel rounded-lg p-5 text-center cursor-pointer hover:bg-white/5 transition-colors"
-            >
-              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary/30 to-accent/20 mx-auto mb-3" />
-              <p className="text-sm font-medium">{artist}</p>
-              <p className="text-xs text-muted-foreground timer-font">
-                {library.filter(t => t.artist === artist).length} tracks
-              </p>
-            </motion.div>
-          ))}
+          {artists.length > 0 ? artists.map((artist, i) => {
+            const artistTracks = library.filter(t => t.artist === artist);
+            const cover = artistTracks[0]?.cover;
+            return (
+              <motion.div
+                key={artist}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.05 }}
+                className="glass-panel rounded-lg p-5 text-center cursor-pointer hover:bg-white/5 transition-colors group"
+                onClick={() => { setTab('songs'); setArtistFilter(artist); setAlbumFilter(null); }}
+              >
+                <div className="w-16 h-16 rounded-full mx-auto mb-3 overflow-hidden bg-gradient-to-br from-primary/30 to-accent/20">
+                  {cover && <img src={cover} alt={artist} className="w-full h-full object-cover" />}
+                </div>
+                <p className="text-sm font-medium truncate">{artist}</p>
+                <p className="text-xs text-muted-foreground timer-font">{artistTracks.length} tracks</p>
+                <button
+                  onClick={(e) => { e.stopPropagation(); playQueue(artistTracks, 0); }}
+                  className="mt-2 opacity-0 group-hover:opacity-100 transition-opacity text-xs text-primary"
+                >
+                  ▶ Reproducir
+                </button>
+              </motion.div>
+            );
+          }) : (
+            <div className="col-span-full text-center py-20">
+              <User className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
+              <p className="text-muted-foreground text-sm">Sin artistas</p>
+            </div>
+          )}
         </div>
       )}
 
       {tab === 'albums' && (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-          {albums.map((album, i) => {
-            const albumTrack = library.find(t => t.album === album)!;
+          {albums.length > 0 ? albums.map((album, i) => {
+            const albumTracks = library.filter(t => t.album === album);
+            const cover = albumTracks[0]?.cover;
             return (
               <motion.div
                 key={album}
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.05 }}
-                className="glass-panel rounded-lg p-4 cursor-pointer hover:bg-white/5 transition-colors"
+                className="glass-panel rounded-lg p-4 cursor-pointer hover:bg-white/5 transition-colors group"
+                onClick={() => { setTab('songs'); setAlbumFilter(album); setArtistFilter(null); }}
               >
-                <div className="aspect-square rounded-md bg-gradient-to-br from-primary/20 via-accent/10 to-secondary mb-3" />
+                <div className="aspect-square rounded-md mb-3 overflow-hidden bg-gradient-to-br from-primary/20 via-accent/10 to-secondary">
+                  {cover && <img src={cover} alt={album} className="w-full h-full object-cover" />}
+                </div>
                 <p className="text-sm font-medium truncate">{album}</p>
-                <p className="text-xs text-muted-foreground truncate">{albumTrack.artist}</p>
+                <p className="text-xs text-muted-foreground truncate">{albumTracks[0]?.artist}</p>
+                <p className="text-xs text-muted-foreground timer-font mt-1">{albumTracks.length} tracks</p>
+                <button
+                  onClick={(e) => { e.stopPropagation(); playQueue(albumTracks, 0); }}
+                  className="mt-2 opacity-0 group-hover:opacity-100 transition-opacity text-xs text-primary"
+                >
+                  ▶ Reproducir
+                </button>
               </motion.div>
             );
-          })}
+          }) : (
+            <div className="col-span-full text-center py-20">
+              <Disc className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
+              <p className="text-muted-foreground text-sm">Sin álbumes</p>
+            </div>
+          )}
         </div>
       )}
     </div>

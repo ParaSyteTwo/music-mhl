@@ -1,13 +1,16 @@
-import { Play, Pause, Download, MoreHorizontal } from 'lucide-react';
+import { Play, Pause, Download, MoreHorizontal, Plus, Trash2 } from 'lucide-react';
 import { Track } from '@/types/music';
 import { useMusicStore } from '@/store/musicStore';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
+import { useState, useRef, useEffect } from 'react';
 
 interface TrackRowProps {
   track: Track;
   index: number;
   showIndex?: boolean;
+  playlistId?: string;
+  contextTracks?: Track[];
 }
 
 function formatDuration(seconds: number) {
@@ -16,10 +19,32 @@ function formatDuration(seconds: number) {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-export function TrackRow({ track, index, showIndex = true }: TrackRowProps) {
-  const { player, playTrack, togglePlay, startDownload } = useMusicStore();
+export function TrackRow({ track, index, showIndex = true, playlistId, contextTracks }: TrackRowProps) {
+  const { player, playTrack, togglePlay, startDownload, playlists, addToPlaylist, addToLibrary, removeFromPlaylist, removeFromLibrary, playQueue } = useMusicStore();
   const isCurrentTrack = player.currentTrack?.id === track.id;
   const navigate = useNavigate();
+  const [showMenu, setShowMenu] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setShowMenu(false);
+    };
+    if (showMenu) document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showMenu]);
+
+  const handlePlay = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isCurrentTrack) {
+      togglePlay();
+    } else if (contextTracks && contextTracks.length > 1) {
+      const idx = contextTracks.findIndex(t => t.id === track.id);
+      playQueue(contextTracks, idx >= 0 ? idx : 0);
+    } else {
+      playTrack(track);
+    }
+  };
 
   return (
     <motion.div
@@ -36,10 +61,7 @@ export function TrackRow({ track, index, showIndex = true }: TrackRowProps) {
             {index + 1}
           </span>
         )}
-        <button
-          onClick={(e) => { e.stopPropagation(); isCurrentTrack ? togglePlay() : playTrack(track); }}
-          className={`${showIndex ? 'hidden group-hover:block' : 'block'}`}
-        >
+        <button onClick={handlePlay} className={`${showIndex ? 'hidden group-hover:block' : 'block'}`}>
           {isCurrentTrack && player.isPlaying ? (
             <Pause className="w-4 h-4 text-primary mx-auto" />
           ) : (
@@ -68,9 +90,6 @@ export function TrackRow({ track, index, showIndex = true }: TrackRowProps) {
 
       {/* Metadata */}
       <div className="flex items-center gap-3 shrink-0">
-        {track.bitrate && (
-          <span className="timer-font text-xs text-muted-foreground hidden lg:inline">{track.bitrate}</span>
-        )}
         <span className="timer-font text-xs text-muted-foreground w-10 text-right">{formatDuration(track.duration)}</span>
         <button
           onClick={(e) => { e.stopPropagation(); startDownload(track, 'MP3'); }}
@@ -78,9 +97,58 @@ export function TrackRow({ track, index, showIndex = true }: TrackRowProps) {
         >
           <Download className="w-4 h-4" />
         </button>
-        <button className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground">
-          <MoreHorizontal className="w-4 h-4" />
-        </button>
+        <div className="relative" ref={menuRef}>
+          <button
+            onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); }}
+            className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
+          >
+            <MoreHorizontal className="w-4 h-4" />
+          </button>
+          <AnimatePresence>
+            {showMenu && (
+              <motion.div
+                initial={{ opacity: 0, y: -5, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -5, scale: 0.95 }}
+                className="absolute right-0 top-full mt-1 glass-panel rounded-lg py-1 min-w-[180px] z-50"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button
+                  onClick={() => { addToLibrary(track); setShowMenu(false); }}
+                  className="w-full text-left px-3 py-2 text-xs hover:bg-white/5 transition-colors flex items-center gap-2"
+                >
+                  <Plus className="w-3 h-3" /> Añadir a biblioteca
+                </button>
+                {playlists.length > 0 && (
+                  <>
+                    <div className="h-px bg-border my-1" />
+                    <p className="px-3 py-1 text-[10px] text-muted-foreground uppercase tracking-wider">Añadir a playlist</p>
+                    {playlists.map((pl) => (
+                      <button
+                        key={pl.id}
+                        onClick={() => { addToPlaylist(pl.id, track); setShowMenu(false); }}
+                        className="w-full text-left px-3 py-2 text-xs hover:bg-white/5 transition-colors truncate"
+                      >
+                        {pl.name}
+                      </button>
+                    ))}
+                  </>
+                )}
+                {playlistId && (
+                  <>
+                    <div className="h-px bg-border my-1" />
+                    <button
+                      onClick={() => { removeFromPlaylist(playlistId, track.id); setShowMenu(false); }}
+                      className="w-full text-left px-3 py-2 text-xs hover:bg-white/5 transition-colors flex items-center gap-2 text-destructive"
+                    >
+                      <Trash2 className="w-3 h-3" /> Quitar de playlist
+                    </button>
+                  </>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
     </motion.div>
   );
