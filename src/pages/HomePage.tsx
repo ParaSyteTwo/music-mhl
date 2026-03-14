@@ -1,12 +1,11 @@
 import { useMusicStore } from '@/store/musicStore';
 import { TrackCard } from '@/components/music/TrackCard';
+import { SearchBar } from '@/components/music/SearchBar';
 import { motion } from 'framer-motion';
-import { TrendingUp, Clock, Zap } from 'lucide-react';
+import { TrendingUp, Search, Music2 } from 'lucide-react';
 
 export default function HomePage() {
   const { searchResults, library } = useMusicStore();
-  const recentTracks = searchResults.slice(0, 4);
-  const trendingTracks = searchResults.slice(2, 6);
 
   return (
     <div className="px-8 py-10">
@@ -15,22 +14,23 @@ export default function HomePage() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-        className="mb-12"
+        className="mb-10"
       >
         <h1 className="text-4xl font-semibold tracking-tighter text-balance mb-2">
           Your library, <span className="text-primary">uncompressed.</span>
         </h1>
-        <p className="text-muted-foreground text-sm max-w-lg">
-          Busca, escucha y descarga música en alta calidad. Tu colección organizada como una estación de trabajo profesional.
+        <p className="text-muted-foreground text-sm max-w-lg mb-6">
+          Busca, escucha y descarga música en alta calidad. Powered by Deezer + YouTube + LRCLIB.
         </p>
+        <SearchBar />
       </motion.div>
 
       {/* Quick Stats */}
       <div className="grid grid-cols-3 gap-4 mb-12">
         {[
-          { icon: Zap, label: 'Tracks', value: searchResults.length.toString(), sub: 'disponibles' },
-          { icon: Clock, label: 'Biblioteca', value: library.length.toString(), sub: 'guardadas' },
-          { icon: TrendingUp, label: 'Descargas', value: '2', sub: 'activas' },
+          { icon: Search, label: 'Resultados', value: searchResults.length.toString(), sub: 'encontrados' },
+          { icon: Music2, label: 'Biblioteca', value: library.length.toString(), sub: 'guardadas' },
+          { icon: TrendingUp, label: 'Fuentes', value: '3', sub: 'Deezer · YT · LRCLIB' },
         ].map((stat, i) => (
           <motion.div
             key={stat.label}
@@ -49,25 +49,25 @@ export default function HomePage() {
         ))}
       </div>
 
-      {/* Recently Added */}
-      <section className="mb-12">
-        <h2 className="text-lg font-semibold tracking-tight mb-4">Recientes</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-          {recentTracks.map((track, i) => (
-            <TrackCard key={track.id} track={track} index={i} />
-          ))}
-        </div>
-      </section>
+      {/* Search Results */}
+      {searchResults.length > 0 && (
+        <section className="mb-12">
+          <h2 className="text-lg font-semibold tracking-tight mb-4">Resultados</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+            {searchResults.map((track, i) => (
+              <TrackCard key={track.id} track={track} index={i} />
+            ))}
+          </div>
+        </section>
+      )}
 
-      {/* Trending */}
-      <section className="mb-12">
-        <h2 className="text-lg font-semibold tracking-tight mb-4">Tendencia</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-          {trendingTracks.map((track, i) => (
-            <TrackCard key={track.id} track={track} index={i} />
-          ))}
+      {searchResults.length === 0 && (
+        <div className="text-center py-16">
+          <Music2 className="w-10 h-10 text-muted-foreground/30 mx-auto mb-4" />
+          <p className="text-muted-foreground text-sm">Busca una canción para empezar</p>
+          <p className="text-xs text-muted-foreground mt-1">Prueba con "Daft Punk", "Billie Eilish" o "Bad Bunny"</p>
         </div>
-      </section>
+      )}
     </div>
   );
 }

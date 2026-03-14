@@ -1,29 +1,19 @@
-import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Mic2, Repeat, Shuffle } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Mic2, Repeat, Shuffle, Loader2, Youtube, Radio } from 'lucide-react';
 import { useMusicStore } from '@/store/musicStore';
-import { motion, AnimatePresence } from 'framer-motion';
-import { useEffect, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { useState } from 'react';
 
 function formatTime(seconds: number): string {
+  if (!isFinite(seconds) || seconds < 0) return '0:00';
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
 export function BottomPlayer() {
-  const { player, togglePlay, setVolume, setProgress, toggleLyrics } = useMusicStore();
-  const { currentTrack, isPlaying, volume, progress, duration } = player;
-  const intervalRef = useRef<ReturnType<typeof setInterval>>();
+  const { player, togglePlay, setVolume, seekTo, toggleLyrics, playTrackWithYouTube } = useMusicStore();
+  const { currentTrack, isPlaying, isLoading, volume, progress, duration, audioSource, error } = player;
   const [hoverProgress, setHoverProgress] = useState(false);
-
-  // Simulate playback progress
-  useEffect(() => {
-    if (isPlaying && currentTrack) {
-      intervalRef.current = setInterval(() => {
-        setProgress(Math.min(progress + 1, duration));
-      }, 1000);
-    }
-    return () => clearInterval(intervalRef.current);
-  }, [isPlaying, progress, duration, currentTrack, setProgress]);
 
   const progressPercent = duration > 0 ? (progress / duration) * 100 : 0;
 
@@ -37,12 +27,12 @@ export function BottomPlayer() {
         onClick={(e) => {
           const rect = e.currentTarget.getBoundingClientRect();
           const x = (e.clientX - rect.left) / rect.width;
-          setProgress(x * duration);
+          seekTo(x * duration);
         }}
       >
         <div
           className="h-full bg-primary transition-all duration-100"
-          style={{ width: `${progressPercent}%` }}
+          style={{ width: `${Math.min(progressPercent, 100)}%` }}
         />
         <AnimatePresence>
           {hoverProgress && (
@@ -51,7 +41,7 @@ export function BottomPlayer() {
               animate={{ scale: 1 }}
               exit={{ scale: 0 }}
               className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-primary"
-              style={{ left: `${progressPercent}%`, marginLeft: -6 }}
+              style={{ left: `${Math.min(progressPercent, 100)}%`, marginLeft: -6 }}
             />
           )}
         </AnimatePresence>
@@ -60,7 +50,7 @@ export function BottomPlayer() {
       {/* Player controls */}
       <div className="flex-1 flex items-center px-4 gap-4">
         {/* Track info */}
-        <div className="flex items-center gap-3 w-[260px] min-w-0">
+        <div className="flex items-center gap-3 w-[280px] min-w-0">
           {currentTrack ? (
             <>
               <div className="w-12 h-12 rounded-md bg-secondary flex items-center justify-center shrink-0 overflow-hidden">
@@ -73,7 +63,29 @@ export function BottomPlayer() {
               <div className="min-w-0">
                 <p className="text-sm font-medium truncate">{currentTrack.title}</p>
                 <p className="text-xs text-muted-foreground truncate">{currentTrack.artist}</p>
+                {/* Source indicator */}
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  {audioSource === 'youtube' ? (
+                    <span className="flex items-center gap-1 text-[10px] text-red-400 font-mono">
+                      <Youtube className="w-2.5 h-2.5" /> YT
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1 text-[10px] text-primary font-mono">
+                      <Radio className="w-2.5 h-2.5" /> Preview
+                    </span>
+                  )}
+                </div>
               </div>
+              {/* YouTube upgrade button */}
+              {audioSource === 'preview' && currentTrack && (
+                <button
+                  onClick={() => playTrackWithYouTube(currentTrack)}
+                  className="shrink-0 text-[10px] font-mono px-2 py-1 rounded bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
+                  title="Reproducir completo via YouTube"
+                >
+                  Full
+                </button>
+              )}
             </>
           ) : (
             <p className="text-sm text-muted-foreground">No track selected</p>
@@ -92,9 +104,11 @@ export function BottomPlayer() {
             <button
               onClick={togglePlay}
               className="w-9 h-9 rounded-full bg-foreground flex items-center justify-center hover:scale-105 transition-transform brand-transition"
-              disabled={!currentTrack}
+              disabled={!currentTrack || isLoading}
             >
-              {isPlaying ? (
+              {isLoading ? (
+                <Loader2 className="w-4 h-4 text-background animate-spin" />
+              ) : isPlaying ? (
                 <Pause className="w-4 h-4 text-background" />
               ) : (
                 <Play className="w-4 h-4 text-background ml-0.5" />
@@ -112,6 +126,10 @@ export function BottomPlayer() {
             <span>/</span>
             <span>{formatTime(duration)}</span>
           </div>
+          {/* Error display */}
+          {error && (
+            <p className="text-[10px] text-destructive/80 font-mono truncate max-w-xs">{error}</p>
+          )}
         </div>
 
         {/* Right controls */}
@@ -128,7 +146,8 @@ export function BottomPlayer() {
           >
             {volume > 0 ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
           </button>
-          <div className="w-24 h-1 bg-muted/30 rounded-full cursor-pointer group relative"
+          <div
+            className="w-24 h-1 bg-muted/30 rounded-full cursor-pointer"
             onClick={(e) => {
               const rect = e.currentTarget.getBoundingClientRect();
               setVolume((e.clientX - rect.left) / rect.width);

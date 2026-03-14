@@ -1,21 +1,28 @@
 import { create } from 'zustand';
-import { Track, Playlist, Download, AudioFormat } from '@/types/music';
+import { Track, Playlist, Download, AudioFormat, AudioSource } from '@/types/music';
+import { audioEngine } from '@/lib/audioEngine';
+import { searchDeezer, searchYouTube, getYouTubeStream, fetchLyrics } from '@/lib/api/musicApi';
 
 interface PlayerState {
   currentTrack: Track | null;
   isPlaying: boolean;
+  isLoading: boolean;
   volume: number;
   progress: number;
   duration: number;
   showLyrics: boolean;
+  audioSource: AudioSource;
+  error: string | null;
 }
 
 interface MusicStore {
   // Player
   player: PlayerState;
-  setCurrentTrack: (track: Track) => void;
+  playTrack: (track: Track) => Promise<void>;
+  playTrackWithYouTube: (track: Track) => Promise<void>;
   togglePlay: () => void;
   setVolume: (v: number) => void;
+  seekTo: (time: number) => void;
   setProgress: (p: number) => void;
   toggleLyrics: () => void;
 
@@ -38,122 +45,291 @@ interface MusicStore {
   // Search
   searchQuery: string;
   searchResults: Track[];
+  isSearching: boolean;
   setSearchQuery: (q: string) => void;
-  setSearchResults: (results: Track[]) => void;
+  performSearch: (query: string) => Promise<void>;
+
+  // Lyrics
+  loadLyrics: (track: Track) => Promise<void>;
 }
 
-// Mock data for demo
-const mockTracks: Track[] = [
-  {
-    id: '1', title: 'Midnight City', artist: 'M83', album: 'Hurry Up, We\'re Dreaming',
-    duration: 243, cover: '', bitrate: '320kbps', format: 'MP3', fileSize: '9.4MB',
-    lyrics: "Waiting in a car\nWaiting for a ride in the dark\nThe city looks so bright from far\nDriving through the city at night\n\nWaiting in a car\nWaiting for a ride in the dark\nThe city looks so bright from far\n\nWaiting in a car\nWaiting for the right time to start",
-    translatedLyrics: "Esperando en un coche\nEsperando un viaje en la oscuridad\nLa ciudad se ve tan brillante desde lejos\nConduciendo por la ciudad de noche\n\nEsperando en un coche\nEsperando un viaje en la oscuridad\nLa ciudad se ve tan brillante desde lejos\n\nEsperando en un coche\nEsperando el momento adecuado para empezar",
-  },
-  {
-    id: '2', title: 'Intro', artist: 'The xx', album: 'xx',
-    duration: 127, cover: '', bitrate: '320kbps', format: 'FLAC', fileSize: '24.1MB',
-    lyrics: "(Instrumental)", translatedLyrics: "(Instrumental)",
-  },
-  {
-    id: '3', title: 'Breathe', artist: 'Télépopmusik', album: 'Genetic World',
-    duration: 282, cover: '', bitrate: '256kbps', format: 'MP3', fileSize: '8.7MB',
-    lyrics: "Just breathe\nBreathe in the air\nSet your intentions right\nFeel that gentle air\n\nAnother day begins\nAnother chance we find\nJust breathe\nAnd let it go",
-    translatedLyrics: "Solo respira\nRespira el aire\nEstablece tus intenciones\nSiente ese aire suave\n\nOtro día comienza\nOtra oportunidad encontramos\nSolo respira\nY déjalo ir",
-  },
-  {
-    id: '4', title: 'Tadow', artist: 'Masego & FKJ', album: 'Tadow',
-    duration: 305, cover: '', bitrate: '320kbps', format: 'MP3', fileSize: '11.2MB',
-    lyrics: "I saw her and she hit me like Tadow\nAin't nothing new but a new beginning\n\nOh I saw her from the other side\nHad to let her know that I was alright\n\nTadow, ain't nothing but a heartbreak\nTadow, that's what I said when she walked away",
-    translatedLyrics: "La vi y me golpeó como Tadow\nNo hay nada nuevo sino un nuevo comienzo\n\nOh la vi desde el otro lado\nTenía que hacerle saber que estaba bien\n\nTadow, no es más que un desamor\nTadow, eso es lo que dije cuando se fue",
-  },
-  {
-    id: '5', title: 'Resonance', artist: 'HOME', album: 'Odyssey',
-    duration: 213, cover: '', bitrate: '320kbps', format: 'FLAC', fileSize: '32.5MB',
-    lyrics: "(Instrumental - Synthwave)", translatedLyrics: "(Instrumental - Synthwave)",
-  },
-  {
-    id: '6', title: 'Redbone', artist: 'Childish Gambino', album: 'Awaken, My Love!',
-    duration: 327, cover: '', bitrate: '320kbps', format: 'MP3', fileSize: '12.1MB',
-    lyrics: "Daylight\nI wake up feeling like you won't play right\nI used to know but now that shit don't feel right\nIt made me put away my pride\n\nSo long\nYou made a nigga wait for way too long\nYou make it hard for boy like that to go on\nI'm wishing I could make this mine",
-    translatedLyrics: "Luz del día\nMe despierto sintiendo que no jugarás limpio\nSolía saber pero ahora eso no se siente bien\nMe hizo guardar mi orgullo\n\nTanto tiempo\nMe hiciste esperar demasiado\nHaces difícil que un chico como yo continúe\nDesearía poder hacer esto mío",
-  },
-];
+export const useMusicStore = create<MusicStore>((set, get) => {
+  // Wire up audio engine events
+  audioEngine.onTimeUpdate = (time) => {
+    set((s) => ({ player: { ...s.player, progress: time } }));
+  };
 
-export const useMusicStore = create<MusicStore>((set, get) => ({
-  player: {
-    currentTrack: null,
-    isPlaying: false,
-    volume: 0.8,
-    progress: 0,
-    duration: 0,
-    showLyrics: false,
-  },
-  setCurrentTrack: (track) => set((s) => ({
-    player: { ...s.player, currentTrack: track, isPlaying: true, progress: 0, duration: track.duration }
-  })),
-  togglePlay: () => set((s) => ({
-    player: { ...s.player, isPlaying: !s.player.isPlaying }
-  })),
-  setVolume: (v) => set((s) => ({ player: { ...s.player, volume: v } })),
-  setProgress: (p) => set((s) => ({ player: { ...s.player, progress: p } })),
-  toggleLyrics: () => set((s) => ({ player: { ...s.player, showLyrics: !s.player.showLyrics } })),
+  audioEngine.onEnded = () => {
+    set((s) => ({ player: { ...s.player, isPlaying: false, progress: 0 } }));
+  };
 
-  library: [mockTracks[0], mockTracks[3]],
-  addToLibrary: (track) => set((s) => ({
-    library: s.library.find(t => t.id === track.id) ? s.library : [...s.library, { ...track, isDownloaded: true }]
-  })),
-  removeFromLibrary: (id) => set((s) => ({
-    library: s.library.filter(t => t.id !== id)
-  })),
+  audioEngine.onCanPlay = () => {
+    set((s) => ({
+      player: {
+        ...s.player,
+        isLoading: false,
+        duration: audioEngine.duration || s.player.currentTrack?.duration || 0,
+      },
+    }));
+  };
 
-  playlists: [
-    { id: 'p1', name: 'Late Night Vibes', tracks: [mockTracks[0], mockTracks[2]], createdAt: new Date() },
-    { id: 'p2', name: 'Focus Mode', tracks: [mockTracks[1], mockTracks[4]], createdAt: new Date() },
-  ],
-  createPlaylist: (name) => set((s) => ({
-    playlists: [...s.playlists, { id: `p${Date.now()}`, name, tracks: [], createdAt: new Date() }]
-  })),
-  addToPlaylist: (playlistId, track) => set((s) => ({
-    playlists: s.playlists.map(p =>
-      p.id === playlistId && !p.tracks.find(t => t.id === track.id)
-        ? { ...p, tracks: [...p.tracks, track] }
-        : p
-    )
-  })),
-  removeFromPlaylist: (playlistId, trackId) => set((s) => ({
-    playlists: s.playlists.map(p =>
-      p.id === playlistId ? { ...p, tracks: p.tracks.filter(t => t.id !== trackId) } : p
-    )
-  })),
+  audioEngine.onError = (error) => {
+    console.error('Audio error:', error);
+    set((s) => ({ player: { ...s.player, isLoading: false, error, isPlaying: false } }));
+  };
 
-  downloads: [
-    { id: 'd1', track: mockTracks[0], format: 'MP3', progress: 100, status: 'completed' },
-    { id: 'd2', track: mockTracks[3], format: 'FLAC', progress: 67, status: 'downloading' },
-  ],
-  startDownload: (track, format) => set((s) => ({
-    downloads: [...s.downloads, {
-      id: `d${Date.now()}`, track, format, progress: 0, status: 'downloading'
-    }]
-  })),
-  updateDownloadProgress: (id, progress) => set((s) => ({
-    downloads: s.downloads.map(d =>
-      d.id === id ? { ...d, progress, status: progress >= 100 ? 'completed' : 'downloading' } : d
-    )
-  })),
+  return {
+    player: {
+      currentTrack: null,
+      isPlaying: false,
+      isLoading: false,
+      volume: 0.8,
+      progress: 0,
+      duration: 0,
+      showLyrics: false,
+      audioSource: 'preview',
+      error: null,
+    },
 
-  searchQuery: '',
-  searchResults: mockTracks,
-  setSearchQuery: (q) => {
-    set({ searchQuery: q });
-    const filtered = q
-      ? mockTracks.filter(t =>
-          t.title.toLowerCase().includes(q.toLowerCase()) ||
-          t.artist.toLowerCase().includes(q.toLowerCase()) ||
-          t.album.toLowerCase().includes(q.toLowerCase())
-        )
-      : mockTracks;
-    set({ searchResults: filtered });
-  },
-  setSearchResults: (results) => set({ searchResults: results }),
-}));
+    // Play using Deezer 30s preview
+    playTrack: async (track) => {
+      set((s) => ({
+        player: {
+          ...s.player,
+          currentTrack: track,
+          isPlaying: false,
+          isLoading: true,
+          progress: 0,
+          duration: track.duration,
+          audioSource: 'preview',
+          error: null,
+        },
+      }));
+
+      if (track.preview) {
+        audioEngine.load(track.preview);
+        audioEngine.setVolume(get().player.volume);
+        await audioEngine.play();
+        set((s) => ({ player: { ...s.player, isPlaying: true, isLoading: false } }));
+      } else {
+        // No preview, try YouTube
+        await get().playTrackWithYouTube(track);
+      }
+
+      // Load lyrics in background
+      get().loadLyrics(track);
+    },
+
+    // Play full song via YouTube/Piped
+    playTrackWithYouTube: async (track) => {
+      set((s) => ({
+        player: {
+          ...s.player,
+          currentTrack: track,
+          isPlaying: false,
+          isLoading: true,
+          progress: 0,
+          duration: track.duration,
+          audioSource: 'youtube',
+          error: null,
+        },
+      }));
+
+      try {
+        // If we already have a youtubeId, use it directly
+        let videoId = track.youtubeId;
+
+        if (!videoId) {
+          // Search YouTube for this track
+          const results = await searchYouTube(`${track.title} ${track.artist}`);
+          if (results.length === 0) {
+            throw new Error('No se encontró en YouTube');
+          }
+          videoId = results[0].videoId;
+        }
+
+        // Get stream URL
+        const streamData = await getYouTubeStream(videoId!);
+        const streamUrl = streamData.stream?.url;
+
+        if (!streamUrl) {
+          throw new Error('No se pudo obtener el stream de audio');
+        }
+
+        audioEngine.load(streamUrl);
+        audioEngine.setVolume(get().player.volume);
+        await audioEngine.play();
+        set((s) => ({
+          player: {
+            ...s.player,
+            isPlaying: true,
+            isLoading: false,
+            currentTrack: { ...track, youtubeId: videoId },
+          },
+        }));
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : 'YouTube playback failed';
+        console.error('YouTube playback error:', msg);
+
+        // Fallback to preview if available
+        if (track.preview) {
+          audioEngine.load(track.preview);
+          audioEngine.setVolume(get().player.volume);
+          await audioEngine.play();
+          set((s) => ({
+            player: {
+              ...s.player,
+              isPlaying: true,
+              isLoading: false,
+              audioSource: 'preview',
+              error: `YouTube falló, usando preview · ${msg}`,
+            },
+          }));
+        } else {
+          set((s) => ({
+            player: { ...s.player, isLoading: false, error: msg },
+          }));
+        }
+      }
+
+      get().loadLyrics(track);
+    },
+
+    togglePlay: () => {
+      const { isPlaying, currentTrack } = get().player;
+      if (!currentTrack) return;
+
+      if (isPlaying) {
+        audioEngine.pause();
+      } else {
+        audioEngine.play();
+      }
+      set((s) => ({ player: { ...s.player, isPlaying: !isPlaying } }));
+    },
+
+    setVolume: (v) => {
+      audioEngine.setVolume(v);
+      set((s) => ({ player: { ...s.player, volume: v } }));
+    },
+
+    seekTo: (time) => {
+      audioEngine.seek(time);
+      set((s) => ({ player: { ...s.player, progress: time } }));
+    },
+
+    setProgress: (p) => set((s) => ({ player: { ...s.player, progress: p } })),
+
+    toggleLyrics: () => set((s) => ({ player: { ...s.player, showLyrics: !s.player.showLyrics } })),
+
+    // Library
+    library: [],
+    addToLibrary: (track) => set((s) => ({
+      library: s.library.find(t => t.id === track.id)
+        ? s.library
+        : [...s.library, { ...track, isDownloaded: true }],
+    })),
+    removeFromLibrary: (id) => set((s) => ({
+      library: s.library.filter(t => t.id !== id),
+    })),
+
+    // Playlists
+    playlists: [],
+    createPlaylist: (name) => set((s) => ({
+      playlists: [...s.playlists, { id: `p${Date.now()}`, name, tracks: [], createdAt: new Date() }],
+    })),
+    addToPlaylist: (playlistId, track) => set((s) => ({
+      playlists: s.playlists.map(p =>
+        p.id === playlistId && !p.tracks.find(t => t.id === track.id)
+          ? { ...p, tracks: [...p.tracks, track] }
+          : p
+      ),
+    })),
+    removeFromPlaylist: (playlistId, trackId) => set((s) => ({
+      playlists: s.playlists.map(p =>
+        p.id === playlistId ? { ...p, tracks: p.tracks.filter(t => t.id !== trackId) } : p
+      ),
+    })),
+
+    // Downloads
+    downloads: [],
+    startDownload: (track, format) => {
+      const id = `d${Date.now()}`;
+      set((s) => ({
+        downloads: [...s.downloads, { id, track, format, progress: 0, status: 'downloading' }],
+      }));
+
+      // Simulate download progress
+      let progress = 0;
+      const interval = setInterval(() => {
+        progress += Math.random() * 15 + 5;
+        if (progress >= 100) {
+          progress = 100;
+          clearInterval(interval);
+          set((s) => ({
+            downloads: s.downloads.map(d =>
+              d.id === id ? { ...d, progress: 100, status: 'completed' } : d
+            ),
+          }));
+          // Auto-add to library
+          get().addToLibrary(track);
+        } else {
+          set((s) => ({
+            downloads: s.downloads.map(d =>
+              d.id === id ? { ...d, progress: Math.floor(progress) } : d
+            ),
+          }));
+        }
+      }, 500);
+    },
+    updateDownloadProgress: (id, progress) => set((s) => ({
+      downloads: s.downloads.map(d =>
+        d.id === id ? { ...d, progress, status: progress >= 100 ? 'completed' : 'downloading' } : d
+      ),
+    })),
+
+    // Search
+    searchQuery: '',
+    searchResults: [],
+    isSearching: false,
+    setSearchQuery: (q) => set({ searchQuery: q }),
+
+    performSearch: async (query) => {
+      if (!query.trim()) {
+        set({ searchResults: [], isSearching: false });
+        return;
+      }
+
+      set({ isSearching: true, searchQuery: query });
+
+      try {
+        const tracks = await searchDeezer(query);
+        set({ searchResults: tracks, isSearching: false });
+      } catch (error) {
+        console.error('Search error:', error);
+        set({ isSearching: false });
+      }
+    },
+
+    // Lyrics
+    loadLyrics: async (track) => {
+      try {
+        const result = await fetchLyrics(track.title, track.artist, track.album, track.duration);
+        if (result) {
+          const updatedTrack = {
+            ...track,
+            lyrics: result.lyrics,
+            syncedLyrics: result.syncedLyrics,
+          };
+          set((s) => ({
+            player: {
+              ...s.player,
+              currentTrack: s.player.currentTrack?.id === track.id ? updatedTrack : s.player.currentTrack,
+            },
+          }));
+        }
+      } catch (e) {
+        console.warn('Failed to load lyrics:', e);
+      }
+    },
+  };
+});

@@ -16,7 +16,7 @@ function formatDuration(seconds: number) {
 }
 
 export function TrackCard({ track, index = 0 }: TrackCardProps) {
-  const { setCurrentTrack, addToLibrary, startDownload } = useMusicStore();
+  const { playTrack, addToLibrary, startDownload } = useMusicStore();
   const navigate = useNavigate();
 
   return (
@@ -37,7 +37,7 @@ export function TrackCard({ track, index = 0 }: TrackCardProps) {
         {/* Hover overlay */}
         <div className="absolute inset-0 bg-background/60 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center gap-2">
           <button
-            onClick={(e) => { e.stopPropagation(); setCurrentTrack(track); }}
+            onClick={(e) => { e.stopPropagation(); playTrack(track); }}
             className="w-10 h-10 rounded-full bg-primary flex items-center justify-center hover:scale-110 transition-transform brand-transition"
           >
             <Play className="w-4 h-4 text-primary-foreground ml-0.5" />
