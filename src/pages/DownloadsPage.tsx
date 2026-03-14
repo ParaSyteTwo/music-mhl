@@ -57,6 +57,36 @@ export default function DownloadsPage() {
         </section>
       )}
 
+      {/* Failed */}
+      {failed.length > 0 && (
+        <section className="mb-10">
+          <h2 className="text-xs font-mono uppercase tracking-widest text-muted-foreground mb-4">Fallidas</h2>
+          <div className="space-y-1">
+            {failed.map((dl, i) => (
+              <motion.div
+                key={dl.id}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: i * 0.03 }}
+                className="flex items-center gap-4 px-4 py-3 rounded-lg hover:bg-white/5 transition-colors group"
+              >
+                <XCircle className="w-4 h-4 text-destructive shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{dl.track.title}</p>
+                  <p className="text-xs text-destructive/70">{dl.error || 'Error desconocido'}</p>
+                </div>
+                <button
+                  onClick={() => startDownload(dl.track, dl.format)}
+                  className="text-xs text-primary hover:underline"
+                >
+                  Reintentar
+                </button>
+              </motion.div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* Completed */}
       {completed.length > 0 && (
         <section className="mb-10">
@@ -71,8 +101,12 @@ export default function DownloadsPage() {
                 className="flex items-center gap-4 px-4 py-3 rounded-lg hover:bg-white/5 transition-colors group"
               >
                 <CheckCircle className="w-4 h-4 text-primary shrink-0" />
-                <div className="w-8 h-8 rounded bg-secondary shrink-0">
-                  <div className="w-full h-full bg-gradient-to-br from-primary/20 to-accent/10 rounded" />
+                <div className="w-8 h-8 rounded bg-secondary shrink-0 overflow-hidden">
+                  {dl.track.cover ? (
+                    <img src={dl.track.cover} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-primary/20 to-accent/10 rounded" />
+                  )}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">{dl.track.title}</p>
@@ -80,12 +114,6 @@ export default function DownloadsPage() {
                 </div>
                 <span className="timer-font text-xs text-muted-foreground">{formatDuration(dl.track.duration)}</span>
                 <span className="text-[10px] font-mono text-muted-foreground px-1.5 py-0.5 rounded bg-muted/50">{dl.format}</span>
-                {dl.track.bitrate && (
-                  <span className="timer-font text-xs text-muted-foreground hidden md:inline">{dl.track.bitrate}</span>
-                )}
-                {dl.track.fileSize && (
-                  <span className="timer-font text-xs text-muted-foreground hidden lg:inline">{dl.track.fileSize}</span>
-                )}
               </motion.div>
             ))}
           </div>
