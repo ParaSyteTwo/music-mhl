@@ -288,32 +288,32 @@ export const useMusicStore = create<MusicStore>((set, get) => {
         if (!mp3Url) throw new Error('No se pudo obtener el MP3');
         updateDl({ progress: 70 });
 
-        // Step 3: Trigger browser download
-        const fileName = `${track.artist} - ${track.title}.mp3`.replace(/[/\\?%*:|"<>]/g, '');
+        // Step 3: Fetch MP3 and embed ID3 metadata
+        const fileName = `${track.title} - ${track.artist}.mp3`.replace(/[/\\?%*:|"<>]/g, '');
         
-        // Try fetching as blob for proper download with filename
-        try {
-          const response = await fetch(mp3Url);
-          if (!response.ok) throw new Error('Fetch failed');
-          const blob = await response.blob();
-          const blobUrl = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = blobUrl;
-          a.download = fileName;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
-        } catch {
-          // Fallback: open URL directly (may not set filename)
-          const a = document.createElement('a');
-          a.href = mp3Url;
-          a.download = fileName;
-          a.target = '_blank';
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-        }
+        const response = await fetch(mp3Url);
+        if (!response.ok) throw new Error('Error descargando el archivo MP3');
+        const mp3ArrayBuffer = await response.arrayBuffer();
+        updateDl({ progress: 85 });
+
+        // Step 4: Write ID3 tags (title, artist, album, cover art)
+        const taggedBlob = await writeID3Tags(mp3ArrayBuffer, {
+          title: track.title,
+          artist: track.artist,
+          album: track.album,
+          coverUrl: track.cover,
+        });
+        updateDl({ progress: 95 });
+
+        // Step 5: Trigger browser download
+        const blobUrl = URL.createObjectURL(taggedBlob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
 
         updateDl({ progress: 100, status: 'completed', downloadUrl: mp3Url });
         get().addToLibrary(track);
