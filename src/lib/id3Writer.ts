@@ -1,3 +1,4 @@
+// @ts-ignore - browser-id3-writer types
 import ID3Writer from 'browser-id3-writer';
 
 interface ID3Tags {
