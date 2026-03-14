@@ -1,1 +1,7 @@
 project_id = "jatvpeqxwngfgpqcuhgq"
+
+[functions.yt-stream]
+verify_jwt = false
+
+[functions.deezer-search]
+verify_jwt = false
