@@ -1,170 +1,149 @@
-// v3 - YouTube audio via Piped/Invidious with fallbacks
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const PIPED = [
-  "https://api.piped.private.coffee",
-  "https://pipedapi.kavin.rocks",
-  "https://pipedapi.in.projectsegfau.lt",
-];
-
-const INVIDIOUS = [
-  "https://invidious.private.coffee",
-  "https://yewtu.be",
-  "https://vid.puffyan.us",
-];
-
-async function tryFetch(url: string, timeoutMs = 8000): Promise<Response | null> {
-  try {
-    const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), timeoutMs);
-    const res = await fetch(url, { signal: controller.signal });
-    clearTimeout(id);
-    if (res.ok) return res;
-    await res.text();
-    return null;
-  } catch {
-    return null;
-  }
-}
-
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const json = (body: unknown, status = 200) =>
-    new Response(JSON.stringify(body), {
-      status,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-
   try {
     const body = await req.json();
-    const action = body.action as string;
-    const query = (body.query as string || "").trim().slice(0, 200);
-    const videoId = (body.videoId as string || "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 20);
+    const action = body.action;
+    const query = (body.query || "").trim().slice(0, 200);
+    const videoId = (body.videoId || "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 20);
 
-    // ─── SEARCH ───
+    const PIPED_API = "https://api.piped.private.coffee";
+
     if (action === "search") {
-      if (!query) return json({ error: "query required" }, 400);
-
-      // Try Piped search
-      for (const base of PIPED) {
-        const res = await tryFetch(
-          `${base}/search?q=${encodeURIComponent(query)}&filter=music_songs`
-        );
-        if (res) {
-          const data = await res.json();
-          const items = (data.items || [])
-            .filter((i: any) => i.type === "stream")
-            .slice(0, 10)
-            .map((i: any) => ({
-              videoId: (i.url || "").replace("/watch?v=", ""),
-              title: i.title || "",
-              artist: (i.uploaderName || "").replace(" - Topic", ""),
-              duration: i.duration || 0,
-              thumbnail: i.thumbnail || "",
-            }));
-          if (items.length > 0) {
-            console.log(`Search OK via Piped: ${base}`);
-            return json({ success: true, results: items });
-          }
-        }
-        console.log(`Piped search skip: ${base}`);
+      if (!query) {
+        return new Response(JSON.stringify({ error: "query required" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
 
-      // Fallback: Invidious search
-      for (const base of INVIDIOUS) {
-        const res = await tryFetch(
-          `${base}/api/v1/search?q=${encodeURIComponent(query)}&type=video&sort_by=relevance`
+      console.log("v4 searching:", query);
+
+      const response = await fetch(
+        `${PIPED_API}/search?q=${encodeURIComponent(query)}&filter=music_songs`
+      );
+
+      if (!response.ok) {
+        const text = await response.text();
+        console.error("Piped search failed:", response.status, text);
+
+        // Fallback: try without filter
+        const response2 = await fetch(
+          `${PIPED_API}/search?q=${encodeURIComponent(query)}&filter=videos`
         );
-        if (res) {
-          const data = await res.json();
-          const items = (data || []).slice(0, 10).map((i: any) => ({
-            videoId: i.videoId || "",
+        if (!response2.ok) {
+          const t2 = await response2.text();
+          return new Response(
+            JSON.stringify({ success: false, error: `Piped failed: ${response2.status} ${t2.slice(0, 200)}` }),
+            { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        const data2 = await response2.json();
+        const items2 = (data2.items || [])
+          .filter((i: Record<string, unknown>) => i.type === "stream")
+          .slice(0, 10)
+          .map((i: Record<string, unknown>) => ({
+            videoId: ((i.url as string) || "").replace("/watch?v=", ""),
             title: i.title || "",
-            artist: (i.author || "").replace(" - Topic", ""),
-            duration: i.lengthSeconds || 0,
-            thumbnail: i.videoThumbnails?.[0]?.url || "",
+            artist: ((i.uploaderName as string) || "").replace(" - Topic", ""),
+            duration: i.duration || 0,
+            thumbnail: i.thumbnail || "",
           }));
-          if (items.length > 0) {
-            console.log(`Search OK via Invidious: ${base}`);
-            return json({ success: true, results: items });
-          }
-        }
-        console.log(`Invidious search skip: ${base}`);
+        return new Response(
+          JSON.stringify({ success: true, results: items2 }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
 
-      return json({ success: false, error: "Search failed on all instances" }, 502);
+      const data = await response.json();
+      const items = (data.items || [])
+        .filter((i: Record<string, unknown>) => i.type === "stream")
+        .slice(0, 10)
+        .map((i: Record<string, unknown>) => ({
+          videoId: ((i.url as string) || "").replace("/watch?v=", ""),
+          title: i.title || "",
+          artist: ((i.uploaderName as string) || "").replace(" - Topic", ""),
+          duration: i.duration || 0,
+          thumbnail: i.thumbnail || "",
+        }));
+
+      console.log("v4 search found:", items.length, "items");
+
+      return new Response(
+        JSON.stringify({ success: true, results: items }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
-    // ─── STREAM ───
     if (action === "stream") {
-      if (!videoId) return json({ error: "videoId required" }, 400);
-
-      // Try Piped streams
-      for (const base of PIPED) {
-        const res = await tryFetch(`${base}/streams/${videoId}`, 10000);
-        if (res) {
-          const data = await res.json();
-          const audios = (data.audioStreams || [])
-            .filter((s: any) => s.mimeType?.startsWith("audio/"))
-            .sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0));
-          if (audios.length > 0) {
-            const best = audios[0];
-            console.log(`Stream OK via Piped: ${base}`);
-            return json({
-              success: true,
-              stream: {
-                url: best.url,
-                mimeType: best.mimeType,
-                bitrate: best.bitrate,
-                quality: best.quality,
-              },
-            });
-          }
-        }
-        console.log(`Piped stream skip: ${base}`);
+      if (!videoId) {
+        return new Response(JSON.stringify({ error: "videoId required" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
 
-      // Fallback: Invidious
-      for (const base of INVIDIOUS) {
-        const res = await tryFetch(`${base}/api/v1/videos/${videoId}`, 10000);
-        if (res) {
-          const data = await res.json();
-          const audios = (data.adaptiveFormats || [])
-            .filter((s: any) => s.type?.startsWith("audio/"))
-            .sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0));
-          if (audios.length > 0) {
-            const best = audios[0];
-            console.log(`Stream OK via Invidious: ${base}`);
-            return json({
-              success: true,
-              stream: {
-                url: best.url,
-                mimeType: best.type?.split(";")[0],
-                bitrate: best.bitrate,
-                quality: `${Math.round(best.bitrate / 1000)}kbps`,
-              },
-            });
-          }
-        }
-        console.log(`Invidious stream skip: ${base}`);
+      console.log("v4 getting stream for:", videoId);
+
+      const response = await fetch(`${PIPED_API}/streams/${videoId}`);
+
+      if (!response.ok) {
+        const text = await response.text();
+        return new Response(
+          JSON.stringify({ success: false, error: `Stream fetch failed: ${response.status} ${text.slice(0, 200)}` }),
+          { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
 
-      return json({ success: false, error: "No audio stream found" }, 502);
+      const data = await response.json();
+      const audioStreams = (data.audioStreams || [])
+        .filter((s: Record<string, unknown>) => ((s.mimeType as string) || "").startsWith("audio/"))
+        .sort((a: Record<string, unknown>, b: Record<string, unknown>) =>
+          ((b.bitrate as number) || 0) - ((a.bitrate as number) || 0)
+        );
+
+      if (audioStreams.length === 0) {
+        return new Response(
+          JSON.stringify({ success: false, error: "No audio streams available" }),
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const best = audioStreams[0];
+      console.log("v4 stream found:", best.mimeType, best.bitrate);
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          stream: {
+            url: best.url,
+            mimeType: best.mimeType,
+            bitrate: best.bitrate,
+            quality: best.quality,
+          },
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
-    return json({ error: 'Use action "search" or "stream"' }, 400);
-  } catch (err) {
-    console.error("youtube-audio error:", err);
-    return json(
-      { success: false, error: err instanceof Error ? err.message : "Unknown error" },
-      500
+    return new Response(
+      JSON.stringify({ error: 'Use action "search" or "stream"' }),
+      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  } catch (err: unknown) {
+    console.error("v4 youtube-audio error:", err);
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    return new Response(
+      JSON.stringify({ success: false, error: msg }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
