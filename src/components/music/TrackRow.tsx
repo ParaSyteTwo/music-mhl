@@ -4,7 +4,6 @@ import { useMusicStore } from '@/store/musicStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useState, useRef, useEffect } from 'react';
-import { TrackIdentifier } from './TrackIdentifier';
 
 interface TrackRowProps {
   track: Track;
@@ -92,7 +91,6 @@ export function TrackRow({ track, index, showIndex = true, playlistId, contextTr
       {/* Metadata */}
       <div className="flex items-center gap-3 shrink-0">
         <span className="timer-font text-xs text-muted-foreground w-10 text-right">{formatDuration(track.duration)}</span>
-        {track.isLocal && <TrackIdentifier track={track} />}
         <button
           onClick={(e) => { e.stopPropagation(); startDownload(track, 'MP3'); }}
           className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"

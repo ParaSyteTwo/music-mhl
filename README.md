@@ -1,121 +1,73 @@
-# Music MHL 🎵
+# Welcome to your Lovable project
 
-A modern music streaming application built with React, TypeScript, and Vite. Stream directly from Deezer, YouTube, or import your local music collection.
+## Project info
 
-## Features
+**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
 
-✅ **Background Playback** - MediaSession API for lock screen controls and notifications
-✅ **Home Trending** - Displays trending tracks from Deezer
-✅ **Queue Management** - Full playback queue with next/previous controls
-✅ **Progressive Web App** - Install as a native app on your device
-✅ **Local Music Import** - Import and manage music from your device storage
-✅ **Shazam-like Identification** - Identify local tracks and auto-fetch metadata
-✅ **Mobile-First Design** - Beautiful, responsive interface for all devices
-✅ **Search** - Search tracks across integrated music sources
-✅ **Library** - Save and organize your favorite tracks and playlists
+## How can I edit this code?
 
-## Getting Started
+There are several ways of editing your application.
 
-### Prerequisites
+**Use Lovable**
 
-- Node.js (v16 or higher)
-- npm or yarn
+Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
 
-### Installation
+Changes made via Lovable will be committed automatically to this repo.
+
+**Use your preferred IDE**
+
+If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+
+The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+
+Follow these steps:
 
 ```sh
-# Clone the repository
-git clone https://github.com/ParaSyteTwo/music-mhl.git
+# Step 1: Clone the repository using the project's Git URL.
+git clone <YOUR_GIT_URL>
 
-# Navigate to the project directory
-cd music-mhl
+# Step 2: Navigate to the project directory.
+cd <YOUR_PROJECT_NAME>
 
-# Install dependencies
-npm install
+# Step 3: Install the necessary dependencies.
+npm i
 
-# Start the development server
+# Step 4: Start the development server with auto-reloading and an instant preview.
 npm run dev
 ```
 
-The app will run on `http://localhost:5173` (or another available port)
+**Edit a file directly in GitHub**
 
-## Configuration
+- Navigate to the desired file(s).
+- Click the "Edit" button (pencil icon) at the top right of the file view.
+- Make your changes and commit the changes.
 
-### AudD API Key (For Track Identification)
+**Use GitHub Codespaces**
 
-To use the Shazam-like track identification feature for local music:
+- Navigate to the main page of your repository.
+- Click on the "Code" button (green button) near the top right.
+- Select the "Codespaces" tab.
+- Click on "New codespace" to launch a new Codespace environment.
+- Edit files directly within the Codespace and commit and push your changes once you're done.
 
-1. Create a free account at [AudD.io](https://audd.io/)
-2. Get your API key from your account dashboard
-3. Create a `.env.local` file in the project root:
-   ```
-   VITE_AUDD_API_KEY=your_api_key_here
-   ```
+## What technologies are used for this project?
 
-### Build & Deploy
+This project is built with:
 
-```sh
-# Build for production
-npm run build
+- Vite
+- TypeScript
+- React
+- shadcn-ui
+- Tailwind CSS
 
-# Preview production build locally
-npm run preview
-```
+## How can I deploy this project?
 
-Deploy to [Vercel](https://vercel.com):
-1. Push your code to GitHub
-2. Connect your GitHub repo to Vercel
-3. Vercel will auto-deploy on every push
+Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
 
-## Technologies
+## Can I connect a custom domain to my Lovable project?
 
-- **Frontend Framework**: React 18
-- **Language**: TypeScript
-- **Build Tool**: Vite
-- **State Management**: Zustand
-- **Styling**: Tailwind CSS
-- **Components**: shadcn-ui
-- **Animations**: Framer Motion
-- **Backend**: Supabase
-- **PWA**: vite-plugin-pwa
-- **Audio APIs**: Web Audio API, MediaSession API
-- **Metadata**: music-metadata-browser
+Yes, you can!
 
-## Project Structure
+To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
 
-```
-src/
-├── components/
-│   ├── music/           # Music-specific components
-│   │   ├── TrackRow
-│   │   ├── TrackCard
-│   │   ├── SearchBar
-│   │   ├── LyricsPanel
-│   │   ├── LocalMusicImporter
-│   │   └── TrackIdentifier
-│   ├── layout/          # Layout components
-│   │   ├── AppLayout
-│   │   ├── AppSidebar
-│   │   └── BottomPlayer
-│   └── ui/              # shadcn-ui components
-├── pages/               # Route pages
-├── lib/
-│   ├── audioEngine.ts   # Audio playback engine
-│   ├── api/
-│   │   └── musicApi.ts  # Music data sources (Deezer, YouTube)
-│   └── id3Writer.ts     # ID3 tag writer
-├── store/
-│   └── musicStore.ts    # Zustand state management
-├── types/
-│   └── music.ts         # TypeScript interfaces
-└── hooks/               # Custom React hooks
-```
-
-## Browser Support
-
-- Chrome/Edge 90+
-- Firefox 88+
-- Safari 14+
-- Mobile browsers (iOS Safari, Chrome Android)
-
-Note: MediaSession API requires relatively recent browser versions for full background playback support
+Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)

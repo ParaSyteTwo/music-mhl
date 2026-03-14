@@ -1,14 +1,3 @@
-// Media Session handlers type
-interface MediaSessionHandlers {
-  onPlay?: () => void;
-  onPause?: () => void;
-  onNextTrack?: () => void;
-  onPreviousTrack?: () => void;
-  onSeekTo?: (time: number) => void;
-  onSeekBackward?: (seconds?: number) => void;
-  onSeekForward?: (seconds?: number) => void;
-}
-
 // Singleton audio engine using HTML5 Audio
 class AudioEngine {
   private audio: HTMLAudioElement;
@@ -21,50 +10,13 @@ class AudioEngine {
   private _onPauseControlPressed: (() => void) | null = null;
   private _onNextControlPressed: (() => void) | null = null;
   private _onPrevControlPressed: (() => void) | null = null;
-  private mediaSessionHandlers: MediaSessionHandlers = {};
 
   constructor() {
     this.audio = new Audio();
     this.audio.preload = 'auto';
 
-    // Prevent browser from freezing audio playback in background
-    document.addEventListener('visibilitychange', () => {
-      if (document.hidden) {
-        // App is backgrounded, but HTMLAudioElement continues playing
-      } else {
-        // App is foregrounded
-        if (this.isPlaying && !this.audio.paused) {
-          this.audio.play().catch(() => {
-            // Play might fail on some browsers when returning from background
-          });
-        }
-      }
-    });
-
-    // Sync MediaSession playback state with audio element events
-    this.audio.addEventListener('play', () => {
-      if ('mediaSession' in navigator) {
-        navigator.mediaSession.playbackState = 'playing';
-      }
-    });
-
-    this.audio.addEventListener('pause', () => {
-      if ('mediaSession' in navigator) {
-        navigator.mediaSession.playbackState = 'paused';
-      }
-    });
-
     this.audio.addEventListener('timeupdate', () => {
       this._onTimeUpdate?.(this.audio.currentTime);
-      
-      // Sync with MediaSession API for lock screen progress
-      if ('mediaSession' in navigator && isFinite(this.audio.duration)) {
-        navigator.mediaSession.setPositionState({
-          duration: this.audio.duration,
-          playbackRate: this.audio.playbackRate,
-          position: this.audio.currentTime,
-        });
-      }
     });
 
     this.audio.addEventListener('ended', () => {
@@ -163,26 +115,14 @@ class AudioEngine {
     this._onPrevControlPressed = fn;
   }
 
-  // Set handlers for MediaSession button presses
-  setMediaSessionHandlers(handlers: MediaSessionHandlers) {
-    this.mediaSessionHandlers = handlers;
-  }
-
   // MediaSession API for background playback & lock screen controls
-  updateMediaSession(
-    metadata: {
-      title: string;
-      artist: string;
-      album?: string;
-      artwork?: string;
-    },
-    handlers?: MediaSessionHandlers
-  ) {
+  updateMediaSession(metadata: {
+    title: string;
+    artist: string;
+    album?: string;
+    artwork?: string;
+  }) {
     if (!('mediaSession' in navigator)) return;
-
-    if (handlers) {
-      this.setMediaSessionHandlers(handlers);
-    }
 
     navigator.mediaSession.metadata = new MediaMetadata({
       title: metadata.title,
@@ -201,60 +141,23 @@ class AudioEngine {
 
     navigator.mediaSession.setActionHandler('play', () => {
       this.play();
-      this.mediaSessionHandlers.onPlay?.();
       this._onPlayControlPressed?.();
     });
 
     navigator.mediaSession.setActionHandler('pause', () => {
       this.pause();
-      this.mediaSessionHandlers.onPause?.();
       this._onPauseControlPressed?.();
     });
 
     navigator.mediaSession.setActionHandler('nexttrack', () => {
-      this.mediaSessionHandlers.onNextTrack?.();
       this._onNextControlPressed?.();
     });
 
     navigator.mediaSession.setActionHandler('previoustrack', () => {
-      this.mediaSessionHandlers.onPreviousTrack?.();
       this._onPrevControlPressed?.();
     });
 
-    navigator.mediaSession.setActionHandler('seekto', (event) => {
-      if (event.seekTime !== undefined) {
-        this.seek(event.seekTime);
-        this.mediaSessionHandlers.onSeekTo?.(event.seekTime);
-      }
-    });
-
-    navigator.mediaSession.setActionHandler('seekbackward', (event) => {
-      const skipTime = event.seekOffset || 5; // default 5 seconds
-      this.seek(Math.max(0, this.audio.currentTime - skipTime));
-      this.mediaSessionHandlers.onSeekBackward?.(skipTime);
-    });
-
-    navigator.mediaSession.setActionHandler('seekforward', (event) => {
-      const skipTime = event.seekOffset || 5; // default 5 seconds
-      this.seek(Math.min(this.audio.duration, this.audio.currentTime + skipTime));
-      this.mediaSessionHandlers.onSeekForward?.(skipTime);
-    });
-
     navigator.mediaSession.playbackState = this.isPlaying ? 'playing' : 'paused';
-  }
-
-  clearMediaSession() {
-    if ('mediaSession' in navigator) {
-      navigator.mediaSession.metadata = null;
-      navigator.mediaSession.setActionHandler('play', null);
-      navigator.mediaSession.setActionHandler('pause', null);
-      navigator.mediaSession.setActionHandler('nexttrack', null);
-      navigator.mediaSession.setActionHandler('previoustrack', null);
-      navigator.mediaSession.setActionHandler('seekto', null);
-      navigator.mediaSession.setActionHandler('seekbackward', null);
-      navigator.mediaSession.setActionHandler('seekforward', null);
-    }
-    this.mediaSessionHandlers = {};
   }
 
   setPlaybackState(state: 'playing' | 'paused') {

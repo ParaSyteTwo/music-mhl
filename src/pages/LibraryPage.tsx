@@ -1,11 +1,10 @@
 import { useMusicStore } from '@/store/musicStore';
 import { TrackRow } from '@/components/music/TrackRow';
-import { LocalMusicImporter } from '@/components/music/LocalMusicImporter';
-import { Music, User, Disc, Play, Trash2, HardDrive } from 'lucide-react';
+import { Music, User, Disc, Play, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 
-type LibraryTab = 'songs' | 'artists' | 'albums' | 'local';
+type LibraryTab = 'songs' | 'artists' | 'albums';
 
 export default function LibraryPage() {
   const { library, removeFromLibrary, playQueue } = useMusicStore();
@@ -15,7 +14,6 @@ export default function LibraryPage() {
 
   const artists = [...new Set(library.map(t => t.artist))];
   const albums = [...new Set(library.map(t => t.album))];
-  const localTracks = library.filter(t => t.isLocal);
 
   const filteredTracks = artistFilter
     ? library.filter(t => t.artist === artistFilter)
@@ -27,7 +25,6 @@ export default function LibraryPage() {
     { key: 'songs', label: 'Songs', icon: Music, count: library.length },
     { key: 'artists', label: 'Artists', icon: User, count: artists.length },
     { key: 'albums', label: 'Albums', icon: Disc, count: albums.length },
-    { key: 'local', label: 'Local', icon: HardDrive, count: localTracks.length },
   ];
 
   const clearFilters = () => { setArtistFilter(null); setAlbumFilter(null); };
@@ -168,29 +165,6 @@ export default function LibraryPage() {
               <p className="text-muted-foreground text-sm">Sin álbumes</p>
             </div>
           )}
-        </div>
-      )}
-
-      {tab === 'local' && (
-        <div className="space-y-6">
-          <LocalMusicImporter />
-          <div className="space-y-0.5 sm:space-y-1">
-            {localTracks.length > 0 ? (
-              localTracks.map((track, i) => (
-                <div key={track.id} className="group relative">
-                  <TrackRow track={track} index={i} contextTracks={localTracks} />
-                </div>
-              ))
-            ) : (
-              <div className="text-center py-20">
-                <HardDrive className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
-                <p className="text-muted-foreground text-sm">Sin canciones locales</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Importa archivos de audio desde tu dispositivo
-                </p>
-              </div>
-            )}
-          </div>
         </div>
       )}
     </div>

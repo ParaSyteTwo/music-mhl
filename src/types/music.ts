@@ -17,8 +17,6 @@ export interface Track {
   isDownloaded?: boolean;
   deezerId?: number;
   youtubeId?: string;
-  localFile?: File;        // Archivo local del dispositivo
-  isLocal?: boolean;       // Indica fuente local en lugar de streaming
 }
 
 export interface Playlist {
