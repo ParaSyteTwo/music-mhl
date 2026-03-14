@@ -230,6 +230,66 @@ export const useMusicStore = create<MusicStore>()(
         }),
 
         playTrack: async (track) => {
+          // Handle local files
+          if (track.isLocal && track.url) {
+            const { queue } = get().player;
+            const trackInQueue = queue.findIndex(t => t.id === track.id);
+            if (trackInQueue === -1 && queue.length === 0) {
+              set((s) => ({ player: { ...s.player, queue: [track], queueIndex: 0 } }));
+            } else if (trackInQueue >= 0) {
+              set((s) => ({ player: { ...s.player, queueIndex: trackInQueue } }));
+            }
+
+            set((s) => ({
+              player: {
+                ...s.player,
+                currentTrack: track,
+                isPlaying: false,
+                isLoading: true,
+                progress: 0,
+                duration: track.duration,
+                audioSource: 'preview',
+                error: null,
+              },
+            }));
+
+            try {
+              audioEngine.load(track.url);
+              audioEngine.setVolume(get().player.volume);
+              await audioEngine.play();
+              set((s) => ({ player: { ...s.player, isPlaying: true, isLoading: false } }));
+              audioEngine.setPlaybackState('playing');
+
+              // Update MediaSession with handlers
+              audioEngine.updateMediaSession(
+                {
+                  title: track.title,
+                  artist: track.artist,
+                  album: track.album,
+                  artwork: track.cover,
+                },
+                {
+                  onPlay: () => get().togglePlay(),
+                  onPause: () => get().togglePlay(),
+                  onNextTrack: () => get().skipNext(),
+                  onPreviousTrack: () => get().skipPrev(),
+                  onSeekTo: (time) => {
+                    audioEngine.seek(time);
+                    set((s) => ({ player: { ...s.player, progress: time } }));
+                  },
+                }
+              );
+            } catch (e) {
+              console.error('Local playback failed:', e);
+              set((s) => ({
+                player: { ...s.player, isLoading: false, error: 'Error al reproducir archivo local' },
+              }));
+            }
+
+            get().loadLyrics(track);
+            return;
+          }
+
           // Add to queue if not already there
           const { queue } = get().player;
           const trackInQueue = queue.findIndex(t => t.id === track.id);
@@ -256,15 +316,29 @@ export const useMusicStore = create<MusicStore>()(
             try {
               audioEngine.load(track.preview);
               audioEngine.setVolume(get().player.volume);
-              audioEngine.updateMediaSession({
-                title: track.title,
-                artist: track.artist,
-                album: track.album,
-                artwork: track.cover,
-              });
               await audioEngine.play();
               set((s) => ({ player: { ...s.player, isPlaying: true, isLoading: false } }));
               audioEngine.setPlaybackState('playing');
+              
+              // Update MediaSession with handlers
+              audioEngine.updateMediaSession(
+                {
+                  title: track.title,
+                  artist: track.artist,
+                  album: track.album,
+                  artwork: track.cover,
+                },
+                {
+                  onPlay: () => get().togglePlay(),
+                  onPause: () => get().togglePlay(),
+                  onNextTrack: () => get().skipNext(),
+                  onPreviousTrack: () => get().skipPrev(),
+                  onSeekTo: (time) => {
+                    audioEngine.seek(time);
+                    set((s) => ({ player: { ...s.player, progress: time } }));
+                  },
+                }
+              );
             } catch (e) {
               console.error('Preview play failed:', e);
               set((s) => ({
@@ -306,12 +380,6 @@ export const useMusicStore = create<MusicStore>()(
 
             audioEngine.load(streamUrl);
             audioEngine.setVolume(get().player.volume);
-            audioEngine.updateMediaSession({
-              title: track.title,
-              artist: track.artist,
-              album: track.album,
-              artwork: track.cover,
-            });
             await audioEngine.play();
             set((s) => ({
               player: {
@@ -322,6 +390,26 @@ export const useMusicStore = create<MusicStore>()(
               },
             }));
             audioEngine.setPlaybackState('playing');
+            
+            // Update MediaSession with handlers
+            audioEngine.updateMediaSession(
+              {
+                title: track.title,
+                artist: track.artist,
+                album: track.album,
+                artwork: track.cover,
+              },
+              {
+                onPlay: () => get().togglePlay(),
+                onPause: () => get().togglePlay(),
+                onNextTrack: () => get().skipNext(),
+                onPreviousTrack: () => get().skipPrev(),
+                onSeekTo: (time) => {
+                  audioEngine.seek(time);
+                  set((s) => ({ player: { ...s.player, progress: time } }));
+                },
+              }
+            );
           } catch (error) {
             const msg = error instanceof Error ? error.message : 'YouTube playback failed';
             console.error('YouTube playback error:', msg);
@@ -373,11 +461,18 @@ export const useMusicStore = create<MusicStore>()(
 
         // ─── Library ───
         library: [],
-        addToLibrary: (track) => set((s) => ({
-          library: s.library.find(t => t.id === track.id)
-            ? s.library
-            : [...s.library, { ...track, isDownloaded: true }],
-        })),
+        addToLibrary: (track) => set((s) => {
+          const existingIndex = s.library.findIndex(t => t.id === track.id);
+          if (existingIndex >= 0) {
+            // Replace existing track
+            const updated = [...s.library];
+            updated[existingIndex] = { ...track, isDownloaded: true };
+            return { library: updated };
+          } else {
+            // Add new track
+            return { library: [...s.library, { ...track, isDownloaded: true }] };
+          }
+        }),
         removeFromLibrary: (id) => set((s) => ({
           library: s.library.filter(t => t.id !== id),
         })),
