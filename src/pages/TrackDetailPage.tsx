@@ -76,7 +76,7 @@ export default function TrackDetailPage() {
           {/* Actions */}
           <div className="flex items-center gap-3">
             <button
-              onClick={() => setCurrentTrack(track)}
+              onClick={() => playTrackWithYouTube(track)}
               className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
             >
               <Play className="w-4 h-4" />
