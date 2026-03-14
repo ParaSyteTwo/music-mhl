@@ -25,7 +25,7 @@ export async function searchDeezer(query: string): Promise<Track[]> {
 
 // ─── YouTube Audio ───
 export async function searchYouTube(query: string) {
-  const { data, error } = await supabase.functions.invoke('youtube-audio', {
+  const { data, error } = await supabase.functions.invoke('yt-stream', {
     body: { action: 'search', query },
   });
 
