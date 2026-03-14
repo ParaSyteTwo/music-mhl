@@ -33,6 +33,8 @@ export interface Download {
   format: AudioFormat;
   progress: number;
   status: 'pending' | 'downloading' | 'completed' | 'error';
+  downloadUrl?: string;
+  error?: string;
 }
 
 export type AudioFormat = 'AUTO' | 'MP3' | 'AAC' | 'FLAC' | 'OPUS';

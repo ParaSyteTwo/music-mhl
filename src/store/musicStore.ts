@@ -259,34 +259,68 @@ export const useMusicStore = create<MusicStore>((set, get) => {
 
     // Downloads
     downloads: [],
-    startDownload: (track, format) => {
+    startDownload: async (track, format) => {
       const id = `d${Date.now()}`;
       set((s) => ({
         downloads: [...s.downloads, { id, track, format, progress: 0, status: 'downloading' }],
       }));
 
-      // Simulate download progress
-      let progress = 0;
-      const interval = setInterval(() => {
-        progress += Math.random() * 15 + 5;
-        if (progress >= 100) {
-          progress = 100;
-          clearInterval(interval);
-          set((s) => ({
-            downloads: s.downloads.map(d =>
-              d.id === id ? { ...d, progress: 100, status: 'completed' } : d
-            ),
-          }));
-          // Auto-add to library
-          get().addToLibrary(track);
-        } else {
-          set((s) => ({
-            downloads: s.downloads.map(d =>
-              d.id === id ? { ...d, progress: Math.floor(progress) } : d
-            ),
-          }));
+      const updateDl = (patch: Partial<import('@/types/music').Download>) =>
+        set((s) => ({
+          downloads: s.downloads.map(d => (d.id === id ? { ...d, ...patch } : d)),
+        }));
+
+      try {
+        // Step 1: Search YouTube for this track (20%)
+        updateDl({ progress: 10 });
+        let videoId = track.youtubeId;
+        if (!videoId) {
+          const results = await searchYouTube(`${track.title} ${track.artist}`);
+          if (!results.length) throw new Error('No se encontró en YouTube');
+          videoId = results[0].videoId;
         }
-      }, 500);
+        updateDl({ progress: 30 });
+
+        // Step 2: Get MP3 URL via RapidAPI (60%)
+        const streamData = await getYouTubeStream(videoId!);
+        const mp3Url = streamData.stream?.url;
+        if (!mp3Url) throw new Error('No se pudo obtener el MP3');
+        updateDl({ progress: 70 });
+
+        // Step 3: Trigger browser download
+        const fileName = `${track.artist} - ${track.title}.mp3`.replace(/[/\\?%*:|"<>]/g, '');
+        
+        // Try fetching as blob for proper download with filename
+        try {
+          const response = await fetch(mp3Url);
+          if (!response.ok) throw new Error('Fetch failed');
+          const blob = await response.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = blobUrl;
+          a.download = fileName;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+        } catch {
+          // Fallback: open URL directly (may not set filename)
+          const a = document.createElement('a');
+          a.href = mp3Url;
+          a.download = fileName;
+          a.target = '_blank';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+        }
+
+        updateDl({ progress: 100, status: 'completed', downloadUrl: mp3Url });
+        get().addToLibrary(track);
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : 'Download failed';
+        console.error('Download error:', msg);
+        updateDl({ status: 'error', error: msg });
+      }
     },
     updateDownloadProgress: (id, progress) => set((s) => ({
       downloads: s.downloads.map(d =>
