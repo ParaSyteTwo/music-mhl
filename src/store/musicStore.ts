@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { Track, Playlist, Download, AudioFormat, AudioSource } from '@/types/music';
 import { audioEngine } from '@/lib/audioEngine';
 import { searchDeezer, searchYouTube, getYouTubeStream, fetchLyrics } from '@/lib/api/musicApi';
+import { writeID3Tags } from '@/lib/id3Writer';
 
 interface PlayerState {
   currentTrack: Track | null;
