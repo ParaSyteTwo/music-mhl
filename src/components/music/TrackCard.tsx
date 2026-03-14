@@ -16,7 +16,7 @@ function formatDuration(seconds: number) {
 }
 
 export function TrackCard({ track, index = 0 }: TrackCardProps) {
-  const { setCurrentTrack, addToLibrary, startDownload } = useMusicStore();
+  const { playTrack, addToLibrary, startDownload } = useMusicStore();
   const navigate = useNavigate();
 
   return (
