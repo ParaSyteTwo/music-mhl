@@ -1,7 +1,4 @@
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
-import ID3WriterModule from 'browser-id3-writer';
-const ID3Writer = ID3WriterModule as any;
+import { ID3Writer } from 'browser-id3-writer';
 
 interface ID3Tags {
   title: string;
