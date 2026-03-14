@@ -1,5 +1,5 @@
-import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Mic2, Repeat, Shuffle, Loader2, Youtube, Radio } from 'lucide-react';
-import { useMusicStore } from '@/store/musicStore';
+import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Mic2, Repeat, Repeat1, Shuffle, Loader2, Youtube, Radio } from 'lucide-react';
+import { useMusicStore, RepeatMode } from '@/store/musicStore';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useState } from 'react';
 
@@ -11,8 +11,8 @@ function formatTime(seconds: number): string {
 }
 
 export function BottomPlayer() {
-  const { player, togglePlay, setVolume, seekTo, toggleLyrics, playTrackWithYouTube } = useMusicStore();
-  const { currentTrack, isPlaying, isLoading, volume, progress, duration, audioSource, error } = player;
+  const { player, togglePlay, setVolume, seekTo, toggleLyrics, playTrackWithYouTube, skipNext, skipPrev, toggleShuffle, toggleRepeat } = useMusicStore();
+  const { currentTrack, isPlaying, isLoading, volume, progress, duration, audioSource, error, shuffle, repeat, queue } = player;
   const [hoverProgress, setHoverProgress] = useState(false);
 
   const progressPercent = duration > 0 ? (progress / duration) * 100 : 0;
@@ -63,7 +63,6 @@ export function BottomPlayer() {
               <div className="min-w-0">
                 <p className="text-sm font-medium truncate">{currentTrack.title}</p>
                 <p className="text-xs text-muted-foreground truncate">{currentTrack.artist}</p>
-                {/* Source indicator */}
                 <div className="flex items-center gap-1.5 mt-0.5">
                   {audioSource === 'youtube' ? (
                     <span className="flex items-center gap-1 text-[10px] text-red-400 font-mono">
@@ -74,9 +73,13 @@ export function BottomPlayer() {
                       <Radio className="w-2.5 h-2.5" /> Preview
                     </span>
                   )}
+                  {queue.length > 1 && (
+                    <span className="text-[10px] text-muted-foreground font-mono ml-1">
+                      {player.queueIndex + 1}/{queue.length}
+                    </span>
+                  )}
                 </div>
               </div>
-              {/* YouTube upgrade button */}
               {audioSource === 'preview' && currentTrack && (
                 <button
                   onClick={() => playTrackWithYouTube(currentTrack)}
@@ -95,10 +98,18 @@ export function BottomPlayer() {
         {/* Center controls */}
         <div className="flex-1 flex flex-col items-center gap-1">
           <div className="flex items-center gap-4">
-            <button className="text-muted-foreground hover:text-foreground transition-colors">
+            <button
+              onClick={toggleShuffle}
+              className={`transition-colors ${shuffle ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+              title={shuffle ? 'Aleatorio: activado' : 'Aleatorio: desactivado'}
+            >
               <Shuffle className="w-4 h-4" />
             </button>
-            <button className="text-muted-foreground hover:text-foreground transition-colors">
+            <button
+              onClick={skipPrev}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+              title="Anterior"
+            >
               <SkipBack className="w-4 h-4" />
             </button>
             <button
@@ -114,11 +125,19 @@ export function BottomPlayer() {
                 <Play className="w-4 h-4 text-background ml-0.5" />
               )}
             </button>
-            <button className="text-muted-foreground hover:text-foreground transition-colors">
+            <button
+              onClick={skipNext}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+              title="Siguiente"
+            >
               <SkipForward className="w-4 h-4" />
             </button>
-            <button className="text-muted-foreground hover:text-foreground transition-colors">
-              <Repeat className="w-4 h-4" />
+            <button
+              onClick={toggleRepeat}
+              className={`transition-colors ${repeat !== 'off' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+              title={`Repetir: ${repeat === 'off' ? 'desactivado' : repeat === 'all' ? 'todo' : 'una'}`}
+            >
+              {repeat === 'one' ? <Repeat1 className="w-4 h-4" /> : <Repeat className="w-4 h-4" />}
             </button>
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground timer-font">
@@ -126,7 +145,6 @@ export function BottomPlayer() {
             <span>/</span>
             <span>{formatTime(duration)}</span>
           </div>
-          {/* Error display */}
           {error && (
             <p className="text-[10px] text-destructive/80 font-mono truncate max-w-xs">{error}</p>
           )}
