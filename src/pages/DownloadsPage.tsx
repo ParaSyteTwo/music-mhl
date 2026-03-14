@@ -16,16 +16,16 @@ export default function DownloadsPage() {
   const failed = downloads.filter(d => d.status === 'error');
 
   return (
-    <div className="px-8 py-10">
-      <h1 className="text-2xl font-semibold tracking-tighter mb-2">Downloads</h1>
-      <p className="text-sm text-muted-foreground mb-8">
+    <div className="px-4 sm:px-8 py-6 sm:py-10">
+      <h1 className="text-xl sm:text-2xl font-semibold tracking-tighter mb-2">Downloads</h1>
+      <p className="text-xs sm:text-sm text-muted-foreground mb-6 sm:mb-8">
         <span className="timer-font">{downloads.length}</span> total · <span className="timer-font">{active.length}</span> activas
       </p>
 
       {/* Active */}
       {active.length > 0 && (
-        <section className="mb-10">
-          <h2 className="text-xs font-mono uppercase tracking-widest text-muted-foreground mb-4">En progreso</h2>
+        <section className="mb-8 sm:mb-10">
+          <h2 className="text-xs font-mono uppercase tracking-widest text-muted-foreground mb-3 sm:mb-4">En progreso</h2>
           <div className="space-y-2">
             {active.map((dl, i) => (
               <motion.div
@@ -33,12 +33,12 @@ export default function DownloadsPage() {
                 initial={{ opacity: 0, x: -10 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: i * 0.05 }}
-                className="flex items-center gap-4 p-4 glass-panel rounded-lg"
+                className="flex items-center gap-2 sm:gap-4 p-2 sm:p-4 glass-panel rounded-lg"
               >
-                <Loader2 className="w-4 h-4 text-primary animate-spin shrink-0" />
+                <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary animate-spin shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{dl.track.title}</p>
-                  <p className="text-xs text-muted-foreground">{dl.track.artist}</p>
+                  <p className="text-xs sm:text-sm font-medium truncate">{dl.track.title}</p>
+                  <p className="text-[10px] sm:text-xs text-muted-foreground">{dl.track.artist}</p>
                   <div className="mt-2 h-1 bg-muted/30 rounded-full overflow-hidden">
                     <motion.div
                       className="h-full bg-primary rounded-full"

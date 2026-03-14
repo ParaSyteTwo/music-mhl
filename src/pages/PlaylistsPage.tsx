@@ -30,9 +30,9 @@ export default function PlaylistsPage() {
   const active = selectedPlaylist ? playlists.find(p => p.id === selectedPlaylist) : null;
 
   return (
-    <div className="px-8 py-10">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold tracking-tighter">Playlists</h1>
+    <div className="px-4 sm:px-8 py-6 sm:py-10">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-0 mb-4 sm:mb-6">
+        <h1 className="text-xl sm:text-2xl font-semibold tracking-tighter">Playlists</h1>
         <button
           onClick={() => setShowCreate(true)}
           className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors"

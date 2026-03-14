@@ -6,6 +6,10 @@ class AudioEngine {
   private _onLoadStart: (() => void) | null = null;
   private _onCanPlay: (() => void) | null = null;
   private _onError: ((error: string) => void) | null = null;
+  private _onPlayControlPressed: (() => void) | null = null;
+  private _onPauseControlPressed: (() => void) | null = null;
+  private _onNextControlPressed: (() => void) | null = null;
+  private _onPrevControlPressed: (() => void) | null = null;
 
   constructor() {
     this.audio = new Audio();
@@ -93,6 +97,73 @@ class AudioEngine {
 
   set onError(fn: ((error: string) => void) | null) {
     this._onError = fn;
+  }
+
+  set onPlayControlPressed(fn: (() => void) | null) {
+    this._onPlayControlPressed = fn;
+  }
+
+  set onPauseControlPressed(fn: (() => void) | null) {
+    this._onPauseControlPressed = fn;
+  }
+
+  set onNextControlPressed(fn: (() => void) | null) {
+    this._onNextControlPressed = fn;
+  }
+
+  set onPrevControlPressed(fn: (() => void) | null) {
+    this._onPrevControlPressed = fn;
+  }
+
+  // MediaSession API for background playback & lock screen controls
+  updateMediaSession(metadata: {
+    title: string;
+    artist: string;
+    album?: string;
+    artwork?: string;
+  }) {
+    if (!('mediaSession' in navigator)) return;
+
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: metadata.title,
+      artist: metadata.artist,
+      album: metadata.album || 'Music',
+      artwork: metadata.artwork
+        ? [
+            {
+              src: metadata.artwork,
+              sizes: '512x512',
+              type: 'image/jpeg',
+            },
+          ]
+        : undefined,
+    });
+
+    navigator.mediaSession.setActionHandler('play', () => {
+      this.play();
+      this._onPlayControlPressed?.();
+    });
+
+    navigator.mediaSession.setActionHandler('pause', () => {
+      this.pause();
+      this._onPauseControlPressed?.();
+    });
+
+    navigator.mediaSession.setActionHandler('nexttrack', () => {
+      this._onNextControlPressed?.();
+    });
+
+    navigator.mediaSession.setActionHandler('previoustrack', () => {
+      this._onPrevControlPressed?.();
+    });
+
+    navigator.mediaSession.playbackState = this.isPlaying ? 'playing' : 'paused';
+  }
+
+  setPlaybackState(state: 'playing' | 'paused') {
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.playbackState = state;
+    }
   }
 
   destroy() {

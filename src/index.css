@@ -42,6 +42,14 @@
     --player-height: 88px;
     --sidebar-width: 260px;
   }
+
+  /* Mobile optimizations */
+  @media (max-width: 767px) {
+    :root {
+      --sidebar-width: 0px;
+      --player-height: 100px;
+    }
+  }
 }
 
 @layer base {

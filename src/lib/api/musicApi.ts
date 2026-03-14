@@ -23,6 +23,31 @@ export async function searchDeezer(query: string): Promise<Track[]> {
   }));
 }
 
+// ─── Deezer Trending ───
+export async function getTrendingTracks(limit: number = 20): Promise<Track[]> {
+  try {
+    const response = await fetch('https://api.deezer.com/chart/0/tracks?limit=' + limit);
+    const data = await response.json();
+    
+    if (!data.data) throw new Error('No trending data');
+    
+    return data.data.map((t: any) => ({
+      id: t.id,
+      title: t.title,
+      artist: t.artist?.name || 'Unknown Artist',
+      album: t.album?.title || 'Unknown Album',
+      duration: t.duration,
+      cover: t.album?.cover_big || t.album?.cover_medium,
+      coverSmall: t.album?.cover_small,
+      preview: t.preview_url,
+      deezerId: t.id,
+    }));
+  } catch (error) {
+    console.error('Trending fetch failed:', error);
+    return [];
+  }
+}
+
 // ─── YouTube Audio ───
 export async function searchYouTube(query: string) {
   const { data, error } = await supabase.functions.invoke('yt-stream', {

@@ -3,19 +3,25 @@ import { AppSidebar } from './AppSidebar';
 import { BottomPlayer } from './BottomPlayer';
 import { LyricsPanel } from '@/components/music/LyricsPanel';
 import { useMusicStore } from '@/store/musicStore';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 export function AppLayout() {
   const showLyrics = useMusicStore((s) => s.player.showLyrics);
+  const isMobile = useIsMobile();
 
   return (
     <div className="min-h-screen bg-background">
-      <AppSidebar />
-      <main className="ml-[var(--sidebar-width)] pb-[var(--player-height)] min-h-screen">
+      {/* Sidebar - Hidden on mobile */}
+      {!isMobile && <AppSidebar />}
+      
+      <main className={`pb-[var(--player-height)] min-h-screen transition-all duration-300 ${
+        !isMobile ? 'ml-[var(--sidebar-width)]' : ''
+      }`}>
         <div className="flex min-h-screen">
-          <div className={`flex-1 transition-all duration-300 ${showLyrics ? 'mr-[400px]' : ''}`}>
+          <div className={`flex-1 transition-all duration-300 ${showLyrics && !isMobile ? 'mr-[400px]' : ''}`}>
             <Outlet />
           </div>
-          {showLyrics && <LyricsPanel />}
+          {showLyrics && !isMobile && <LyricsPanel />}
         </div>
       </main>
       <BottomPlayer />

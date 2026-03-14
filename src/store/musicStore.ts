@@ -126,6 +126,22 @@ export const useMusicStore = create<MusicStore>()(
         set((s) => ({ player: { ...s.player, isLoading: false, error, isPlaying: false } }));
       };
 
+      audioEngine.onPlayControlPressed = () => {
+        get().togglePlay();
+      };
+
+      audioEngine.onPauseControlPressed = () => {
+        get().togglePlay();
+      };
+
+      audioEngine.onNextControlPressed = () => {
+        get().skipNext();
+      };
+
+      audioEngine.onPrevControlPressed = () => {
+        get().skipPrev();
+      };
+
       return {
         // ─── Settings ───
         settings: {
@@ -240,8 +256,15 @@ export const useMusicStore = create<MusicStore>()(
             try {
               audioEngine.load(track.preview);
               audioEngine.setVolume(get().player.volume);
+              audioEngine.updateMediaSession({
+                title: track.title,
+                artist: track.artist,
+                album: track.album,
+                artwork: track.cover,
+              });
               await audioEngine.play();
               set((s) => ({ player: { ...s.player, isPlaying: true, isLoading: false } }));
+              audioEngine.setPlaybackState('playing');
             } catch (e) {
               console.error('Preview play failed:', e);
               set((s) => ({
@@ -283,6 +306,12 @@ export const useMusicStore = create<MusicStore>()(
 
             audioEngine.load(streamUrl);
             audioEngine.setVolume(get().player.volume);
+            audioEngine.updateMediaSession({
+              title: track.title,
+              artist: track.artist,
+              album: track.album,
+              artwork: track.cover,
+            });
             await audioEngine.play();
             set((s) => ({
               player: {
@@ -292,6 +321,7 @@ export const useMusicStore = create<MusicStore>()(
                 currentTrack: { ...track, youtubeId: videoId },
               },
             }));
+            audioEngine.setPlaybackState('playing');
           } catch (error) {
             const msg = error instanceof Error ? error.message : 'YouTube playback failed';
             console.error('YouTube playback error:', msg);
@@ -323,7 +353,9 @@ export const useMusicStore = create<MusicStore>()(
           const { isPlaying, currentTrack } = get().player;
           if (!currentTrack) return;
           if (isPlaying) { audioEngine.pause(); } else { audioEngine.play(); }
-          set((s) => ({ player: { ...s.player, isPlaying: !isPlaying } }));
+          const newState = !isPlaying;
+          set((s) => ({ player: { ...s.player, isPlaying: newState } }));
+          audioEngine.setPlaybackState(newState ? 'playing' : 'paused');
         },
 
         setVolume: (v) => {

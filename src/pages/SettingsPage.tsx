@@ -25,14 +25,14 @@ export default function SettingsPage() {
   const { settings, updateSettings, library, downloads, playlists } = useMusicStore();
 
   return (
-    <div className="px-8 py-10">
-      <h1 className="text-2xl font-semibold tracking-tighter mb-2">Settings</h1>
-      <p className="text-sm text-muted-foreground mb-8">Configura tu experiencia MHL</p>
+    <div className="px-4 sm:px-8 py-6 sm:py-10">
+      <h1 className="text-xl sm:text-2xl font-semibold tracking-tighter mb-2">Settings</h1>
+      <p className="text-xs sm:text-sm text-muted-foreground mb-6 sm:mb-8">Configura tu experiencia MHL</p>
 
-      <div className="space-y-6 max-w-lg">
+      <div className="space-y-4 sm:space-y-6 max-w-lg">
         {/* Audio quality */}
-        <div className="glass-panel rounded-lg p-5">
-          <h3 className="text-sm font-medium mb-3">Calidad de descarga</h3>
+        <div className="glass-panel rounded-lg p-3 sm:p-5">
+          <h3 className="text-xs sm:text-sm font-medium mb-2 sm:mb-3">Calidad de descarga</h3>
           <div className="space-y-1">
             {qualities.map((q) => (
               <label

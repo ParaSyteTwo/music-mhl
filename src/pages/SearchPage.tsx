@@ -11,15 +11,15 @@ export default function SearchPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
 
   return (
-    <div className="px-8 py-10">
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold tracking-tighter mb-4">Search</h1>
+    <div className="px-4 sm:px-8 py-6 sm:py-10">
+      <div className="mb-6 sm:mb-8">
+        <h1 className="text-xl sm:text-2xl font-semibold tracking-tighter mb-3 sm:mb-4">Search</h1>
         <SearchBar />
       </div>
 
       {/* View toggle */}
-      <div className="flex items-center justify-between mb-6">
-        <p className="text-sm text-muted-foreground">
+      <div className="flex items-center justify-between mb-4 sm:mb-6">
+        <p className="text-xs sm:text-sm text-muted-foreground">
           {searchQuery ? `Resultados para "${searchQuery}"` : 'Todos los tracks'} · <span className="timer-font">{searchResults.length}</span>
         </p>
         <div className="flex items-center gap-1 bg-secondary/50 rounded-lg p-1">
@@ -40,7 +40,7 @@ export default function SearchPage() {
 
       {/* Results */}
       {viewMode === 'grid' ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-4">
           {searchResults.map((track, i) => (
             <TrackCard key={track.id} track={track} index={i} />
           ))}
