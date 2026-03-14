@@ -35,7 +35,7 @@ export async function searchYouTube(query: string) {
 }
 
 export async function getYouTubeStream(videoId: string) {
-  const { data, error } = await supabase.functions.invoke('youtube-audio', {
+  const { data, error } = await supabase.functions.invoke('yt-stream', {
     body: { action: 'stream', videoId },
   });
 
