@@ -4,7 +4,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Multiple Invidious instances for resilience
+// ─── Invidious instances for search ───
 const INVIDIOUS_INSTANCES = [
   "https://inv.nadeko.net",
   "https://invidious.nerdvpn.de",
@@ -17,11 +17,11 @@ const PIPED_INSTANCES = [
   "https://api.piped.private.coffee",
 ];
 
-async function fetchWithTimeout(url: string, timeoutMs = 8000): Promise<Response> {
+async function fetchWithTimeout(url: string, opts: RequestInit = {}, timeoutMs = 8000): Promise<Response> {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(url, { signal: controller.signal });
+    const res = await fetch(url, { ...opts, signal: controller.signal });
     return res;
   } finally {
     clearTimeout(id);
@@ -79,57 +79,54 @@ async function pipedSearch(query: string) {
   return null;
 }
 
-// ─── Invidious stream ───
-async function invidiousStream(videoId: string) {
-  for (const base of INVIDIOUS_INSTANCES) {
+// ─── RapidAPI YouTube MP3 stream ───
+async function rapidApiStream(videoId: string, apiKey: string): Promise<{ url: string; status: string } | null> {
+  const MAX_RETRIES = 5;
+  const RETRY_DELAY = 1500; // ms
+
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
-      const res = await fetchWithTimeout(`${base}/api/v1/videos/${videoId}`);
-      if (!res.ok) { await res.text(); continue; }
+      const res = await fetchWithTimeout(
+        `https://youtube-mp36.p.rapidapi.com/dl?id=${videoId}`,
+        {
+          method: "GET",
+          headers: {
+            "X-RapidAPI-Key": apiKey,
+            "X-RapidAPI-Host": "youtube-mp36.p.rapidapi.com",
+          },
+        },
+        15000
+      );
+
+      if (!res.ok) {
+        const text = await res.text();
+        console.error(`[yt-stream] RapidAPI error ${res.status}:`, text);
+        return null;
+      }
+
       const data = await res.json();
-      const audioStreams = (data.adaptiveFormats || [])
-        .filter((s: any) => ((s.type as string) || "").startsWith("audio/"))
-        .sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0));
+      console.log(`[yt-stream] RapidAPI response (attempt ${attempt + 1}):`, data.status);
 
-      if (audioStreams.length === 0) continue;
+      if (data.status === "ok" && data.link) {
+        return { url: data.link, status: "ok" };
+      }
 
-      const best = audioStreams[0];
-      return {
-        url: best.url,
-        mimeType: best.type?.split(";")[0] || "audio/mp4",
-        bitrate: best.bitrate,
-        quality: best.audioQuality || "unknown",
-      };
-    } catch {
-      continue;
+      if (data.status === "processing") {
+        // Wait and retry
+        await new Promise((r) => setTimeout(r, RETRY_DELAY));
+        continue;
+      }
+
+      // fail or unknown status
+      console.error("[yt-stream] RapidAPI conversion failed:", data.msg || data.status);
+      return null;
+    } catch (err) {
+      console.error("[yt-stream] RapidAPI fetch error:", err);
+      return null;
     }
   }
-  return null;
-}
 
-// ─── Piped stream (fallback) ───
-async function pipedStream(videoId: string) {
-  for (const base of PIPED_INSTANCES) {
-    try {
-      const res = await fetchWithTimeout(`${base}/streams/${videoId}`);
-      if (!res.ok) { await res.text(); continue; }
-      const data = await res.json();
-      const audioStreams = (data.audioStreams || [])
-        .filter((s: any) => ((s.mimeType as string) || "").startsWith("audio/"))
-        .sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0));
-
-      if (audioStreams.length === 0) continue;
-
-      const best = audioStreams[0];
-      return {
-        url: best.url,
-        mimeType: best.mimeType,
-        bitrate: best.bitrate,
-        quality: best.quality,
-      };
-    } catch {
-      continue;
-    }
-  }
+  console.error("[yt-stream] RapidAPI max retries exceeded");
   return null;
 }
 
@@ -154,7 +151,6 @@ Deno.serve(async (req: Request) => {
 
       console.log("[yt-stream] searching:", query);
 
-      // Try Invidious first, then Piped
       let results = await invidiousSearch(query);
       if (!results) {
         console.log("[yt-stream] Invidious search failed, trying Piped...");
@@ -173,21 +169,28 @@ Deno.serve(async (req: Request) => {
       const videoId = (body.videoId || "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 20);
       if (!videoId) return respond({ error: "videoId required" }, 400);
 
-      console.log("[yt-stream] fetching stream:", videoId);
-
-      // Try Invidious first, then Piped
-      let stream = await invidiousStream(videoId);
-      if (!stream) {
-        console.log("[yt-stream] Invidious stream failed, trying Piped...");
-        stream = await pipedStream(videoId);
+      const RAPIDAPI_KEY = Deno.env.get("RAPIDAPI_KEY");
+      if (!RAPIDAPI_KEY) {
+        return respond({ success: false, error: "RAPIDAPI_KEY not configured" }, 500);
       }
 
+      console.log("[yt-stream] fetching stream via RapidAPI:", videoId);
+
+      const stream = await rapidApiStream(videoId, RAPIDAPI_KEY);
+
       if (!stream) {
-        return respond({ success: false, error: "No audio stream found from any provider" }, 502);
+        return respond({ success: false, error: "No se pudo convertir el audio" }, 502);
       }
 
-      console.log("[yt-stream] stream found:", stream.mimeType, stream.bitrate);
-      return respond({ success: true, stream });
+      console.log("[yt-stream] MP3 link obtained successfully");
+      return respond({
+        success: true,
+        stream: {
+          url: stream.url,
+          mimeType: "audio/mpeg",
+          quality: "128kbps",
+        },
+      });
     }
 
     return respond({ error: 'Use action: "search" or "stream"' }, 400);
