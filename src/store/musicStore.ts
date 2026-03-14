@@ -91,7 +91,7 @@ export const useMusicStore = create<MusicStore>((set, get) => {
       error: null,
     },
 
-    // Play using Deezer 30s preview
+    // Play track - tries preview first, then YouTube
     playTrack: async (track) => {
       set((s) => ({
         player: {
@@ -107,12 +107,19 @@ export const useMusicStore = create<MusicStore>((set, get) => {
       }));
 
       if (track.preview) {
-        audioEngine.load(track.preview);
-        audioEngine.setVolume(get().player.volume);
-        await audioEngine.play();
-        set((s) => ({ player: { ...s.player, isPlaying: true, isLoading: false } }));
+        try {
+          audioEngine.load(track.preview);
+          audioEngine.setVolume(get().player.volume);
+          await audioEngine.play();
+          set((s) => ({ player: { ...s.player, isPlaying: true, isLoading: false } }));
+        } catch (e) {
+          console.error('Preview play failed:', e);
+          set((s) => ({
+            player: { ...s.player, isLoading: false, error: 'Error al reproducir preview' },
+          }));
+        }
       } else {
-        // No preview, try YouTube
+        // No preview available, try YouTube
         await get().playTrackWithYouTube(track);
       }
 
