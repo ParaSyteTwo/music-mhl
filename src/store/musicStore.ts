@@ -392,17 +392,29 @@ export const useMusicStore = create<MusicStore>()(
 
           // Try to fetch YouTube stream in parallel
           try {
+            console.log('[playTrackWithYouTube] 1. Buscando en YouTube:', track.title, track.artist);
+            
             let videoId = track.youtubeId;
             if (!videoId) {
               const results = await searchYouTube(`${track.title} ${track.artist}`);
+              console.log('[playTrackWithYouTube] Resultados de búsqueda:', results.length, results);
               if (results.length === 0) throw new Error('No se encontró en YouTube');
               videoId = results[0].videoId;
             }
 
+            console.log('[playTrackWithYouTube] 2. VideoId encontrado:', videoId);
             const streamData = await getYouTubeStream(videoId!);
+            console.log('[playTrackWithYouTube] 3. StreamData recibido:', JSON.stringify(streamData), 'URL:', streamData.stream?.url);
+            
             const streamUrl = streamData.stream?.url;
-            if (!streamUrl) throw new Error('No se pudo obtener el stream de audio');
+            console.log('[playTrackWithYouTube] 4. URL del stream:', streamUrl);
+            
+            if (!streamUrl) {
+              console.error('[playTrackWithYouTube] URL del stream es null/undefined');
+              throw new Error('No se pudo obtener el stream de audio (URL vacía)');
+            }
 
+            console.log('[playTrackWithYouTube] Cargando stream...');
             // YouTube stream found - crossfade to it
             audioEngine.load(streamUrl);
             audioEngine.setVolume(get().player.volume);
@@ -416,6 +428,7 @@ export const useMusicStore = create<MusicStore>()(
             // Only auto-play if not already playing (preview case)
             const currentState = get().player;
             if (!currentState.isPlaying) {
+              console.log('[playTrackWithYouTube] Reproduciendo desde el principio...');
               await audioEngine.play();
             }
             
@@ -432,20 +445,34 @@ export const useMusicStore = create<MusicStore>()(
             audioEngine.setPlaybackState('playing');
           } catch (error) {
             const msg = error instanceof Error ? error.message : 'YouTube playback failed';
-            console.error('YouTube playback error:', msg);
+            console.error('[playTrackWithYouTube] Error:', msg);
 
-            // If YouTube failed and no preview was loaded, show error
+            // If YouTube failed and no preview was loaded, show different error messages
             if (!track.preview) {
+              let errorMsg = 'No se pudo reproducir esta canción';
+              if (msg.includes('API')) {
+                errorMsg = 'YouTube API no disponible - intenta configurar RapidAPI en .env';
+              }
+              
               set((s) => ({
                 player: {
                   ...s.player,
                   isLoading: false,
-                  error: 'No se pudo reproducir esta canción',
-                  currentTrack: { ...track, audioSourceBadge: '❌ Error' },
+                  error: errorMsg,
+                  currentTrack: { ...track, audioSourceBadge: '⚠️ Sin stream' },
+                },
+              }));
+              console.warn('[playTrackWithYouTube] No preview available, showing error to user');
+            } else {
+              // If preview is playing, just log the error but continue with preview
+              console.log('[playTrackWithYouTube] YouTube failed, continuing with preview');
+              set((s) => ({
+                player: {
+                  ...s.player,
+                  currentTrack: { ...track, audioSourceBadge: '📺 Preview 30s (YouTube no disponible)' },
                 },
               }));
             }
-            // If preview is already playing, don't show error - just let it continue
           }
 
           get().loadLyrics(track);

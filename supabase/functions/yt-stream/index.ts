@@ -29,8 +29,8 @@ async function tryInvidious(path: string): Promise<any | null> {
   for (const instance of INVIDIOUS_INSTANCES) {
     try {
       const url = `${instance}${path}`;
-      console.log(`[yt-stream] Trying ${instance}...`);
-      const res = await fetchWithTimeout(url, {}, 8000);
+      console.log(`[yt-stream] Trying Invidious ${instance}...`);
+      const res = await fetchWithTimeout(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, 8000);
       
       if (!res.ok) {
         console.warn(`[yt-stream] ${instance} returned ${res.status}`);
@@ -38,13 +38,49 @@ async function tryInvidious(path: string): Promise<any | null> {
       }
       
       const data = await res.json();
-      console.log(`[yt-stream] Success with ${instance}`);
+      console.log(`[yt-stream] Invidious success with ${instance}`);
       return data;
     } catch (err) {
       console.warn(`[yt-stream] ${instance} failed:`, err instanceof Error ? err.message : String(err));
       continue;
     }
   }
+  return null;
+}
+
+// ─── RapidAPI YouTube MP3 Downloader ───
+async function tryRapidAPIYouTubeMp3(videoId: string): Promise<{ url: string; title?: string } | null> {
+  const rapidApiKey = Deno.env.get('RAPIDAPI_YOUTUBE_MP3_KEY');
+  if (!rapidApiKey) {
+    console.log('[yt-stream] RapidAPI key not configured, skipping');
+    return null;
+  }
+
+  try {
+    const res = await fetchWithTimeout(
+      `https://youtube-mp36.p.rapidapi.com/dl?id=${videoId}`,
+      {
+        headers: {
+          'X-RapidAPI-Key': rapidApiKey,
+          'X-RapidAPI-Host': 'youtube-mp36.p.rapidapi.com'
+        }
+      },
+      8000
+    );
+
+    if (res.ok) {
+      const data = await res.json() as any;
+      if (data.link) {
+        console.log('[yt-stream] Got MP3 URL from RapidAPI');
+        return { url: data.link, title: data.title };
+      }
+    } else {
+      console.warn(`[yt-stream] RapidAPI returned ${res.status}`);
+    }
+  } catch (err) {
+    console.warn('[yt-stream] RapidAPI failed:', err instanceof Error ? err.message : String(err));
+  }
+
   return null;
 }
 
@@ -67,7 +103,7 @@ async function invidiousSearch(query: string) {
     }));
 }
 
-// ─── Invidious stream (audio only) ───
+// ─── Invidious stream (audio only) - with CORS-friendly URL handling ───
 async function invidiousStream(videoId: string): Promise<{ url: string; quality: string } | null> {
   const path = `/api/v1/videos/${videoId}`;
   const data = await tryInvidious(path);
@@ -87,15 +123,33 @@ async function invidiousStream(videoId: string): Promise<{ url: string; quality:
     
     if (best.url) {
       console.log(`[yt-stream] Found audio format: ${best.bitrate}bps`);
-      return { url: best.url, quality: `${best.bitrate}bps` };
+      // Test if URL is valid by making a HEAD request
+      try {
+        const testRes = await fetchWithTimeout(best.url, { method: 'HEAD' }, 5000);
+        if (testRes.ok || testRes.status === 206) {
+          console.log('[yt-stream] Invidious URL is accessible');
+          return { url: best.url, quality: `${best.bitrate}bps` };
+        } else {
+          console.warn(`[yt-stream] Invidious URL returned ${testRes.status}`);
+        }
+      } catch (err) {
+        console.warn('[yt-stream] Invidious URL is not accessible:', err instanceof Error ? err.message : String(err));
+      }
     }
   }
 
   // Fallback: use formatStreams (video+audio combined, less ideal but works)
   const fallback = (data.formatStreams || [])[0];
   if (fallback?.url) {
-    console.log(`[yt-stream] Using fallback format (video+audio)`);
-    return { url: fallback.url, quality: "auto" };
+    console.log(`[yt-stream] Using Invidious fallback format (video+audio)`);
+    try {
+      const testRes = await fetchWithTimeout(fallback.url, { method: 'HEAD' }, 5000);
+      if (testRes.ok || testRes.status === 206) {
+        return { url: fallback.url, quality: "auto" };
+      }
+    } catch (err) {
+      console.warn('[yt-stream] Fallback URL is not accessible');
+    }
   }
 
   return null;
@@ -136,23 +190,29 @@ Deno.serve(async (req: Request) => {
       const videoId = (body.videoId || "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 20);
       if (!videoId) return respond({ error: "videoId required" }, 400);
 
-      console.log("[yt-stream] fetching stream via Invidious:", videoId);
+      console.log("[yt-stream] fetching stream for videoId:", videoId);
 
-      const stream = await invidiousStream(videoId);
-
-      if (!stream) {
-        return respond({ success: false, error: "No se pudo obtener el stream de audio" }, 502);
+      // Strategy 1: Try RapidAPI YouTube MP3 first (most reliable)
+      let stream = await tryRapidAPIYouTubeMp3(videoId);
+      if (stream) {
+        console.log("[yt-stream] success: RapidAPI YouTube MP3");
+        return respond({ success: true, stream, source: 'rapidapi' });
       }
 
-      console.log("[yt-stream] stream obtained successfully");
-      return respond({
-        success: true,
-        stream: {
-          url: stream.url,
-          mimeType: "audio/mpeg",
-          quality: stream.quality,
-        },
-      });
+      // Strategy 2: Fall back to Invidious
+      console.log("[yt-stream] Trying Invidious fallback...");
+      stream = await invidiousStream(videoId);
+      if (stream) {
+        console.log("[yt-stream] success: Invidious");
+        return respond({ success: true, stream, source: 'invidious' });
+      }
+
+      // All strategies failed
+      return respond({ 
+        success: false, 
+        error: "No se pudo obtener el stream de audio. Usa el preview de Deezer como alternativa.",
+        helpText: "Configure RAPIDAPI_YOUTUBE_MP3_KEY en las variables de entorno para mejor soporte de YouTube"
+      }, 502);
     }
 
     return respond({ error: 'Use action: "search" or "stream"' }, 400);
