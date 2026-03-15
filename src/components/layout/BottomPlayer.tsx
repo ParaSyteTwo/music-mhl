@@ -3,6 +3,7 @@ import { useMusicStore, RepeatMode } from '@/store/musicStore';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useState } from 'react';
 import { QueuePanel } from '@/components/music/QueuePanel';
+import { FullscreenPlayer } from './FullscreenPlayer';
 
 function formatTime(seconds: number): string {
   if (!isFinite(seconds) || seconds < 0) return '0:00';
@@ -16,6 +17,7 @@ export function BottomPlayer() {
   const { currentTrack, isPlaying, isLoading, volume, progress, duration, audioSource, error, shuffle, repeat, queue } = player;
   const [hoverProgress, setHoverProgress] = useState(false);
   const [showQueue, setShowQueue] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   const progressPercent = duration > 0 ? (progress / duration) * 100 : 0;
 
@@ -66,18 +68,28 @@ export function BottomPlayer() {
           <div className="hidden sm:flex items-center gap-3 w-[280px] min-w-0">
             {currentTrack ? (
               <>
-                {/* Cover art with shadow */}
-                <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-[#C8F04B]/30 to-[#8BC34A]/10 flex-shrink-0 overflow-hidden" style={{ boxShadow: '0 4px 20px rgba(0,0,0,0.5)' }}>
+                {/* Cover art with shadow - CLICKABLE for fullscreen */}
+                <button
+                  onClick={() => setIsExpanded(true)}
+                  className="w-12 h-12 rounded-lg bg-gradient-to-br from-[#C8F04B]/30 to-[#8BC34A]/10 flex-shrink-0 overflow-hidden hover:scale-105 transition-transform cursor-pointer"
+                  style={{ boxShadow: '0 4px 20px rgba(0,0,0,0.5)' }}
+                  title="Click to expand"
+                >
                   {currentTrack.cover ? (
                     <img src={currentTrack.cover} alt="" className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full" />
                   )}
-                </div>
+                </button>
 
-                {/* Track info */}
+                {/* Track info - TITLE ALSO CLICKABLE */}
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-[#F5F5F0] truncate font-[family-name:Syne]">{currentTrack.title}</p>
+                  <button
+                    onClick={() => setIsExpanded(true)}
+                    className="text-sm font-semibold text-[#F5F5F0] truncate font-[family-name:Syne] hover:text-[#C8F04B] transition-colors text-left w-full"
+                  >
+                    {currentTrack.title}
+                  </button>
                   <p className="text-xs text-[#666660] truncate">{currentTrack.artist}</p>
 
                   {/* Source badge */}
@@ -249,6 +261,9 @@ export function BottomPlayer() {
 
       {/* Queue Panel */}
       <QueuePanel isOpen={showQueue} onClose={() => setShowQueue(false)} />
+
+      {/* Fullscreen Player */}
+      <FullscreenPlayer isOpen={isExpanded} onClose={() => setIsExpanded(false)} />
     </>
   );
 }
