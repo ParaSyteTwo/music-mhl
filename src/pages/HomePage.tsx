@@ -1,8 +1,9 @@
 import { Play, Music, Pause } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useMusicStore } from '../store/musicStore';
 import { useHomeData } from '../hooks/useHomeData';
 import { Skeleton } from '../components/ui/skeleton';
-import type { HomeTrack } from '../hooks/useHomeData';
+import type { HomeTrack, HomeArtist, HomeAlbum } from '../hooks/useHomeData';
 
 const genreColors: Record<string, { bg: string; text: string; border: string }> = {
   Pop: { bg: 'rgba(200, 240, 75, 0.1)', text: '#C8F04B', border: 'rgba(200, 240, 75, 0.3)' },
@@ -14,11 +15,11 @@ const genreColors: Record<string, { bg: string; text: string; border: string }> 
 };
 
 function HeroSection({ track }: { track: HomeTrack | null }) {
-  const { playTrack, currentTrack, isPlaying } = useMusicStore();
+  const { player, playTrack, togglePlay } = useMusicStore();
 
   if (!track) return null;
 
-  const isPlayingThis = currentTrack?.id === track.id;
+  const isPlayingThis = player.currentTrack?.id === track.id;
 
   return (
     <div
@@ -38,23 +39,14 @@ function HeroSection({ track }: { track: HomeTrack | null }) {
         </div>
         <div className="flex gap-3">
           <button
-            onClick={() => playTrack(track)}
-            className="px-6 py-2 bg-[#C8F04B] text-black font-syne font-semibold rounded-lg  hover:scale-105 transition-transform flex items-center gap-2"
+            onClick={() => isPlayingThis ? togglePlay() : playTrack(track)}
+            className="px-6 py-2 bg-[#C8F04B] text-black font-syne font-semibold rounded-lg hover:scale-105 transition-transform flex items-center gap-2"
           >
-            {isPlayingThis && isPlaying ? (
-              <>
-                <Pause size={16} />
-                Pausar
-              </>
+            {isPlayingThis && player.isPlaying ? (
+              <><Pause size={16} />Pausar</>
             ) : (
-              <>
-                <Play size={16} className="ml-0.5" />
-                Reproducir ahora
-              </>
+              <><Play size={16} className="ml-0.5" />Reproducir ahora</>
             )}
-          </button>
-          <button className="px-6 py-2 border border-[rgba(255,255,255,0.2)] text-[#F5F5F0] font-dm-sans rounded-lg hover:bg-[rgba(255,255,255,0.05)] transition-colors">
-            Añadir a biblioteca
           </button>
         </div>
       </div>
@@ -80,13 +72,8 @@ function ContinueListening() {
             className="glass-panel p-3 space-y-3 hover:scale-105 transition-transform group"
           >
             {track.cover ? (
-              <div
-                className="w-full aspect-square rounded-lg overflow-hidden"
-                style={{
-                  backgroundImage: `url(${track.cover})`,
-                  backgroundSize: 'cover',
-                }}
-              />
+              <div className="w-full aspect-square rounded-lg overflow-hidden"
+                style={{ backgroundImage: `url(${track.cover})`, backgroundSize: 'cover' }} />
             ) : (
               <div className="w-full aspect-square rounded-lg bg-gradient-to-br from-[#C8F04B] to-[#8BC34A] flex items-center justify-center">
                 <Music size={24} className="text-black opacity-50" />
@@ -104,7 +91,7 @@ function ContinueListening() {
 }
 
 function TopGlobalSection({ tracks }: { tracks: HomeTrack[] }) {
-  const { playTrack, currentTrack } = useMusicStore();
+  const { playTrack, player } = useMusicStore();
 
   if (!tracks || tracks.length === 0) return null;
 
@@ -116,7 +103,7 @@ function TopGlobalSection({ tracks }: { tracks: HomeTrack[] }) {
       </div>
       <div className="space-y-2">
         {tracks.slice(0, 20).map((track, idx) => {
-          const isActive = currentTrack?.id === track.id;
+          const isActive = player.currentTrack?.id === track.id;
           const top3 = idx < 3;
 
           return (
@@ -132,13 +119,8 @@ function TopGlobalSection({ tracks }: { tracks: HomeTrack[] }) {
               ) : (
                 <div className="text-[#333330] w-8 text-center text-sm font-mono">{idx + 1}</div>
               )}
-              <div
-                className="w-10 h-10 rounded flex-shrink-0"
-                style={{
-                  backgroundImage: `url(${track.coverSmall})`,
-                  backgroundSize: 'cover',
-                }}
-              />
+              <div className="w-10 h-10 rounded flex-shrink-0 overflow-hidden"
+                style={{ backgroundImage: `url(${track.cover})`, backgroundSize: 'cover' }} />
               <div className="flex-1 min-w-0 text-left">
                 <p className="text-sm font-dm-sans font-medium text-[#F5F5F0] truncate">{track.title}</p>
                 <p className="text-xs text-[#666660] truncate">{track.artist}</p>
@@ -147,10 +129,7 @@ function TopGlobalSection({ tracks }: { tracks: HomeTrack[] }) {
                 {Math.floor(track.duration / 60)}:{(track.duration % 60).toString().padStart(2, '0')}
               </span>
               <div
-                onClick={(e) => {
-                  e.stopPropagation();
-                  playTrack(track);
-                }}
+                onClick={(e) => { e.stopPropagation(); playTrack(track); }}
                 className="hidden group-hover:flex items-center justify-center w-8 h-8 rounded-full bg-[#C8F04B] text-black flex-shrink-0 cursor-pointer"
               >
                 <Play size={14} className="ml-0.5" />
@@ -163,7 +142,9 @@ function TopGlobalSection({ tracks }: { tracks: HomeTrack[] }) {
   );
 }
 
-function TrendingArtistsSection({ artists }: any) {
+function TrendingArtistsSection({ artists }: { artists: HomeArtist[] }) {
+  const navigate = useNavigate();
+
   if (!artists || artists.length === 0) return null;
 
   const formatFans = (fans?: number) => {
@@ -177,17 +158,15 @@ function TrendingArtistsSection({ artists }: any) {
     <section className="mb-12">
       <h2 className="font-syne text-2xl font-bold text-[#F5F5F0] mb-6">Artistas del momento</h2>
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-        {artists.slice(0, 12).map((artist: any) => (
-          <button key={artist.id} className="glass-panel p-4 text-center space-y-3 hover:scale-105 transition-transform group">
+        {artists.slice(0, 12).map((artist) => (
+          <button
+            key={artist.id}
+            onClick={() => navigate(`/artist/${artist.id}`)}
+            className="glass-panel p-4 text-center space-y-3 hover:scale-105 transition-transform group"
+          >
             {artist.picture ? (
-              <div
-                className="w-full aspect-square rounded-full overflow-hidden mx-auto"
-                style={{
-                  backgroundImage: `url(${artist.picture})`,
-                  backgroundSize: 'cover',
-                  maxWidth: '120px',
-                }}
-              />
+              <div className="w-full aspect-square rounded-full overflow-hidden mx-auto"
+                style={{ backgroundImage: `url(${artist.picture})`, backgroundSize: 'cover', maxWidth: '120px' }} />
             ) : (
               <div className="w-24 h-24 rounded-full bg-gradient-to-br from-[#C8F04B] to-[#8BC34A] flex items-center justify-center mx-auto">
                 <Music size={32} className="text-black opacity-50" />
@@ -213,33 +192,17 @@ function GenreSection({ name, tracks }: { name: string; tracks: HomeTrack[] }) {
   return (
     <section className="mb-12">
       <div className="flex items-center justify-between mb-6">
-        <h3 className="font-syne text-xl font-bold" style={{ color: colors.text }}>
-          Top {name}
-        </h3>
-        <button className="text-xs px-3 py-1 rounded border transition-colors" style={{ borderColor: colors.border, color: colors.text }}>
-          Ver todo
-        </button>
+        <h3 className="font-syne text-xl font-bold" style={{ color: colors.text }}>Top {name}</h3>
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 overflow-x-auto pb-2">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         {tracks.slice(0, 10).map((track) => (
           <button
             key={track.id}
             onClick={() => playTrack(track)}
-            className="glass-panel p-3 space-y-3 hover:scale-105 transition-transform flex-shrink-0 w-40"
+            className="glass-panel p-3 space-y-3 hover:scale-105 transition-transform"
           >
-            {track.cover ? (
-              <div
-                className="w-full aspect-square rounded-lg overflow-hidden"
-                style={{
-                  backgroundImage: `url(${track.coverSmall})`,
-                  backgroundSize: 'cover',
-                }}
-              />
-            ) : (
-              <div className="w-full aspect-square rounded-lg bg-gradient-to-br from-[#C8F04B] to-[#8BC34A] flex items-center justify-center">
-                <Music size={24} className="text-black opacity-50" />
-              </div>
-            )}
+            <div className="w-full aspect-square rounded-lg overflow-hidden"
+              style={{ backgroundImage: `url(${track.cover})`, backgroundSize: 'cover' }} />
             <div className="space-y-1">
               <p className="text-xs font-syne font-semibold text-[#F5F5F0] line-clamp-2">{track.title}</p>
               <p className="text-xs text-[#666660] truncate">{track.artist}</p>
@@ -251,28 +214,23 @@ function GenreSection({ name, tracks }: { name: string; tracks: HomeTrack[] }) {
   );
 }
 
-function NewAlbumsSection({ albums }: any) {
+function NewAlbumsSection({ albums }: { albums: HomeAlbum[] }) {
+  const navigate = useNavigate();
+
   if (!albums || albums.length === 0) return null;
 
   return (
     <section className="mb-12">
       <h2 className="font-syne text-2xl font-bold text-[#F5F5F0] mb-6">Novedades</h2>
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-        {albums.slice(0, 12).map((album: any) => (
-          <button key={album.id} className="glass-panel p-3 space-y-3 hover:scale-105 transition-transform">
-            {album.cover ? (
-              <div
-                className="w-full aspect-square rounded-lg overflow-hidden"
-                style={{
-                  backgroundImage: `url(${album.cover})`,
-                  backgroundSize: 'cover',
-                }}
-              />
-            ) : (
-              <div className="w-full aspect-square rounded-lg bg-gradient-to-br from-[#C8F04B] to-[#8BC34A] flex items-center justify-center">
-                <Music size={32} className="text-black opacity-50" />
-              </div>
-            )}
+        {albums.slice(0, 12).map((album) => (
+          <button
+            key={album.id}
+            onClick={() => navigate(`/album/${album.deezerId}`)}
+            className="glass-panel p-3 space-y-3 hover:scale-105 transition-transform"
+          >
+            <div className="w-full aspect-square rounded-lg overflow-hidden"
+              style={{ backgroundImage: `url(${album.cover})`, backgroundSize: 'cover' }} />
             <div className="space-y-1">
               <p className="text-xs font-syne font-semibold text-[#F5F5F0] line-clamp-2">{album.title}</p>
               <p className="text-xs text-[#666660] truncate">{album.artist}</p>

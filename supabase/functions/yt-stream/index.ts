@@ -1,13 +1,15 @@
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-async function fetchWithTimeout(
-  url: string,
-  opts: RequestInit = {},
-  timeoutMs = 15000
-): Promise<Response> {
+const PIPED_INSTANCES = [
+  "https://pipedapi.kavin.rocks",
+  "https://pipedapi.r4fo.com",
+  "https://api.piped.privacydev.net",
+];
+
+async function fetchWithTimeout(url: string, opts: RequestInit = {}, timeoutMs = 12000): Promise<Response> {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -17,84 +19,58 @@ async function fetchWithTimeout(
   }
 }
 
-// Search YouTube using RapidAPI youtube-search service
-async function searchYouTube(query: string) {
-  const apiKey = Deno.env.get("RAPIDAPI_KEY");
-  if (!apiKey) {
-    console.error("RAPIDAPI_KEY not configured");
-    return null;
+async function tryPipedInstances(path: string): Promise<any | null> {
+  for (const instance of PIPED_INSTANCES) {
+    try {
+      const res = await fetchWithTimeout(`${instance}${path}`);
+      if (res.ok) return await res.json();
+    } catch {}
   }
-
-  try {
-    const searchUrl = `https://youtube-search-and-download.p.rapidapi.com/search?query=${encodeURIComponent(query)}&type=v`;
-
-    const res = await fetchWithTimeout(searchUrl, {
-      method: "GET",
-      headers: {
-        "X-RapidAPI-Key": apiKey,
-        "X-RapidAPI-Host": "youtube-search-and-download.p.rapidapi.com",
-      },
-    });
-
-    if (!res.ok) {
-      console.error(`YouTube search failed: ${res.status}`);
-      return null;
-    }
-
-    const data = (await res.json()) as any;
-    const firstResult = data?.contents?.[0];
-
-    if (firstResult?.video?.videoId) {
-      return {
-        videoId: firstResult.video.videoId,
-        title: firstResult.video.title,
-        query,
-      };
-    }
-    return null;
-  } catch (err) {
-    console.error("YouTube search error:", err);
-    return null;
-  }
+  return null;
 }
 
-// Get MP3 stream from YouTube video ID using RapidAPI youtube-mp36
-async function getYouTubeStream(videoId: string): Promise<string | null> {
-  const apiKey = Deno.env.get("RAPIDAPI_KEY");
-  if (!apiKey) {
-    console.error("RAPIDAPI_KEY not configured");
-    return null;
+// Search YouTube via Piped
+async function searchYouTube(query: string) {
+  const data = await tryPipedInstances(`/search?q=${encodeURIComponent(query)}&filter=music_songs`);
+  if (!data?.items?.length) {
+    // Fallback to video filter
+    const fallback = await tryPipedInstances(`/search?q=${encodeURIComponent(query)}&filter=videos`);
+    if (!fallback?.items?.length) return [];
+    return fallback.items.slice(0, 10).map((item: any) => ({
+      videoId: item.url?.replace("/watch?v=", ""),
+      title: item.title,
+      artist: item.uploaderName?.replace(" - Topic", "") || "",
+      duration: item.duration || 0,
+      thumbnail: item.thumbnail || "",
+    }));
   }
 
-  try {
-    const streamUrl = `https://youtube-mp36.p.rapidapi.com/dl?id=${videoId}`;
+  return data.items.slice(0, 10).map((item: any) => ({
+    videoId: item.url?.replace("/watch?v=", ""),
+    title: item.title,
+    artist: item.uploaderName?.replace(" - Topic", "") || "",
+    duration: item.duration || 0,
+    thumbnail: item.thumbnail || "",
+  }));
+}
 
-    const res = await fetchWithTimeout(streamUrl, {
-      method: "GET",
-      headers: {
-        "X-RapidAPI-Key": apiKey,
-        "X-RapidAPI-Host": "youtube-mp36.p.rapidapi.com",
-      },
-    });
+// Get audio stream URL via Piped
+async function getStream(videoId: string): Promise<string | null> {
+  const data = await tryPipedInstances(`/streams/${videoId}`);
+  if (!data) return null;
 
-    if (!res.ok) {
-      console.error(`YouTube stream fetch failed: ${res.status}`);
-      return null;
-    }
-
-    const data = (await res.json()) as any;
-
-    // youtube-mp36 returns { link: "https://..." } with direct MP3 URL
-    if (data?.link) {
-      return data.link;
-    }
-
-    console.error("No stream link returned:", data);
-    return null;
-  } catch (err) {
-    console.error("YouTube stream error:", err);
-    return null;
+  // Try audio streams first (best quality)
+  if (data.audioStreams?.length) {
+    const sorted = data.audioStreams
+      .filter((s: any) => s.mimeType?.includes("audio"))
+      .sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0));
+    if (sorted.length > 0) return sorted[0].url;
   }
+
+  // Fallback to HLS
+  if (data.hls) return data.hls;
+
+  return null;
 }
 
 Deno.serve(async (req: Request) => {
@@ -102,51 +78,30 @@ Deno.serve(async (req: Request) => {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
 
-  const respond = (
-    success: boolean,
-    data: any = null,
-    error: string | null = null,
-    status = 200
-  ) =>
+  const respond = (success: boolean, data: any = null, error: string | null = null, status = 200) =>
     new Response(
-      JSON.stringify({
-        success,
-        ...(data && { ...data }),
-        ...(error && { error }),
-      }),
-      {
-        status,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      JSON.stringify({ success, ...(data && { ...data }), ...(error && { error }) }),
+      { status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 
   try {
     const { action, query, videoId } = (await req.json()) as any;
 
     if (action === "search") {
-      if (!query?.trim()) {
-        return respond(false, null, "Query required", 400);
-      }
-      const result = await searchYouTube(query);
-      return respond(!!result, result ? { results: [result] } : null, result ? null : "No results found");
+      if (!query?.trim()) return respond(false, null, "Query required", 400);
+      const results = await searchYouTube(query);
+      return respond(results.length > 0, results.length > 0 ? { results } : null, results.length > 0 ? null : "No results found");
     }
 
     if (action === "stream") {
-      if (!videoId?.trim()) {
-        return respond(false, null, "Video ID required", 400);
-      }
-      const url = await getYouTubeStream(videoId);
-      return respond(!!url, url ? { stream: { url } } : null, url ? null : "Stream not available");
+      if (!videoId?.trim()) return respond(false, null, "Video ID required", 400);
+      const url = await getStream(videoId);
+      return respond(!!url, url ? { stream: { url } } : null, url ? null : "No se pudo convertir el audio");
     }
 
     return respond(false, null, "Invalid action", 400);
   } catch (err) {
     console.error("Server error:", err);
-    return respond(
-      false,
-      null,
-      err instanceof Error ? err.message : "Server error",
-      500
-    );
+    return respond(false, null, err instanceof Error ? err.message : "Server error", 500);
   }
 });

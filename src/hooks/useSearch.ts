@@ -1,13 +1,11 @@
 import { useState, useEffect } from 'react';
+import { searchAll as searchAllDeezer } from '@/lib/api/musicApi';
 
 export interface SearchResult {
   tracks: any[];
   artists: any[];
   albums: any[];
 }
-
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 const LOCAL_STORAGE_KEY = 'music_search_history';
 
@@ -44,16 +42,13 @@ export function useUnifiedSearch() {
   const [error, setError] = useState<string | null>(null);
   const { addSearch } = useSearchHistory();
 
-  // Debounce query changes (500ms)
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedQuery(query);
-    }, 500);
-
+    }, 400);
     return () => clearTimeout(timer);
   }, [query]);
 
-  // Auto-search on debounced query change
   useEffect(() => {
     if (debouncedQuery.trim()) {
       search(debouncedQuery);
@@ -74,23 +69,7 @@ export function useUnifiedSearch() {
     setError(null);
 
     try {
-      const response = await fetch(
-        `${SUPABASE_URL}/functions/v1/deezer-search`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${SUPABASE_KEY}`,
-          },
-          body: JSON.stringify({ action: 'searchAll', query: q }),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(`API error: ${response.statusText}`);
-      }
-
-      const data: SearchResult = await response.json();
+      const data = await searchAllDeezer(q);
       setResults(data);
       addSearch(q);
     } catch (err) {

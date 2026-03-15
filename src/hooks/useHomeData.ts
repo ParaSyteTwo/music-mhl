@@ -1,21 +1,8 @@
 import { useState, useEffect } from 'react';
 import { fetchDeezerHome } from '@/lib/api/musicApi';
+import { Track } from '@/types/music';
 
-export interface HomeTrack {
-  id: string;
-  deezerId: number;
-  title: string;
-  artist: string;
-  album: string;
-  duration: number;
-  cover: string;
-  coverSmall: string;
-  coverXL?: string;
-  preview: string;
-  artistId?: number;
-  albumId?: number;
-  rank?: number;
-}
+export type HomeTrack = Track;
 
 export interface HomeArtist {
   id: string;
@@ -39,15 +26,8 @@ export interface HomeAlbum {
   releaseDate: string;
 }
 
-export interface HomeGenre {
-  id: number;
-  name: string;
-  picture: string;
-}
-
 export interface HomeData {
   topTracks: HomeTrack[];
-  genres: HomeGenre[];
   byGenre: Record<string, { genreId: number; tracks: HomeTrack[] }>;
   trendingArtists: HomeArtist[];
   newAlbums: HomeAlbum[];
@@ -70,23 +50,13 @@ export function useHomeData(): UseHomeDataState {
     async function fetchHomeData() {
       try {
         setState({ data: null, loading: true, error: null });
-
         const homeData = await fetchDeezerHome();
 
         const data: HomeData = {
-          topTracks: homeData.topTracks as HomeTrack[],
-          genres: [],
-          byGenre: Object.fromEntries(
-            Object.entries(homeData.byGenre).map(([genreName, tracks]) => [
-              genreName,
-              {
-                genreId: 0,
-                tracks: tracks as HomeTrack[],
-              },
-            ])
-          ),
-          trendingArtists: [],
-          newAlbums: [],
+          topTracks: homeData.topTracks,
+          byGenre: homeData.byGenre,
+          trendingArtists: homeData.trendingArtists as HomeArtist[],
+          newAlbums: homeData.newAlbums as HomeAlbum[],
         };
 
         setState({ data, loading: false, error: null });
