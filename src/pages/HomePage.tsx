@@ -35,10 +35,10 @@ export default function HomePage() {
         transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
         className="mb-8 sm:mb-10"
       >
-        <h1 className="text-2xl sm:text-4xl font-semibold tracking-tighter text-balance mb-2">
-          Your library, <span className="text-primary">uncompressed.</span>
+        <h1 className="text-3xl sm:text-5xl font-bold tracking-tight text-balance mb-3 text-[#F5F5F0] font-[family-name:Syne]">
+          Your library, <span className="text-[#C8F04B]">uncompressed.</span>
         </h1>
-        <p className="text-muted-foreground text-xs sm:text-sm max-w-lg mb-4 sm:mb-6">
+        <p className="text-[#666660] text-sm sm:text-base max-w-lg mb-6 sm:mb-8">
           Busca, escucha y descarga tu música en alta calidad.
         </p>
         <SearchBar />
@@ -56,14 +56,14 @@ export default function HomePage() {
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 + i * 0.05 }}
-            className="glass-panel rounded-lg p-2 sm:p-4"
+            className="bg-[#0f0f0f] border border-[rgba(255,255,255,0.06)] rounded-[16px] p-3 sm:p-4"
           >
-            <div className="flex items-center gap-1 sm:gap-2 mb-1 sm:mb-2">
-              <stat.icon className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-primary" />
-              <span className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider">{stat.label}</span>
+            <div className="flex items-center gap-2 sm:gap-2 mb-2 sm:mb-3">
+              <stat.icon className="w-3 h-3 sm:w-4 sm:h-4 text-[#C8F04B]" />
+              <span className="text-[9px] sm:text-xs text-[#333330] uppercase tracking-wider font-semibold">{stat.label}</span>
             </div>
-            <p className="text-lg sm:text-2xl font-semibold tracking-tighter timer-font">{stat.value}</p>
-            <p className="text-[10px] sm:text-xs text-muted-foreground">{stat.sub}</p>
+            <p className="text-xl sm:text-2xl font-bold tracking-tighter timer-font text-[#F5F5F0]">{stat.value}</p>
+            <p className="text-[9px] sm:text-xs text-[#666660] mt-1">{stat.sub}</p>
           </motion.div>
         ))}
       </div>
@@ -71,7 +71,7 @@ export default function HomePage() {
       {/* Search Results */}
       {searchResults.length > 0 && (
         <section className="mb-8 sm:mb-12">
-          <h2 className="text-base sm:text-lg font-semibold tracking-tight mb-3 sm:mb-4">Resultados</h2>
+          <h2 className="text-base sm:text-lg font-bold tracking-tight mb-4 sm:mb-6 font-[family-name:Syne] text-[#F5F5F0]">Resultados</h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-4">
             {searchResults.map((track, i) => (
               <TrackCard key={track.id} track={track} index={i} />
@@ -84,8 +84,8 @@ export default function HomePage() {
         <>
           {trending.length > 0 && (
             <section className="mb-8 sm:mb-12">
-              <h2 className="text-base sm:text-lg font-semibold tracking-tight mb-3 sm:mb-4 flex items-center gap-2">
-                <TrendingUp className="w-4 h-4" />
+              <h2 className="text-base sm:text-lg font-bold tracking-tight mb-4 sm:mb-6 font-[family-name:Syne] text-[#F5F5F0] flex items-center gap-2">
+                <TrendingUp className="w-5 h-5" />
                 Trending Global
               </h2>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-4">
@@ -97,15 +97,15 @@ export default function HomePage() {
           )}
           {!isLoadingTrending && trending.length === 0 && (
             <div className="text-center py-16">
-              <Music2 className="w-10 h-10 text-muted-foreground/30 mx-auto mb-4" />
-              <p className="text-muted-foreground text-sm">No se pudieron cargar las tendencias</p>
-              <p className="text-xs text-muted-foreground mt-1">Prueba buscando una canción directamente</p>
+              <Music2 className="w-12 h-12 text-[#333330] mx-auto mb-4" />
+              <p className="text-[#666660] text-sm">No se pudieron cargar las tendencias</p>
+              <p className="text-[#333330] text-xs mt-2">Prueba buscando una canción directamente</p>
             </div>
           )}
           {isLoadingTrending && (
             <div className="text-center py-16">
-              <Music2 className="w-10 h-10 text-muted-foreground/30 mx-auto mb-4 animate-pulse" />
-              <p className="text-muted-foreground text-sm">Cargando tendencias...</p>
+              <Music2 className="w-12 h-12 text-[#333330] mx-auto mb-4 animate-pulse" />
+              <p className="text-[#666660] text-sm">Cargando tendencias...</p>
             </div>
           )}
         </>

@@ -31,30 +31,32 @@ export default function LibraryPage() {
 
   return (
     <div className="px-4 sm:px-8 py-6 sm:py-10">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-0 mb-4 sm:mb-6">
-        <h1 className="text-xl sm:text-2xl font-semibold tracking-tighter">Library</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-0 mb-8 sm:mb-10">
+        <h1 className="text-3xl sm:text-4xl font-bold tracking-tight font-[family-name:Syne] text-[#F5F5F0]">Library</h1>
         {library.length > 0 && tab === 'songs' && (
           <button
             onClick={() => playQueue(filteredTracks, 0)}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-[#C8F04B]/10 text-[#C8F04B] hover:bg-[#C8F04B]/20 transition-colors"
           >
-            <Play className="w-3.5 h-3.5" />
+            <Play className="w-4 h-4" />
             Reproducir todo
           </button>
         )}
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-1 mb-4 sm:mb-6 overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0 pb-2 sm:pb-0">
+      <div className="flex items-center gap-2 mb-6 sm:mb-8 overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0 pb-2 sm:pb-0">
         {tabs.map((t) => (
           <button
             key={t.key}
             onClick={() => { setTab(t.key); clearFilters(); }}
-            className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${
-              tab === t.key ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-white/5'
+            className={`flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-colors whitespace-nowrap ${
+              tab === t.key 
+                ? 'bg-[#C8F04B]/10 text-[#C8F04B]' 
+                : 'text-[#666660] hover:text-[#F5F5F0] hover:bg-[rgba(255,255,255,0.04)]'
             }`}
           >
-            <t.icon className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+            <t.icon className="w-3 h-3 sm:w-4 sm:h-4" />
             {t.label}
             <span className="timer-font text-[10px] sm:text-xs ml-0.5 sm:ml-1 opacity-60">{t.count}</span>
           </button>
@@ -63,12 +65,12 @@ export default function LibraryPage() {
 
       {/* Active filter */}
       {(artistFilter || albumFilter) && (
-        <div className="flex items-center gap-2 mb-3 sm:mb-4 overflow-x-auto">
-          <span className="text-xs text-muted-foreground">Filtrando:</span>
-          <span className="text-xs font-medium bg-primary/10 text-primary px-2 py-1 rounded">
+        <div className="flex items-center gap-2 mb-4 sm:mb-6 overflow-x-auto">
+          <span className="text-xs text-[#333330]">Filtrando:</span>
+          <span className="text-xs font-semibold bg-[#C8F04B]/10 text-[#C8F04B] px-2 py-1 rounded">
             {artistFilter || albumFilter}
           </span>
-          <button onClick={clearFilters} className="text-xs text-muted-foreground hover:text-foreground">
+          <button onClick={clearFilters} className="text-xs text-[#666660] hover:text-[#F5F5F0]">
             × Limpiar
           </button>
         </div>
@@ -85,11 +87,11 @@ export default function LibraryPage() {
             ))
           ) : (
             <div className="text-center py-20">
-              <Music className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
-              <p className="text-muted-foreground text-sm">
+              <Music className="w-10 h-10 text-[#333330] mx-auto mb-4" />
+              <p className="text-[#666660] text-sm">
                 {library.length === 0 ? 'Tu biblioteca está vacía' : 'Sin resultados'}
               </p>
-              <p className="text-xs text-muted-foreground mt-1">Busca canciones y añádelas a tu colección</p>
+              <p className="text-xs text-[#333330] mt-2">Busca canciones y añádelas a tu colección</p>
             </div>
           )}
         </div>

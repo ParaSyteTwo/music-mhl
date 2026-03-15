@@ -12,28 +12,28 @@ export default function SearchPage() {
 
   return (
     <div className="px-4 sm:px-8 py-6 sm:py-10">
-      <div className="mb-6 sm:mb-8">
-        <h1 className="text-xl sm:text-2xl font-semibold tracking-tighter mb-3 sm:mb-4">Search</h1>
+      <div className="mb-8 sm:mb-10">
+        <h1 className="text-3xl sm:text-4xl font-bold tracking-tight mb-4 sm:mb-6 font-[family-name:Syne] text-[#F5F5F0]">Search</h1>
         <SearchBar />
       </div>
 
       {/* View toggle */}
-      <div className="flex items-center justify-between mb-4 sm:mb-6">
-        <p className="text-xs sm:text-sm text-muted-foreground">
-          {searchQuery ? `Resultados para "${searchQuery}"` : 'Todos los tracks'} · <span className="timer-font">{searchResults.length}</span>
+      <div className="flex items-center justify-between mb-6 sm:mb-8">
+        <p className="text-xs sm:text-sm text-[#666660]">
+          {searchQuery ? `Resultados para "${searchQuery}"` : 'Todos los tracks'} · <span className="timer-font text-[#C8F04B]">{searchResults.length}</span>
         </p>
-        <div className="flex items-center gap-1 bg-secondary/50 rounded-lg p-1">
+        <div className="flex items-center gap-1 bg-[rgba(255,255,255,0.04)] rounded-lg p-1">
           <button
             onClick={() => setViewMode('grid')}
-            className={`p-1.5 rounded transition-colors ${viewMode === 'grid' ? 'bg-muted text-foreground' : 'text-muted-foreground'}`}
+            className={`p-1.5 rounded transition-colors ${viewMode === 'grid' ? 'bg-[#C8F04B]/20 text-[#C8F04B]' : 'text-[#666660]'}`}
           >
-            <Grid3x3 className="w-3.5 h-3.5" />
+            <Grid3x3 className="w-4 h-4" />
           </button>
           <button
             onClick={() => setViewMode('list')}
-            className={`p-1.5 rounded transition-colors ${viewMode === 'list' ? 'bg-muted text-foreground' : 'text-muted-foreground'}`}
+            className={`p-1.5 rounded transition-colors ${viewMode === 'list' ? 'bg-[#C8F04B]/20 text-[#C8F04B]' : 'text-[#666660]'}`}
           >
-            <List className="w-3.5 h-3.5" />
+            <List className="w-4 h-4" />
           </button>
         </div>
       </div>
@@ -55,7 +55,7 @@ export default function SearchPage() {
 
       {searchResults.length === 0 && (
         <div className="text-center py-20">
-          <p className="text-muted-foreground text-sm">No se encontraron resultados</p>
+          <p className="text-[#666660] text-sm">No se encontraron resultados</p>
         </div>
       )}
     </div>
