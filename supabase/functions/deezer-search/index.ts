@@ -185,6 +185,44 @@ async function getArtistData(artistId: number) {
   }
 }
 
+async function getAlbumData(albumId: number) {
+  try {
+    const albumRes = await fetch(`https://api.deezer.com/album/${albumId}`);
+    if (!albumRes.ok) {
+      throw new Error('Failed to fetch album');
+    }
+
+    const albumData = await albumRes.json();
+
+    // Get artist's other albums
+    const artistId = albumData.artist.id;
+    const artistAlbumsRes = await fetch(`https://api.deezer.com/artist/${artistId}/albums?limit=20`);
+    const artistAlbumsData = await artistAlbumsRes.json();
+
+    return {
+      success: true,
+      album: {
+        id: albumData.id,
+        title: albumData.title,
+        cover: albumData.cover_xl || albumData.cover_big || albumData.cover_medium || '',
+        artist: {
+          id: albumData.artist.id,
+          name: albumData.artist.name,
+        },
+        releaseDate: albumData.release_date,
+        trackCount: albumData.nb_tracks || 0,
+        tracks: (albumData.tracks?.data || []).map(transformTrack),
+      },
+      moreByArtist: (artistAlbumsData.data || [])
+        .filter((a: any) => a.id !== albumId)
+        .slice(0, 4)
+        .map(transformAlbum),
+    };
+  } catch (error) {
+    throw error;
+  }
+}
+
 async function getHomeData() {
   try {
     // Genre IDs: Pop=132, Rap=116, Rock=152, Electronic=106, R&B=165, Latin=197
@@ -302,6 +340,21 @@ Deno.serve(async (req) => {
       }
       const artistData = await getArtistData(artistId);
       return new Response(JSON.stringify(artistData), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Album action
+    if (action === 'album') {
+      const albumId = body.albumId;
+      if (!albumId) {
+        return new Response(
+          JSON.stringify({ error: 'albumId is required' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      const albumData = await getAlbumData(albumId);
+      return new Response(JSON.stringify(albumData), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }

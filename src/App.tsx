@@ -13,6 +13,7 @@ import DownloadsPage from "./pages/DownloadsPage";
 import TrackDetailPage from "./pages/TrackDetailPage";
 import SettingsPage from "./pages/SettingsPage";
 import ArtistPage from "./pages/ArtistPage";
+import { AlbumPage } from "./pages/AlbumPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -33,6 +34,7 @@ const App = () => (
             <Route path="/downloads" element={<DownloadsPage />} />
             <Route path="/track/:id" element={<TrackDetailPage />} />
             <Route path="/artist/:id" element={<ArtistPage />} />
+            <Route path="/album/:id" element={<AlbumPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>
           <Route path="*" element={<NotFound />} />
