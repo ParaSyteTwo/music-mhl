@@ -109,9 +109,7 @@ export default function IdentifyPage() {
         artist,
         album: album || 'Desconocido',
         duration: duration || 0,
-        url: '', // No tenemos URL desde AudD
-        isLocal: false,
-        source: 'identified',
+        cover: '',
       };
 
       setIdentifiedTrack(identifiedTrackData);

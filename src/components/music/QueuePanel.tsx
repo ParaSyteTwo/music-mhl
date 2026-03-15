@@ -33,7 +33,6 @@ interface QueueItemProps {
   artist: string;
   duration: number;
   cover?: string;
-  onDelete: () => void;
   onClick: () => void;
 }
 
@@ -53,7 +52,6 @@ function QueueTrackItem({
   artist,
   duration,
   cover,
-  onDelete,
   onClick,
 }: QueueItemProps) {
   const {
@@ -126,27 +124,20 @@ function QueueTrackItem({
       <span className="text-xs font-mono text-[#666660] w-12 text-right">
         {formatTime(duration)}
       </span>
-
-      {/* Delete Button */}
-      <button
-        onClick={onDelete}
-        className="opacity-0 hover:opacity-100 text-[#666660] hover:text-red-500 transition-all flex-shrink-0"
-        title="Remove from queue"
-      >
-        <X size={16} />
-      </button>
     </div>
   );
 }
 
 export function QueuePanel({ isOpen, onClose }: QueuePanelProps) {
-  const { player, jumpToQueueItem, removeFromQueue, clearQueue } = useMusicStore();
+  const { player, playQueue, playTrack } = useMusicStore();
   const { currentTrack, queue = [], queueIndex = 0 } = player;
 
   // dnd-kit sensors
   const sensors = useSensors(
     useSensor(PointerSensor, {
-      distance: 8,
+      activationConstraint: {
+        distance: 8,
+      },
     }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
@@ -204,15 +195,6 @@ export function QueuePanel({ isOpen, onClose }: QueuePanelProps) {
               </div>
 
               <div className="flex gap-2">
-                {queue.length > 0 && (
-                  <button
-                    onClick={clearQueue}
-                    className="px-3 py-1.5 text-xs font-dm-sans text-[#666660] hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
-                    title="Clear queue"
-                  >
-                    Clear
-                  </button>
-                )}
 
                 <button
                   onClick={onClose}
@@ -246,8 +228,7 @@ export function QueuePanel({ isOpen, onClose }: QueuePanelProps) {
                           artist={track.artist}
                           duration={track.duration}
                           cover={track.cover}
-                          onDelete={() => removeFromQueue(index)}
-                          onClick={() => jumpToQueueItem(index)}
+                          onClick={() => playTrack(track)}
                         />
                       ))}
                     </div>
