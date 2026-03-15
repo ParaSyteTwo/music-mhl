@@ -1,7 +1,7 @@
 {
   "name": "Music MHL - Your Library, Uncompressed",
   "short_name": "Music MHL",
-  "description": "Stream, download, and manage your music in high quality. Powered by Deezer, YouTube, and LRCLIB.",
+  "description": "Stream, download, and manage your music in high quality.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

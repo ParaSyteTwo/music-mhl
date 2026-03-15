@@ -39,7 +39,7 @@ export default function HomePage() {
           Your library, <span className="text-primary">uncompressed.</span>
         </h1>
         <p className="text-muted-foreground text-xs sm:text-sm max-w-lg mb-4 sm:mb-6">
-          Busca, escucha y descarga música en alta calidad. Powered by Deezer + YouTube + LRCLIB.
+          Busca, escucha y descarga tu música en alta calidad.
         </p>
         <SearchBar />
       </motion.div>
@@ -49,7 +49,7 @@ export default function HomePage() {
         {[
           { icon: Search, label: 'Resultados', value: searchResults.length.toString(), sub: 'encontrados' },
           { icon: Music2, label: 'Biblioteca', value: library.length.toString(), sub: 'guardadas' },
-          { icon: TrendingUp, label: 'Fuentes', value: '3', sub: 'Deezer · YT · LRCLIB' },
+          { icon: TrendingUp, label: 'Popular', value: trending.length.toString(), sub: 'trending' },
         ].map((stat, i) => (
           <motion.div
             key={stat.label}
