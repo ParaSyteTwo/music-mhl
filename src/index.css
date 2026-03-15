@@ -52,8 +52,8 @@
     --gradient-primary: linear-gradient(135deg, #C8F04B 0%, #8BC34A 100%);
     
     /* Layout */
-    --player-height: 88px;
-    --sidebar-width: 240px;
+    --player-height: 72px;
+    --nav-height: 0px;
     
     /* Legacy tokens for compatibility */
     --glass-bg: rgba(15, 15, 15, 0.95);
@@ -62,10 +62,10 @@
   }
 
   /* Mobile optimizations */
-  @media (max-width: 767px) {
+  @media (max-width: 639px) {
     :root {
-      --sidebar-width: 0px;
-      --player-height: 100px;
+      --player-height: 64px;
+      --nav-height: 52px;
     }
   }
 }

@@ -82,7 +82,7 @@ define(['./workbox-f87553f6'], (function (workbox) { 'use strict';
     "revision": "3ca0b8505b4bec776b69afdba2768812"
   }, {
     "url": "index.html",
-    "revision": "0.gfd3bf9a884"
+    "revision": "0.ottorpn59n8"
   }], {});
   workbox.cleanupOutdatedCaches();
   workbox.registerRoute(new workbox.NavigationRoute(workbox.createHandlerBoundToURL("index.html"), {
@@ -100,6 +100,20 @@ define(['./workbox-f87553f6'], (function (workbox) { 'use strict';
     plugins: [new workbox.ExpirationPlugin({
       maxEntries: 50,
       maxAgeSeconds: 86400
+    })]
+  }), 'GET');
+  workbox.registerRoute(/^https:\/\/e-cdns-images\.dzcdn\.net\/.*/i, new workbox.CacheFirst({
+    "cacheName": "deezer-images-cache",
+    plugins: [new workbox.ExpirationPlugin({
+      maxEntries: 200,
+      maxAgeSeconds: 2592000
+    })]
+  }), 'GET');
+  workbox.registerRoute(/^https:\/\/cdns-preview-.*\.dzcdn\.net\/.*/i, new workbox.CacheFirst({
+    "cacheName": "deezer-preview-cache",
+    plugins: [new workbox.ExpirationPlugin({
+      maxEntries: 50,
+      maxAgeSeconds: 604800
     })]
   }), 'GET');
   workbox.registerRoute(/^https:\/\/.*\.supabase\.co\/.*/i, new workbox.NetworkFirst({

@@ -1,7 +1,6 @@
 import { useMusicStore } from '@/store/musicStore';
-import { Download as DownloadIcon, CheckCircle, Loader2, XCircle, Trash2 } from 'lucide-react';
+import { CheckCircle, Loader2, XCircle, Music, Trash2 } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { EmptyState, DownloadIcon as DownloadSVGIcon } from '@/components/ui/empty-state';
 
 function formatDuration(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -10,23 +9,23 @@ function formatDuration(seconds: number) {
 }
 
 export default function DownloadsPage() {
-  const { downloads, startDownload } = useMusicStore();
+  const { downloads, startDownload, removeDownload } = useMusicStore();
 
-  const completed = downloads.filter(d => d.status === 'completed');
-  const active = downloads.filter(d => d.status === 'downloading');
-  const failed = downloads.filter(d => d.status === 'error');
+  const completed = downloads.filter((d) => d.status === 'completed');
+  const active = downloads.filter((d) => d.status === 'downloading');
+  const failed = downloads.filter((d) => d.status === 'error');
 
   return (
-    <div className="px-4 sm:px-8 py-6 sm:py-10">
-      <h1 className="text-xl sm:text-2xl font-semibold tracking-tighter mb-2">Downloads</h1>
-      <p className="text-xs sm:text-sm text-muted-foreground mb-6 sm:mb-8">
-        <span className="timer-font">{downloads.length}</span> total · <span className="timer-font">{active.length}</span> activas
+    <div className="px-3 sm:px-8 py-4 sm:py-10 max-w-3xl mx-auto">
+      <h1 className="text-lg sm:text-2xl font-semibold tracking-tighter mb-1 sm:mb-2">Descargas</h1>
+      <p className="text-xs sm:text-sm text-[#666660] mb-6 sm:mb-8">
+        <span className="tabular-nums">{downloads.length}</span> total · <span className="tabular-nums">{active.length}</span> activas
       </p>
 
       {/* Active */}
       {active.length > 0 && (
-        <section className="mb-8 sm:mb-10">
-          <h2 className="text-xs font-mono uppercase tracking-widest text-muted-foreground mb-3 sm:mb-4">En progreso</h2>
+        <section className="mb-8">
+          <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">En progreso</h2>
           <div className="space-y-2">
             {active.map((dl, i) => (
               <motion.div
@@ -34,24 +33,21 @@ export default function DownloadsPage() {
                 initial={{ opacity: 0, x: -10 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: i * 0.05 }}
-                className="flex items-center gap-2 sm:gap-4 p-2 sm:p-4 glass-panel rounded-lg"
+                className="flex items-center gap-3 p-3 rounded-lg bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)]"
               >
-                <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary animate-spin shrink-0" />
+                <Loader2 className="w-4 h-4 text-[#C8F04B] animate-spin shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs sm:text-sm font-medium truncate">{dl.track.title}</p>
-                  <p className="text-[10px] sm:text-xs text-muted-foreground">{dl.track.artist}</p>
-                  <div className="mt-2 h-1 bg-muted/30 rounded-full overflow-hidden">
+                  <p className="text-sm font-medium truncate text-[#F5F5F0]">{dl.track.title}</p>
+                  <p className="text-xs text-[#666660]">{dl.track.artist}</p>
+                  <div className="mt-2 h-1 bg-[rgba(255,255,255,0.06)] rounded-full overflow-hidden">
                     <motion.div
-                      className="h-full bg-primary rounded-full"
+                      className="h-full bg-[#C8F04B] rounded-full"
                       animate={{ width: `${dl.progress}%` }}
                       transition={{ duration: 0.5 }}
                     />
                   </div>
                 </div>
-                <div className="text-right shrink-0">
-                  <p className="timer-font text-xs text-muted-foreground">{dl.progress}%</p>
-                  <p className="text-[10px] font-mono text-muted-foreground mt-0.5">{dl.format}</p>
-                </div>
+                <span className="text-xs tabular-nums text-[#666660]">{dl.progress}%</span>
               </motion.div>
             ))}
           </div>
@@ -60,29 +56,32 @@ export default function DownloadsPage() {
 
       {/* Failed */}
       {failed.length > 0 && (
-        <section className="mb-10">
-          <h2 className="text-xs font-mono uppercase tracking-widest text-muted-foreground mb-4">Fallidas</h2>
+        <section className="mb-8">
+          <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">Fallidas</h2>
           <div className="space-y-1">
-            {failed.map((dl, i) => (
-              <motion.div
+            {failed.map((dl) => (
+              <div
                 key={dl.id}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: i * 0.03 }}
-                className="flex items-center gap-4 px-4 py-3 rounded-lg hover:bg-white/5 transition-colors group"
+                className="flex items-center gap-2.5 sm:gap-3 px-2 sm:px-3 py-2 sm:py-2.5 rounded-lg hover:bg-[rgba(255,255,255,0.03)] active:bg-[rgba(255,255,255,0.04)] transition-colors"
               >
-                <XCircle className="w-4 h-4 text-destructive shrink-0" />
+                <XCircle className="w-4 h-4 text-red-400 shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{dl.track.title}</p>
-                  <p className="text-xs text-destructive/70">{dl.error || 'Error desconocido'}</p>
+                  <p className="text-[13px] sm:text-sm font-medium truncate text-[#F5F5F0]">{dl.track.title}</p>
+                  <p className="text-[11px] sm:text-xs text-red-400/70">{dl.error || 'Error desconocido'}</p>
                 </div>
                 <button
-                  onClick={() => startDownload(dl.track, dl.format)}
-                  className="text-xs text-primary hover:underline"
+                  onClick={() => startDownload(dl.track)}
+                  className="text-xs text-[#C8F04B] hover:underline px-2 py-1"
                 >
                   Reintentar
                 </button>
-              </motion.div>
+                <button
+                  onClick={() => removeDownload(dl.id)}
+                  className="p-2 -mr-1 text-[#666660] hover:text-red-400 active:text-red-400 transition-colors"
+                >
+                  <Trash2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
+                </button>
+              </div>
             ))}
           </div>
         </section>
@@ -90,47 +89,46 @@ export default function DownloadsPage() {
 
       {/* Completed */}
       {completed.length > 0 && (
-        <section className="mb-10">
-          <h2 className="text-xs font-mono uppercase tracking-widest text-muted-foreground mb-4">Completadas</h2>
+        <section className="mb-8">
+          <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">Completadas</h2>
           <div className="space-y-1">
-            {completed.map((dl, i) => (
-              <motion.div
+            {completed.map((dl) => (
+              <div
                 key={dl.id}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: i * 0.03 }}
-                className="flex items-center gap-4 px-4 py-3 rounded-lg hover:bg-white/5 transition-colors group"
+                className="flex items-center gap-2.5 sm:gap-3 px-2 sm:px-3 py-2 sm:py-2.5 rounded-lg hover:bg-[rgba(255,255,255,0.03)] active:bg-[rgba(255,255,255,0.04)] transition-colors group"
               >
-                <CheckCircle className="w-4 h-4 text-primary shrink-0" />
-                <div className="w-8 h-8 rounded bg-secondary shrink-0 overflow-hidden">
+                <CheckCircle className="w-4 h-4 text-[#C8F04B] shrink-0" />
+                <div className="w-9 h-9 sm:w-8 sm:h-8 rounded overflow-hidden shrink-0">
                   {dl.track.cover ? (
                     <img src={dl.track.cover} alt="" className="w-full h-full object-cover" />
                   ) : (
-                    <div className="w-full h-full bg-gradient-to-br from-primary/20 to-accent/10 rounded" />
+                    <div className="w-full h-full bg-[rgba(200,240,75,0.1)] flex items-center justify-center">
+                      <Music className="w-3 h-3 text-[#666660]" />
+                    </div>
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{dl.track.title}</p>
-                  <p className="text-xs text-muted-foreground">{dl.track.artist}</p>
+                  <p className="text-[13px] sm:text-sm font-medium truncate text-[#F5F5F0]">{dl.track.title}</p>
+                  <p className="text-[11px] sm:text-xs text-[#666660]">{dl.track.artist}</p>
                 </div>
-                <span className="timer-font text-xs text-muted-foreground">{formatDuration(dl.track.duration)}</span>
-                <span className="text-[10px] font-mono text-muted-foreground px-1.5 py-0.5 rounded bg-muted/50">{dl.format}</span>
-              </motion.div>
+                <span className="text-xs tabular-nums text-[#444] hidden sm:block">{formatDuration(dl.track.duration)}</span>
+                <button
+                  onClick={() => removeDownload(dl.id)}
+                  className="p-2 -mr-1 text-[#666660] hover:text-red-400 active:text-red-400 transition-colors sm:opacity-0 sm:group-hover:opacity-100"
+                >
+                  <Trash2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
+                </button>
+              </div>
             ))}
           </div>
         </section>
       )}
 
       {downloads.length === 0 && (
-        <EmptyState
-          icon={<DownloadSVGIcon />}
-          title="No Downloads Yet"
-          description="Download songs to listen offline and build your collection."
-          action={{
-            label: 'Find Music',
-            onClick: () => window.location.href = '/search',
-          }}
-        />
+        <div className="text-center py-12 sm:py-16 space-y-3">
+          <Music className="w-10 h-10 text-[#333] mx-auto" />
+          <p className="text-sm text-[#666660]">No hay descargas aún</p>
+        </div>
       )}
     </div>
   );
