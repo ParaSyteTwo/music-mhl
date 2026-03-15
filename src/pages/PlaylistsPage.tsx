@@ -3,6 +3,7 @@ import { TrackRow } from '@/components/music/TrackRow';
 import { Plus, ListMusic, Trash2, Pencil, Play } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState } from 'react';
+import { EmptyState, ListIcon } from '@/components/ui/empty-state';
 
 export default function PlaylistsPage() {
   const { playlists, createPlaylist, deletePlaylist, renamePlaylist, playQueue } = useMusicStore();
@@ -70,11 +71,15 @@ export default function PlaylistsPage() {
       </AnimatePresence>
 
       {playlists.length === 0 && !showCreate && (
-        <div className="text-center py-20">
-          <ListMusic className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
-          <p className="text-muted-foreground text-sm">No tienes playlists</p>
-          <p className="text-xs text-muted-foreground mt-1">Crea una para organizar tu música</p>
-        </div>
+        <EmptyState
+          icon={<ListIcon />}
+          title="No Playlists Yet"
+          description="Create your first playlist to organize and enjoy your music."
+          action={{
+            label: 'Create Playlist',
+            onClick: () => setShowCreate(true),
+          }}
+        />
       )}
 
       {playlists.length > 0 && (

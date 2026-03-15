@@ -1,8 +1,9 @@
 import { useMusicStore } from '@/store/musicStore';
 import { TrackRow } from '@/components/music/TrackRow';
-import { Music, User, Disc, Play, Trash2 } from 'lucide-react';
+import { Music, User, Disc, Play } from 'lucide-react';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
+import { EmptyState, VinylIcon } from '@/components/ui/empty-state';
 
 type LibraryTab = 'songs' | 'artists' | 'albums';
 
@@ -86,13 +87,15 @@ export default function LibraryPage() {
               </div>
             ))
           ) : (
-            <div className="text-center py-20">
-              <Music className="w-10 h-10 text-[#333330] mx-auto mb-4" />
-              <p className="text-[#666660] text-sm">
-                {library.length === 0 ? 'Tu biblioteca está vacía' : 'Sin resultados'}
-              </p>
-              <p className="text-xs text-[#333330] mt-2">Busca canciones y añádelas a tu colección</p>
-            </div>
+            <EmptyState
+              icon={<VinylIcon />}
+              title="Your Library is Empty"
+              description={library.length === 0 ? 'Start exploring and add tracks to your collection.' : 'No tracks found for your filters.'}
+              action={{
+                label: 'Explore Music',
+                onClick: () => window.location.href = '/search',
+              }}
+            />
           )}
         </div>
       )}

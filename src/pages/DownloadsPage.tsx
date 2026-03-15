@@ -1,6 +1,7 @@
 import { useMusicStore } from '@/store/musicStore';
 import { Download as DownloadIcon, CheckCircle, Loader2, XCircle, Trash2 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { EmptyState, DownloadIcon as DownloadSVGIcon } from '@/components/ui/empty-state';
 
 function formatDuration(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -121,10 +122,15 @@ export default function DownloadsPage() {
       )}
 
       {downloads.length === 0 && (
-        <div className="text-center py-20">
-          <DownloadIcon className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
-          <p className="text-muted-foreground text-sm">No hay descargas</p>
-        </div>
+        <EmptyState
+          icon={<DownloadSVGIcon />}
+          title="No Downloads Yet"
+          description="Download songs to listen offline and build your collection."
+          action={{
+            label: 'Find Music',
+            onClick: () => window.location.href = '/search',
+          }}
+        />
       )}
     </div>
   );
