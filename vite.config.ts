@@ -18,7 +18,23 @@ export default defineConfig(({ mode }) => ({
     mode === "development" && componentTagger(),
     VitePWA({
       registerType: "autoUpdate",
-      manifest: "/manifest.json",
+      manifest: {
+        name: "MHL Music",
+        short_name: "MHL",
+        description: "Tu música, sin compromisos",
+        theme_color: "#C8F04B",
+        background_color: "#080808",
+        display: "standalone",
+        scope: "/",
+        start_url: "/",
+        icons: [
+          {
+            src: "/favicon.ico",
+            sizes: "64x64",
+            type: "image/x-icon",
+          },
+        ],
+      },
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,wav,mp3}"],
         runtimeCaching: [
