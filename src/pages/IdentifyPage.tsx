@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Loader, AlertCircle, CheckCircle, Music, Grid3x3, List } from 'lucide-react';
+import { Loader, AlertCircle, CheckCircle, Music, Grid3x3, List, AudioWaveform, Upload } from 'lucide-react';
 import { useMusicStore } from '../store/musicStore';
 import { TrackCard } from '../components/music/TrackCard';
 import { TrackRow } from '../components/music/TrackRow';
@@ -11,21 +11,19 @@ export default function IdentifyPage() {
   const [error, setError] = useState<string | null>(null);
   const [identifiedTrack, setIdentifiedTrack] = useState<Track | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
+  const [dragActive, setDragActive] = useState(false);
 
   const { addToLibrary } = useMusicStore();
   const AUDD_API_KEY = import.meta.env.VITE_AUDD_API_KEY;
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
+  const handleFileSelect = (selectedFile: File | null) => {
     if (!selectedFile) return;
 
-    // Validar que sea un archivo de audio
     if (!selectedFile.type.startsWith('audio/')) {
       setError('Por favor selecciona un archivo de audio válido');
       return;
     }
 
-    // Limitar tamaño (AudD acepta hasta 10MB)
     if (selectedFile.size > 10 * 1024 * 1024) {
       setError('El archivo es demasiado grande (máximo 10MB)');
       return;
@@ -33,6 +31,26 @@ export default function IdentifyPage() {
 
     setFile(selectedFile);
     setError(null);
+  };
+
+  const handleDrag = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === 'dragenter' || e.type === 'dragover') {
+      setDragActive(true);
+    } else if (e.type === 'dragleave') {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    const droppedFile = e.dataTransfer.files?.[0];
+    if (droppedFile) {
+      handleFileSelect(droppedFile);
+    }
   };
 
   const handleIdentify = async () => {
@@ -116,111 +134,142 @@ export default function IdentifyPage() {
 
   return (
     <div className="px-4 sm:px-8 py-6 sm:py-10">
-      <div className="mb-6 sm:mb-8">
-        <h1 className="text-xl sm:text-2xl font-semibold tracking-tighter mb-3 sm:mb-4 flex items-center gap-2">
-          <Music size={24} />
-          Identificar Canción
+      {/* Header */}
+      <div className="mb-12 sm:mb-16 max-w-2xl">
+        <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-[#F5F5F0] font-[family-name:Syne] mb-3">
+          Identify
         </h1>
+        <p className="text-sm sm:text-base text-[#666660]">
+          Drop a track. Get the truth.
+        </p>
       </div>
 
       {!identifiedTrack ? (
-        <div className="max-w-md mx-auto bg-slate-900/50 rounded-lg shadow-lg p-6 sm:p-8 border border-slate-700">
-          {/* File Input */}
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-300">
-                Selecciona un archivo de audio
-              </label>
-              <input
-                type="file"
-                accept="audio/*"
-                onChange={handleFileSelect}
-                disabled={loading}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded text-sm text-white disabled:opacity-50 focus:outline-none focus:border-blue-500"
-              />
-              {file && (
-                <p className="text-xs text-slate-400">
-                  Seleccionado: {file.name} ({(file.size / 1024 / 1024).toFixed(2)}MB)
+        <div className="max-w-lg mx-0">
+          {/* Drop zone */}
+          <div
+            className={`relative border-2 border-dashed rounded-[20px] p-8 sm:p-12 transition-all duration-200 cursor-pointer ${
+              dragActive
+                ? 'border-[#C8F04B] bg-[rgba(200,240,75,0.08)]'
+                : 'border-[rgba(255,255,255,0.1)] bg-[rgba(255,255,255,0.02)] hover:border-[rgba(255,255,255,0.2)]'
+            }`}
+            onDragEnter={handleDrag}
+            onDragLeave={handleDrag}
+            onDragOver={handleDrag}
+            onDrop={handleDrop}
+            onClick={() => document.getElementById('file-input')?.click()}
+          >
+            <input
+              id="file-input"
+              type="file"
+              accept="audio/*"
+              onChange={(e) => handleFileSelect(e.target.files?.[0] || null)}
+              disabled={loading}
+              className="hidden"
+            />
+
+            {/* Icon and text */}
+            <div className="flex flex-col items-center justify-center gap-4">
+              <div className={`transition-colors duration-200 ${dragActive ? 'text-[#C8F04B]' : 'text-[#333330]'}`}>
+                <AudioWaveform size={48} />
+              </div>
+              <div className="text-center">
+                <p className="text-sm font-medium text-[#F5F5F0] mb-1">
+                  Arrastra un archivo de audio
                 </p>
-              )}
+                <p className="text-xs text-[#666660]">
+                  o haz clic para elegir uno
+                </p>
+              </div>
             </div>
 
-            {/* Error */}
-            {error && (
-              <div className="flex gap-2 p-3 bg-red-900/20 border border-red-700/50 rounded text-sm text-red-200">
-                <AlertCircle size={16} className="flex-shrink-0 mt-0.5" />
-                <span>{error}</span>
+            {/* File info */}
+            {file && (
+              <div className="mt-4 pt-4 border-t border-[rgba(255,255,255,0.06)]">
+                <p className="text-xs text-[#C8F04B] font-mono">
+                  ✓ {file.name} ({(file.size / 1024 / 1024).toFixed(2)}MB)
+                </p>
               </div>
             )}
-
-            {/* Button */}
-            <button
-              onClick={handleIdentify}
-              disabled={!file || loading}
-              className="w-full py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 text-white rounded font-medium transition-colors disabled:cursor-not-allowed flex items-center justify-center gap-2"
-            >
-              {loading && <Loader size={18} className="animate-spin" />}
-              {loading ? 'Identificando...' : 'Identificar'}
-            </button>
           </div>
+
+          {/* Error */}
+          {error && (
+            <div className="mt-6 flex gap-3 p-4 bg-[rgba(255,77,109,0.1)] border border-[#FF4D6D]/30 rounded-lg text-sm text-[#FF4D6D]">
+              <AlertCircle size={18} className="flex-shrink-0 mt-0.5" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          {/* Identify button */}
+          <button
+            onClick={handleIdentify}
+            disabled={!file || loading}
+            className="w-full mt-6 py-3 bg-[#C8F04B] hover:bg-[#D4FF57] disabled:bg-[#333330] text-[#080808] disabled:text-[#666660] rounded-lg font-semibold transition-all duration-200 flex items-center justify-center gap-2"
+          >
+            {loading && <Loader size={18} className="animate-spin" />}
+            {loading ? 'Escuchando...' : 'Identificar'}
+          </button>
         </div>
       ) : (
-        <div className="space-y-6">
-          {/* Success Alert */}
-          <div className="max-w-md mx-auto flex gap-3 p-4 bg-green-900/20 border border-green-700/50 rounded">
-            <CheckCircle size={20} className="text-green-400 flex-shrink-0 mt-0.5" />
-            <div className="text-sm text-green-100">
-              <p className="font-medium">¡Canción identificada!</p>
+        <div className="max-w-4xl mx-0 space-y-8">
+          {/* Success */}
+          <div className="flex gap-3 p-4 bg-[rgba(200,240,75,0.1)] border border-[#C8F04B]/30 rounded-lg text-sm text-[#C8F04B]">
+            <CheckCircle size={18} className="flex-shrink-0 mt-0.5" />
+            <span>¡Canción identificada exitosamente!</span>
+          </div>
+
+          {/* Track card */}
+          <div className="bg-[#0f0f0f] border border-[rgba(255,255,255,0.06)] rounded-[16px] p-6 sm:p-8">
+            <div className="flex gap-6">
+              {/* Cover */}
+              <div className="w-24 h-24 rounded-lg bg-gradient-to-br from-[#C8F04B]/30 to-[#8BC34A]/10 flex-shrink-0">
+                {identifiedTrack.cover && (
+                  <img src={identifiedTrack.cover} alt={identifiedTrack.title} className="w-full h-full object-cover rounded-lg" />
+                )}
+              </div>
+
+              {/* Info */}
+              <div className="flex-1">
+                <h2 className="text-xl sm:text-2xl font-bold text-[#F5F5F0] font-[family-name:Syne] mb-2">
+                  {identifiedTrack.title}
+                </h2>
+                <p className="text-sm text-[#666660] mb-4">{identifiedTrack.artist}</p>
+                <p className="text-sm text-[#333330]">{identifiedTrack.album}</p>
+              </div>
+            </div>
+
+            {/* Buttons */}
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={handleNewSearch}
+                className="flex-1 py-2 bg-[#C8F04B] hover:bg-[#D4FF57] text-[#080808] rounded-lg font-semibold transition-colors"
+              >
+                Identificar otra
+              </button>
             </div>
           </div>
 
-          {/* Track Info */}
-          <div className="max-w-md mx-auto bg-slate-900/50 rounded-lg p-4 sm:p-6 border border-slate-700">
-            <div className="space-y-3">
-              <div>
-                <p className="text-xs text-slate-400">Título</p>
-                <p className="text-white font-medium text-lg">{identifiedTrack.title}</p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-400">Artista</p>
-                <p className="text-slate-200">{identifiedTrack.artist}</p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-400">Álbum</p>
-                <p className="text-slate-200">{identifiedTrack.album}</p>
-              </div>
-            </div>
-
-            <button
-              onClick={handleNewSearch}
-              className="w-full mt-6 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded font-medium transition-colors"
-            >
-              Identificar otra canción
-            </button>
-          </div>
-
-          {/* View toggle */}
+          {/* Download options header */}
           <div className="flex items-center justify-between">
-            <p className="text-xs sm:text-sm text-muted-foreground">
-              Opciones de descarga
-            </p>
-            <div className="flex items-center gap-1 bg-secondary/50 rounded-lg p-1">
+            <h3 className="text-lg font-semibold text-[#F5F5F0]">Opciones de descarga</h3>
+            <div className="flex items-center gap-1 bg-[rgba(255,255,255,0.04)] rounded-lg p-1">
               <button
                 onClick={() => setViewMode('grid')}
-                className={`p-1.5 rounded transition-colors ${viewMode === 'grid' ? 'bg-muted text-foreground' : 'text-muted-foreground'}`}
+                className={`p-1.5 rounded transition-colors ${viewMode === 'grid' ? 'bg-[#C8F04B]/20 text-[#C8F04B]' : 'text-[#666660]'}`}
               >
-                <Grid3x3 className="w-3.5 h-3.5" />
+                <Grid3x3 className="w-4 h-4" />
               </button>
               <button
                 onClick={() => setViewMode('list')}
-                className={`p-1.5 rounded transition-colors ${viewMode === 'list' ? 'bg-muted text-foreground' : 'text-muted-foreground'}`}
+                className={`p-1.5 rounded transition-colors ${viewMode === 'list' ? 'bg-[#C8F04B]/20 text-[#C8F04B]' : 'text-[#666660]'}`}
               >
-                <List className="w-3.5 h-3.5" />
+                <List className="w-4 h-4" />
               </button>
             </div>
           </div>
 
-          {/* Track Display */}
+          {/* Track display */}
           {viewMode === 'grid' ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-4">
               <TrackCard track={identifiedTrack} index={0} />
