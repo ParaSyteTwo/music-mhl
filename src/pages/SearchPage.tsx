@@ -399,42 +399,43 @@ export function SearchPage() {
                     <p className="text-sm text-[#333330]">Intenta con otras palabras clave o explora los géneros disponibles</p>
                   </div>
                 )}
-              </>
-            )}
 
-            {/* TRACKS TAB */}
-                {tab === 'tracks' && (
-                  <div className="space-y-2">
-                    {results.tracks.length > 0 ? (
-                      results.tracks.map((track) => <TrackItem key={track.id} track={track} />)
-                    ) : (
-                      <p className="text-center py-8 text-[#333330]">No se encontraron canciones</p>
+                {/* TABS VIEW FOR SEARCH */}
+                {!activeGenre && query && (
+                  <>
+                    {/* TRACKS TAB */}
+                    {tab === 'tracks' && (
+                      <div className="space-y-2">
+                        {results.tracks.length > 0 ? (
+                          results.tracks.map((track) => <TrackItem key={track.id} track={track} />)
+                        ) : (
+                          <p className="text-center py-8 text-[#333330]">No se encontraron canciones</p>
+                        )}
+                      </div>
                     )}
-                  </div>
-                )}
 
-                {/* ARTISTS TAB */}
-                {tab === 'artists' && (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-                    {results.artists.length > 0 ? (
-                      results.artists.map((artist) => <ArtistCard key={artist.id} artist={artist} />)
-                    ) : (
-                      <p className="col-span-full text-center py-8 text-[#333330]">No se encontraron artistas</p>
+                    {/* ARTISTS TAB */}
+                    {tab === 'artists' && (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+                        {results.artists.length > 0 ? (
+                          results.artists.map((artist) => <ArtistCard key={artist.id} artist={artist} />)
+                        ) : (
+                          <p className="col-span-full text-center py-8 text-[#333330]">No se encontraron artistas</p>
+                        )}
+                      </div>
                     )}
-                  </div>
-                )}
 
-                {/* ALBUMS TAB */}
-                {tab === 'albums' && (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                    {results.albums.length > 0 ? (
-                      results.albums.map((album) => <AlbumCard key={album.id} album={album} />)
-                    ) : (
-                      <p className="col-span-full text-center py-8 text-[#333330]">No se encontraron álbumes</p>
+                    {/* ALBUMS TAB */}
+                    {tab === 'albums' && (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                        {results.albums.length > 0 ? (
+                          results.albums.map((album) => <AlbumCard key={album.id} album={album} />)
+                        ) : (
+                          <p className="col-span-full text-center py-8 text-[#333330]">No se encontraron álbumes</p>
+                        )}
+                      </div>
                     )}
-                  </div>
-                )}
-              </>
+                  </>
                 )}
               </>
             )}

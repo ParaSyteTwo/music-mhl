@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { Track, Playlist, Download, AudioFormat, AudioSource } from '@/types/music';
 import { audioEngine } from '@/lib/audioEngine';
-import { searchDeezer, searchYouTube, getYouTubeStream, fetchLyrics } from '@/lib/api/musicApi';
+import { searchDeezer, searchYouTube, getYouTubeStream, fetchLyrics, detectAndTranslate } from '@/lib/api/musicApi';
 import { writeID3Tags } from '@/lib/id3Writer';
 
 // ─── Settings ───
@@ -19,6 +19,7 @@ interface PlayerState {
   currentTrack: Track | null;
   isPlaying: boolean;
   isLoading: boolean;
+  isTranslating: boolean;
   volume: number;
   progress: number;
   duration: number;
@@ -79,6 +80,7 @@ interface MusicStore {
 
   // Lyrics
   loadLyrics: (track: Track) => Promise<void>;
+  loadTranslation: (track: Track) => Promise<void>;
 
   // Settings
   settings: AppSettings;
@@ -161,6 +163,7 @@ export const useMusicStore = create<MusicStore>()(
           currentTrack: null,
           isPlaying: false,
           isLoading: false,
+          isTranslating: false,
           volume: 0.8,
           progress: 0,
           duration: 0,
@@ -530,9 +533,41 @@ export const useMusicStore = create<MusicStore>()(
                   currentTrack: s.player.currentTrack?.id === track.id ? updatedTrack : s.player.currentTrack,
                 },
               }));
+
+              // Auto-load translation if not English
+              const systemLang = navigator.language.split('-')[0];
+              if (systemLang !== 'en' && result.lyrics) {
+                get().loadTranslation(updatedTrack);
+              }
             }
           } catch (e) {
             console.warn('Failed to load lyrics:', e);
+          }
+        },
+
+        loadTranslation: async (track) => {
+          const lyrics = track.lyrics;
+          if (!lyrics) return;
+          
+          set((s) => ({ player: { ...s.player, isTranslating: true } }));
+          
+          try {
+            const translated = await detectAndTranslate(lyrics);
+            if (translated) {
+              set((s) => ({
+                player: {
+                  ...s.player,
+                  isTranslating: false,
+                  currentTrack: s.player.currentTrack?.id === track.id
+                    ? { ...s.player.currentTrack, translatedLyrics: translated }
+                    : s.player.currentTrack,
+                }
+              }));
+            } else {
+              set((s) => ({ player: { ...s.player, isTranslating: false } }));
+            }
+          } catch {
+            set((s) => ({ player: { ...s.player, isTranslating: false } }));
           }
         },
       };

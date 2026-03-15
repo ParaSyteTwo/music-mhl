@@ -69,9 +69,17 @@ export default function IdentifyPage() {
 
     try {
       const formData = new FormData();
-      formData.append('file', file);
+      // Only send first 1MB of file to API
+      const slicedFile = file.slice(0, 1024 * 1024);
+      formData.append('file', slicedFile, file.name);
       formData.append('api_token', AUDD_API_KEY);
-      formData.append('return', 'apple_music,spotify');
+      formData.append('return', 'apple_music,deezer');
+
+      console.log('Enviando a AudD:', {
+        fileSize: file.size,
+        slicedSize: slicedFile.size,
+        apiKey: AUDD_API_KEY ? 'presente' : 'FALTA'
+      });
 
       const response = await fetch('https://api.audd.io/', {
         method: 'POST',
@@ -83,11 +91,14 @@ export default function IdentifyPage() {
       }
 
       const data = await response.json();
+      console.log('Respuesta AudD:', JSON.stringify(data, null, 2));
 
-      if (!data.success) {
+      // AudD returns status: 'success' not data.success
+      if (data.status !== 'success') {
         setError(
           data.result?.message || 'No se pudo identificar la canción. Intenta con otro archivo.'
         );
+        console.error('AudD error:', data);
         return;
       }
 
