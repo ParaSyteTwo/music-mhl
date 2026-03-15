@@ -219,7 +219,6 @@
     color: #C8F04B;
     border-left: 2px solid #C8F04B;
   }
-}
 
   .track-card {
     @apply rounded-lg transition-all duration-200 cursor-pointer;
