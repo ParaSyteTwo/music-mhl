@@ -65,7 +65,7 @@ function HeroSection({ track }: { track: HomeTrack | null }) {
 function ContinueListening() {
   const { history, playTrack } = useMusicStore();
 
-  if (history.length === 0) return null;
+  if (history.length < 2) return null;
 
   const recentTracks = history.slice(0, 6);
 

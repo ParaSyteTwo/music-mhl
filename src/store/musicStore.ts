@@ -241,10 +241,15 @@ export const useMusicStore = create<MusicStore>()(
         clearHistory: () => set({ history: [] }),
 
         playTrack: async (track) => {
-          // Add to history (at the beginning, max 50 items, no consecutive duplicates)
+          // Add to history (at the beginning, max 20 items, no duplicates anywhere)
           set((s) => {
-            const newHistory = s.history[0]?.id === track.id ? s.history : [track, ...s.history];
-            return { history: newHistory.slice(0, 50) };
+            const lastInHistory = s.history[0];
+            const isDuplicate = lastInHistory?.id === track.id;
+            if (isDuplicate) {
+              return {};
+            }
+            const newHistory = [track, ...s.history.filter(t => t.id !== track.id)].slice(0, 20);
+            return { history: newHistory };
           });
           // Add to queue if not already there
           const { queue } = get().player;
@@ -295,10 +300,15 @@ export const useMusicStore = create<MusicStore>()(
         },
 
         playTrackWithYouTube: async (track) => {
-          // Add to history (at the beginning, max 50 items, no consecutive duplicates)
+          // Add to history (at the beginning, max 20 items, no duplicates anywhere)
           set((s) => {
-            const newHistory = s.history[0]?.id === track.id ? s.history : [track, ...s.history];
-            return { history: newHistory.slice(0, 50) };
+            const lastInHistory = s.history[0];
+            const isDuplicate = lastInHistory?.id === track.id;
+            if (isDuplicate) {
+              return {};
+            }
+            const newHistory = [track, ...s.history.filter(t => t.id !== track.id)].slice(0, 20);
+            return { history: newHistory };
           });
           
           // Strategy: Try YouTube first, fallback to preview if available
