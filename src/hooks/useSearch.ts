@@ -38,10 +38,30 @@ export function useSearchHistory() {
 
 export function useUnifiedSearch() {
   const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const [results, setResults] = useState<SearchResult>({ tracks: [], artists: [], albums: [] });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { addSearch } = useSearchHistory();
+
+  // Debounce query changes (500ms)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedQuery(query);
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  // Auto-search on debounced query change
+  useEffect(() => {
+    if (debouncedQuery.trim()) {
+      search(debouncedQuery);
+    } else {
+      setResults({ tracks: [], artists: [], albums: [] });
+      setError(null);
+    }
+  }, [debouncedQuery]);
 
   const search = async (q: string) => {
     if (!q.trim()) {
@@ -50,7 +70,6 @@ export function useUnifiedSearch() {
       return;
     }
 
-    setQuery(q);
     setLoading(true);
     setError(null);
 
@@ -82,5 +101,5 @@ export function useUnifiedSearch() {
     }
   };
 
-  return { query, results, loading, error, search };
+  return { query, setQuery, results, loading, error, search };
 }

@@ -161,10 +161,9 @@ function GenreGrid({ onGenreClick }: GenreGridProps) {
 }
 
 export function SearchPage() {
-  const { query, results, loading, error, search } = useUnifiedSearch();
+  const { query, setQuery, results, loading, error, search } = useUnifiedSearch();
   const { recentSearches, clearHistory } = useSearchHistory();
   const [tab, setTab] = useState<SearchTab>('all');
-  const [localQuery, setLocalQuery] = useState('');
   const [activeGenre, setActiveGenre] = useState<{ name: string; id: number } | null>(null);
   const [genreResults, setGenreResults] = useState<any[] | null>(null);
   const [genreLoading, setGenreLoading] = useState(false);
@@ -173,14 +172,13 @@ export function SearchPage() {
   const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
   const handleSearch = (q: string) => {
-    setLocalQuery(q);
+    setQuery(q);
     setActiveGenre(null);
-    search(q);
   };
 
   const handleGenreClick = async (genreName: string, genreId: number) => {
     setActiveGenre({ name: genreName, id: genreId });
-    setLocalQuery(genreName);
+    setQuery('');
     setGenreLoading(true);
     
     // Search by genre using edge function
@@ -210,15 +208,13 @@ export function SearchPage() {
 
   const handleClearGenre = () => {
     setActiveGenre(null);
-    setLocalQuery('');
+    setQuery('');
     setGenreResults(null);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (localQuery.trim()) {
-      handleSearch(localQuery);
-    }
+    // Debounce will handle the search automatically
   };
 
   const tabs: { id: SearchTab; label: string; count: number }[] = [
@@ -240,8 +236,8 @@ export function SearchPage() {
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[#666660]" size={20} />
             <input
               type="text"
-              value={localQuery}
-              onChange={(e) => setLocalQuery(e.target.value)}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
               placeholder="Busca canciones, artistas o álbumes..."
               className="w-full pl-12 pr-6 py-3 bg-[#0f0f0f] border border-[rgba(255,255,255,0.08)] rounded-lg text-[#F5F5F0] placeholder:text-[#333330] focus:outline-none focus:border-[#C8F04B] focus:ring-1 focus:ring-[#C8F04B]"
             />
@@ -396,7 +392,17 @@ export function SearchPage() {
                   </div>
                 )}
 
-                {/* TRACKS TAB */}
+                {/* NO RESULTS MESSAGE */}
+                {!activeGenre && query && results.tracks.length === 0 && results.artists.length === 0 && results.albums.length === 0 && (
+                  <div className="text-center py-12 space-y-3">
+                    <p className="text-lg text-[#666660]">Sin resultados para "<span className="text-[#F5F5F0] font-semibold">{query}</span>"</p>
+                    <p className="text-sm text-[#333330]">Intenta con otras palabras clave o explora los géneros disponibles</p>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* TRACKS TAB */}
                 {tab === 'tracks' && (
                   <div className="space-y-2">
                     {results.tracks.length > 0 ? (
