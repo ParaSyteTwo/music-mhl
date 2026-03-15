@@ -47,6 +47,10 @@ interface MusicStore {
   toggleShuffle: () => void;
   toggleRepeat: () => void;
 
+  // History
+  history: Track[];
+  clearHistory: () => void;
+
   // Library
   library: Track[];
   addToLibrary: (track: Track) => void;
@@ -229,7 +233,16 @@ export const useMusicStore = create<MusicStore>()(
           return { player: { ...s.player, repeat: modes[(idx + 1) % 3] } };
         }),
 
+        // ─── History ───
+        history: [],
+        clearHistory: () => set({ history: [] }),
+
         playTrack: async (track) => {
+          // Add to history (at the beginning, max 50 items, no consecutive duplicates)
+          set((s) => {
+            const newHistory = s.history[0]?.id === track.id ? s.history : [track, ...s.history];
+            return { history: newHistory.slice(0, 50) };
+          });
           // Add to queue if not already there
           const { queue } = get().player;
           const trackInQueue = queue.findIndex(t => t.id === track.id);
@@ -279,6 +292,12 @@ export const useMusicStore = create<MusicStore>()(
         },
 
         playTrackWithYouTube: async (track) => {
+          // Add to history (at the beginning, max 50 items, no consecutive duplicates)
+          set((s) => {
+            const newHistory = s.history[0]?.id === track.id ? s.history : [track, ...s.history];
+            return { history: newHistory.slice(0, 50) };
+          });
+          
           set((s) => ({
             player: {
               ...s.player,
