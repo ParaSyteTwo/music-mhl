@@ -116,6 +116,38 @@ async function searchTracks(query: string, limit: number = 25) {
   return { success: true, tracks, total: data.total || 0 };
 }
 
+async function searchAll(query: string) {
+  const sanitizedQuery = query.trim().slice(0, 200);
+  const encoded = encodeURIComponent(sanitizedQuery);
+
+  try {
+    const [tracksRes, artistsRes, albumsRes] = await Promise.all([
+      fetch(`https://api.deezer.com/search?q=${encoded}&limit=10`),
+      fetch(`https://api.deezer.com/search/artist?q=${encoded}&limit=5`),
+      fetch(`https://api.deezer.com/search/album?q=${encoded}&limit=5`),
+    ]);
+
+    if (!tracksRes.ok || !artistsRes.ok || !albumsRes.ok) {
+      throw new Error('One or more searches failed');
+    }
+
+    const [tracksData, artistsData, albumsData] = await Promise.all([
+      tracksRes.json(),
+      artistsRes.json(),
+      albumsRes.json(),
+    ]);
+
+    return {
+      success: true,
+      tracks: (tracksData.data || []).map(transformTrack),
+      artists: (artistsData.data || []).map(transformArtist),
+      albums: (albumsData.data || []).map(transformAlbum),
+    };
+  } catch (error) {
+    throw error;
+  }
+}
+
 async function getHomeData() {
   try {
     // Genre IDs: Pop=132, Rap=116, Rock=152, Electronic=106, R&B=165, Latin=197
@@ -223,7 +255,22 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Search action (default): search tracks
+    // Search all action: tracks + artists + albums
+    if (action === 'searchAll') {
+      if (!query || typeof query !== 'string') {
+        return new Response(
+          JSON.stringify({ error: 'Query parameter is required for searchAll action' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const result = await searchAll(query);
+      return new Response(JSON.stringify(result), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Search action (default): search tracks only
     if (action === 'search' || !action) {
       if (!query || typeof query !== 'string') {
         return new Response(
