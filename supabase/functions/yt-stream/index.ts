@@ -4,17 +4,13 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// ─── Invidious instances for search ───
+// ─── Invidious instances (with fallbacks) ───
 const INVIDIOUS_INSTANCES = [
+  "https://invidious.snopyta.org",
+  "https://vid.puffyan.us",
+  "https://invidious.kavin.rocks",
   "https://inv.nadeko.net",
   "https://invidious.nerdvpn.de",
-  "https://invidious.jing.rocks",
-  "https://iv.ggtyler.dev",
-];
-
-const PIPED_INSTANCES = [
-  "https://pipedapi.kavin.rocks",
-  "https://api.piped.private.coffee",
 ];
 
 async function fetchWithTimeout(url: string, opts: RequestInit = {}, timeoutMs = 8000): Promise<Response> {
@@ -28,105 +24,80 @@ async function fetchWithTimeout(url: string, opts: RequestInit = {}, timeoutMs =
   }
 }
 
-// ─── Invidious search ───
-async function invidiousSearch(query: string) {
-  for (const base of INVIDIOUS_INSTANCES) {
+// ─── Try Invidious with fallback instances ───
+async function tryInvidious(path: string): Promise<any | null> {
+  for (const instance of INVIDIOUS_INSTANCES) {
     try {
-      const url = `${base}/api/v1/search?q=${encodeURIComponent(query)}&type=video&sort_by=relevance`;
-      const res = await fetchWithTimeout(url);
-      if (!res.ok) { await res.text(); continue; }
-      const data = await res.json();
-      return (data || [])
-        .filter((i: any) => i.type === "video")
-        .slice(0, 10)
-        .map((i: any) => ({
-          videoId: i.videoId,
-          title: i.title || "",
-          artist: (i.author || "").replace(" - Topic", ""),
-          duration: i.lengthSeconds || 0,
-          thumbnail: i.videoThumbnails?.[0]?.url || "",
-        }));
-    } catch {
-      continue;
-    }
-  }
-  return null;
-}
-
-// ─── Piped search (fallback) ───
-async function pipedSearch(query: string) {
-  for (const base of PIPED_INSTANCES) {
-    try {
-      const res = await fetchWithTimeout(
-        `${base}/search?q=${encodeURIComponent(query)}&filter=music_songs`
-      );
-      if (!res.ok) { await res.text(); continue; }
-      const data = await res.json();
-      return (data.items || [])
-        .filter((i: any) => i.type === "stream")
-        .slice(0, 10)
-        .map((i: any) => ({
-          videoId: ((i.url as string) || "").replace("/watch?v=", ""),
-          title: i.title || "",
-          artist: ((i.uploaderName as string) || "").replace(" - Topic", ""),
-          duration: i.duration || 0,
-          thumbnail: i.thumbnail || "",
-        }));
-    } catch {
-      continue;
-    }
-  }
-  return null;
-}
-
-// ─── RapidAPI YouTube MP3 stream ───
-async function rapidApiStream(videoId: string, apiKey: string): Promise<{ url: string; status: string } | null> {
-  const MAX_RETRIES = 5;
-  const RETRY_DELAY = 1500; // ms
-
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    try {
-      const res = await fetchWithTimeout(
-        `https://youtube-mp36.p.rapidapi.com/dl?id=${videoId}`,
-        {
-          method: "GET",
-          headers: {
-            "X-RapidAPI-Key": apiKey,
-            "X-RapidAPI-Host": "youtube-mp36.p.rapidapi.com",
-          },
-        },
-        15000
-      );
-
+      const url = `${instance}${path}`;
+      console.log(`[yt-stream] Trying ${instance}...`);
+      const res = await fetchWithTimeout(url, {}, 8000);
+      
       if (!res.ok) {
-        const text = await res.text();
-        console.error(`[yt-stream] RapidAPI error ${res.status}:`, text);
-        return null;
-      }
-
-      const data = await res.json();
-      console.log(`[yt-stream] RapidAPI response (attempt ${attempt + 1}):`, data.status);
-
-      if (data.status === "ok" && data.link) {
-        return { url: data.link, status: "ok" };
-      }
-
-      if (data.status === "processing") {
-        // Wait and retry
-        await new Promise((r) => setTimeout(r, RETRY_DELAY));
+        console.warn(`[yt-stream] ${instance} returned ${res.status}`);
         continue;
       }
-
-      // fail or unknown status
-      console.error("[yt-stream] RapidAPI conversion failed:", data.msg || data.status);
-      return null;
+      
+      const data = await res.json();
+      console.log(`[yt-stream] Success with ${instance}`);
+      return data;
     } catch (err) {
-      console.error("[yt-stream] RapidAPI fetch error:", err);
-      return null;
+      console.warn(`[yt-stream] ${instance} failed:`, err instanceof Error ? err.message : String(err));
+      continue;
+    }
+  }
+  return null;
+}
+
+// ─── Invidious search ───
+async function invidiousSearch(query: string) {
+  const path = `/api/v1/search?q=${encodeURIComponent(query)}&type=video&sort_by=relevance`;
+  const data = await tryInvidious(path);
+  
+  if (!data) return null;
+  
+  return (data || [])
+    .filter((i: any) => i.type === "video")
+    .slice(0, 10)
+    .map((i: any) => ({
+      videoId: i.videoId,
+      title: i.title || "",
+      artist: (i.author || "").replace(" - Topic", ""),
+      duration: i.lengthSeconds || 0,
+      thumbnail: i.videoThumbnails?.[0]?.url || "",
+    }));
+}
+
+// ─── Invidious stream (audio only) ───
+async function invidiousStream(videoId: string): Promise<{ url: string; quality: string } | null> {
+  const path = `/api/v1/videos/${videoId}`;
+  const data = await tryInvidious(path);
+  
+  if (!data) return null;
+
+  // Find best audio format
+  const audioFormats = (data.adaptiveFormats || []).filter((f: any) => {
+    const type = (f.type || "").toLowerCase();
+    return type.includes("audio") && (type.includes("mp4") || type.includes("webm"));
+  });
+
+  if (audioFormats.length > 0) {
+    // Sort by bitrate descending
+    audioFormats.sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0));
+    const best = audioFormats[0];
+    
+    if (best.url) {
+      console.log(`[yt-stream] Found audio format: ${best.bitrate}bps`);
+      return { url: best.url, quality: `${best.bitrate}bps` };
     }
   }
 
-  console.error("[yt-stream] RapidAPI max retries exceeded");
+  // Fallback: use formatStreams (video+audio combined, less ideal but works)
+  const fallback = (data.formatStreams || [])[0];
+  if (fallback?.url) {
+    console.log(`[yt-stream] Using fallback format (video+audio)`);
+    return { url: fallback.url, quality: "auto" };
+  }
+
   return null;
 }
 
@@ -151,11 +122,7 @@ Deno.serve(async (req: Request) => {
 
       console.log("[yt-stream] searching:", query);
 
-      let results = await invidiousSearch(query);
-      if (!results) {
-        console.log("[yt-stream] Invidious search failed, trying Piped...");
-        results = await pipedSearch(query);
-      }
+      const results = await invidiousSearch(query);
 
       if (!results) {
         return respond({ success: false, error: "All search providers failed" }, 502);
@@ -169,26 +136,21 @@ Deno.serve(async (req: Request) => {
       const videoId = (body.videoId || "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 20);
       if (!videoId) return respond({ error: "videoId required" }, 400);
 
-      const RAPIDAPI_KEY = Deno.env.get("RAPIDAPI_KEY");
-      if (!RAPIDAPI_KEY) {
-        return respond({ success: false, error: "RAPIDAPI_KEY not configured" }, 500);
-      }
+      console.log("[yt-stream] fetching stream via Invidious:", videoId);
 
-      console.log("[yt-stream] fetching stream via RapidAPI:", videoId);
-
-      const stream = await rapidApiStream(videoId, RAPIDAPI_KEY);
+      const stream = await invidiousStream(videoId);
 
       if (!stream) {
-        return respond({ success: false, error: "No se pudo convertir el audio" }, 502);
+        return respond({ success: false, error: "No se pudo obtener el stream de audio" }, 502);
       }
 
-      console.log("[yt-stream] MP3 link obtained successfully");
+      console.log("[yt-stream] stream obtained successfully");
       return respond({
         success: true,
         stream: {
           url: stream.url,
           mimeType: "audio/mpeg",
-          quality: "128kbps",
+          quality: stream.quality,
         },
       });
     }

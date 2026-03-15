@@ -301,32 +301,25 @@ export const useMusicStore = create<MusicStore>()(
             return { history: newHistory.slice(0, 50) };
           });
           
-          set((s) => ({
-            player: {
-              ...s.player,
-              currentTrack: track,
-              isPlaying: false,
-              isLoading: true,
-              progress: 0,
-              duration: track.duration,
-              audioSource: 'youtube',
-              error: null,
-            },
-          }));
+          // Strategy: Try YouTube first, fallback to preview if available
+          let youtubeSucceeded = false;
+          
+          // If preview exists, start with it immediately while searching for YouTube stream
+          if (track.preview) {
+            set((s) => ({
+              player: {
+                ...s.player,
+                currentTrack: track,
+                isPlaying: false,
+                isLoading: true,
+                progress: 0,
+                duration: track.duration,
+                audioSource: 'preview',
+                error: null,
+              },
+            }));
 
-          try {
-            let videoId = track.youtubeId;
-            if (!videoId) {
-              const results = await searchYouTube(`${track.title} ${track.artist}`);
-              if (results.length === 0) throw new Error('No se encontró en YouTube');
-              videoId = results[0].videoId;
-            }
-
-            const streamData = await getYouTubeStream(videoId!);
-            const streamUrl = streamData.stream?.url;
-            if (!streamUrl) throw new Error('No se pudo obtener el stream de audio');
-
-            audioEngine.load(streamUrl);
+            audioEngine.load(track.preview);
             audioEngine.setVolume(get().player.volume);
             audioEngine.updateMediaSession({
               title: track.title,
@@ -340,7 +333,63 @@ export const useMusicStore = create<MusicStore>()(
                 ...s.player,
                 isPlaying: true,
                 isLoading: false,
-                currentTrack: { ...track, youtubeId: videoId },
+                currentTrack: { ...track, audioSourceBadge: '📺 Preview 30s' },
+              },
+            }));
+            audioEngine.setPlaybackState('playing');
+          } else {
+            // No preview, show loading state
+            set((s) => ({
+              player: {
+                ...s.player,
+                currentTrack: track,
+                isPlaying: false,
+                isLoading: true,
+                progress: 0,
+                duration: track.duration,
+                audioSource: 'youtube',
+                error: null,
+              },
+            }));
+          }
+
+          // Try to fetch YouTube stream in parallel
+          try {
+            let videoId = track.youtubeId;
+            if (!videoId) {
+              const results = await searchYouTube(`${track.title} ${track.artist}`);
+              if (results.length === 0) throw new Error('No se encontró en YouTube');
+              videoId = results[0].videoId;
+            }
+
+            const streamData = await getYouTubeStream(videoId!);
+            const streamUrl = streamData.stream?.url;
+            if (!streamUrl) throw new Error('No se pudo obtener el stream de audio');
+
+            // YouTube stream found - crossfade to it
+            audioEngine.load(streamUrl);
+            audioEngine.setVolume(get().player.volume);
+            audioEngine.updateMediaSession({
+              title: track.title,
+              artist: track.artist,
+              album: track.album,
+              artwork: track.cover,
+            });
+            
+            // Only auto-play if not already playing (preview case)
+            const currentState = get().player;
+            if (!currentState.isPlaying) {
+              await audioEngine.play();
+            }
+            
+            youtubeSucceeded = true;
+            set((s) => ({
+              player: {
+                ...s.player,
+                isPlaying: true,
+                isLoading: false,
+                audioSource: 'youtube',
+                currentTrack: { ...track, youtubeId: videoId, audioSourceBadge: '🎵 Full · YouTube' },
               },
             }));
             audioEngine.setPlaybackState('playing');
@@ -348,24 +397,18 @@ export const useMusicStore = create<MusicStore>()(
             const msg = error instanceof Error ? error.message : 'YouTube playback failed';
             console.error('YouTube playback error:', msg);
 
-            if (track.preview) {
-              audioEngine.load(track.preview);
-              audioEngine.setVolume(get().player.volume);
-              await audioEngine.play();
+            // If YouTube failed and no preview was loaded, show error
+            if (!track.preview) {
               set((s) => ({
                 player: {
                   ...s.player,
-                  isPlaying: true,
                   isLoading: false,
-                  audioSource: 'preview',
-                  error: `YouTube falló, usando preview · ${msg}`,
+                  error: 'No se pudo reproducir esta canción',
+                  currentTrack: { ...track, audioSourceBadge: '❌ Error' },
                 },
               }));
-            } else {
-              set((s) => ({
-                player: { ...s.player, isLoading: false, error: msg },
-              }));
             }
+            // If preview is already playing, don't show error - just let it continue
           }
 
           get().loadLyrics(track);
