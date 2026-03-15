@@ -54,6 +54,8 @@
     /* Layout */
     --player-height: 72px;
     --nav-height: 0px;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
     
     /* Legacy tokens for compatibility */
     --glass-bg: rgba(15, 15, 15, 0.95);

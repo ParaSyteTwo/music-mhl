@@ -1,19 +1,34 @@
 import { Outlet, NavLink } from 'react-router-dom';
 import { BottomPlayer } from './BottomPlayer';
-import { Search, Download } from 'lucide-react';
+import { Search, Download, Library, ListMusic, Settings } from 'lucide-react';
 import { useMusicStore } from '@/store/musicStore';
 
 export function AppLayout() {
   const downloadCount = useMusicStore((s) => s.downloads.filter((d) => d.status === 'downloading').length);
+  const dominantColor = useMusicStore((s) => s.dominantColor);
+  const currentTrack = useMusicStore((s) => s.currentTrack);
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Dynamic color gradient from album art */}
+      {currentTrack && dominantColor && (
+        <div
+          className="fixed top-0 left-0 right-0 h-40 z-0 pointer-events-none"
+          style={{
+            background: `linear-gradient(to bottom, rgba(${dominantColor}, 0.08), transparent)`,
+            transition: 'background 800ms ease',
+          }}
+        />
+      )}
       {/* Desktop top nav */}
-      <nav className="hidden sm:flex sticky top-0 z-30 items-center gap-6 px-8 py-3 bg-[rgba(8,8,8,0.9)] border-b border-[rgba(255,255,255,0.06)]" style={{ backdropFilter: 'blur(12px)' }}>
+      <nav
+        className="hidden sm:flex sticky top-0 z-30 items-center gap-6 px-8 py-3 bg-[rgba(8,8,8,0.9)] border-b border-[rgba(255,255,255,0.06)]"
+        style={{ backdropFilter: 'blur(12px)', paddingTop: 'calc(12px + var(--safe-top))' }}
+      >
         <NavLink
           to="/"
           className={({ isActive }) =>
-            `flex items-center gap-1.5 text-sm font-medium transition-colors ${isActive ? 'text-[#C8F04B]' : 'text-[#999] hover:text-[#F5F5F0]'}`
+            `flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors ${isActive ? 'text-[#C8F04B] bg-[rgba(200,240,75,0.1)]' : 'text-[#999] hover:text-[#F5F5F0]'}`
           }
         >
           <Search className="w-4 h-4" />
@@ -22,27 +37,57 @@ export function AppLayout() {
         <NavLink
           to="/downloads"
           className={({ isActive }) =>
-            `flex items-center gap-1.5 text-sm font-medium transition-colors ${isActive ? 'text-[#C8F04B]' : 'text-[#999] hover:text-[#F5F5F0]'}`
+            `flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors ${isActive ? 'text-[#C8F04B] bg-[rgba(200,240,75,0.1)]' : 'text-[#999] hover:text-[#F5F5F0]'}`
           }
         >
           <Download className="w-4 h-4" />
           Descargas
         </NavLink>
+        <NavLink
+          to="/library"
+          className={({ isActive }) =>
+            `flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors ${isActive ? 'text-[#C8F04B] bg-[rgba(200,240,75,0.1)]' : 'text-[#999] hover:text-[#F5F5F0]'}`
+          }
+        >
+          <Library className="w-4 h-4" />
+          Biblioteca
+        </NavLink>
+        <NavLink
+          to="/playlists"
+          className={({ isActive }) =>
+            `flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors ${isActive ? 'text-[#C8F04B] bg-[rgba(200,240,75,0.1)]' : 'text-[#999] hover:text-[#F5F5F0]'}`
+          }
+        >
+          <ListMusic className="w-4 h-4" />
+          Playlists
+        </NavLink>
+        <div className="flex-1" />
+        <NavLink
+          to="/settings"
+          className={({ isActive }) =>
+            `flex items-center gap-1.5 text-sm font-medium p-2 rounded-lg transition-colors ${isActive ? 'text-[#C8F04B] bg-[rgba(200,240,75,0.1)]' : 'text-[#999] hover:text-[#F5F5F0]'}`
+          }
+        >
+          <Settings className="w-4 h-4" />
+        </NavLink>
       </nav>
 
-      {/* Content area — bottom padding accounts for player + mobile nav */}
-      <main className="pb-[calc(var(--player-height)+var(--nav-height))]">
+      {/* Content area — bottom padding accounts for player + mobile nav + safe areas */}
+      <main style={{ paddingBottom: 'calc(var(--player-height) + var(--nav-height) + var(--safe-bottom) + 16px)' }}>
         <Outlet />
       </main>
 
       <BottomPlayer />
 
       {/* Mobile bottom tab bar */}
-      <nav className="sm:hidden fixed bottom-0 left-0 right-0 z-50 h-[var(--nav-height)] bg-[rgba(8,8,8,0.97)] border-t border-[rgba(255,255,255,0.06)] flex" style={{ backdropFilter: 'blur(12px)' }}>
+      <nav
+        className="sm:hidden fixed bottom-0 left-0 right-0 z-50 bg-[rgba(8,8,8,0.97)] border-t border-[rgba(255,255,255,0.06)] flex"
+        style={{ backdropFilter: 'blur(12px)', paddingBottom: 'var(--safe-bottom)', height: 'calc(var(--nav-height) + var(--safe-bottom))' }}
+      >
         <NavLink
           to="/"
           className={({ isActive }) =>
-            `flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors ${isActive ? 'text-[#C8F04B]' : 'text-[#666]'}`
+            `flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors min-h-[44px] ${isActive ? 'text-[#C8F04B] bg-[rgba(200,240,75,0.06)]' : 'text-[#666]'}`
           }
         >
           <Search className="w-5 h-5" />
@@ -51,7 +96,7 @@ export function AppLayout() {
         <NavLink
           to="/downloads"
           className={({ isActive }) =>
-            `flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors relative ${isActive ? 'text-[#C8F04B]' : 'text-[#666]'}`
+            `flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors relative min-h-[44px] ${isActive ? 'text-[#C8F04B] bg-[rgba(200,240,75,0.06)]' : 'text-[#666]'}`
           }
         >
           <Download className="w-5 h-5" />
@@ -61,6 +106,24 @@ export function AppLayout() {
               {downloadCount}
             </span>
           )}
+        </NavLink>
+        <NavLink
+          to="/library"
+          className={({ isActive }) =>
+            `flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors min-h-[44px] ${isActive ? 'text-[#C8F04B] bg-[rgba(200,240,75,0.06)]' : 'text-[#666]'}`
+          }
+        >
+          <Library className="w-5 h-5" />
+          <span className="text-[10px] font-medium">Biblioteca</span>
+        </NavLink>
+        <NavLink
+          to="/playlists"
+          className={({ isActive }) =>
+            `flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors min-h-[44px] ${isActive ? 'text-[#C8F04B] bg-[rgba(200,240,75,0.06)]' : 'text-[#666]'}`
+          }
+        >
+          <ListMusic className="w-5 h-5" />
+          <span className="text-[10px] font-medium">Playlists</span>
         </NavLink>
       </nav>
     </div>

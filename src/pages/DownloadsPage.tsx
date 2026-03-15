@@ -8,6 +8,14 @@ function formatDuration(seconds: number) {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+function getProgressLabel(progress: number): string {
+  if (progress >= 100) return '✓ Completado';
+  if (progress >= 90) return 'Guardando archivo...';
+  if (progress >= 70) return 'Escribiendo metadatos...';
+  if (progress >= 30) return 'Obteniendo audio...';
+  return 'Buscando en YouTube...';
+}
+
 export default function DownloadsPage() {
   const { downloads, startDownload, removeDownload } = useMusicStore();
 
@@ -16,7 +24,12 @@ export default function DownloadsPage() {
   const failed = downloads.filter((d) => d.status === 'error');
 
   return (
-    <div className="px-3 sm:px-8 py-4 sm:py-10 max-w-3xl mx-auto">
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+      className="px-4 sm:px-8 py-4 sm:py-10 max-w-3xl mx-auto"
+    >
       <h1 className="text-lg sm:text-2xl font-semibold tracking-tighter mb-1 sm:mb-2">Descargas</h1>
       <p className="text-xs sm:text-sm text-[#666660] mb-6 sm:mb-8">
         <span className="tabular-nums">{downloads.length}</span> total · <span className="tabular-nums">{active.length}</span> activas
@@ -39,6 +52,9 @@ export default function DownloadsPage() {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate text-[#F5F5F0]">{dl.track.title}</p>
                   <p className="text-xs text-[#666660]">{dl.track.artist}</p>
+                  <p className="text-[10px] text-[#555] mt-1">
+                    {dl.error || getProgressLabel(dl.progress)}
+                  </p>
                   <div className="mt-2 h-1 bg-[rgba(255,255,255,0.06)] rounded-full overflow-hidden">
                     <motion.div
                       className="h-full bg-[#C8F04B] rounded-full"
@@ -71,13 +87,13 @@ export default function DownloadsPage() {
                 </div>
                 <button
                   onClick={() => startDownload(dl.track)}
-                  className="text-xs text-[#C8F04B] hover:underline px-2 py-1"
+                  className="text-xs text-[#C8F04B] hover:underline px-2 py-1 min-h-[44px] flex items-center"
                 >
                   Reintentar
                 </button>
                 <button
                   onClick={() => removeDownload(dl.id)}
-                  className="p-2 -mr-1 text-[#666660] hover:text-red-400 active:text-red-400 transition-colors"
+                  className="p-2 -mr-1 text-[#666660] hover:text-red-400 active:text-red-400 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
                 >
                   <Trash2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                 </button>
@@ -114,7 +130,7 @@ export default function DownloadsPage() {
                 <span className="text-xs tabular-nums text-[#444] hidden sm:block">{formatDuration(dl.track.duration)}</span>
                 <button
                   onClick={() => removeDownload(dl.id)}
-                  className="p-2 -mr-1 text-[#666660] hover:text-red-400 active:text-red-400 transition-colors sm:opacity-0 sm:group-hover:opacity-100"
+                  className="p-2 -mr-1 text-[#666660] hover:text-red-400 active:text-red-400 transition-colors sm:opacity-0 sm:group-hover:opacity-100 min-h-[44px] min-w-[44px] flex items-center justify-center"
                 >
                   <Trash2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                 </button>
@@ -126,10 +142,10 @@ export default function DownloadsPage() {
 
       {downloads.length === 0 && (
         <div className="text-center py-12 sm:py-16 space-y-3">
-          <Music className="w-10 h-10 text-[#333] mx-auto" />
+          <Music className="w-16 h-16 text-[#333] mx-auto" />
           <p className="text-sm text-[#666660]">No hay descargas aún</p>
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }

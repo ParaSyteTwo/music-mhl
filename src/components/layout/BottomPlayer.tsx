@@ -11,7 +11,7 @@ function formatTime(seconds: number): string {
 }
 
 export function BottomPlayer() {
-  const { currentTrack, isPlaying, isLoading, volume, progress, duration, togglePlay, setVolume, seekTo } = useMusicStore();
+  const { currentTrack, isPlaying, isLoading, volume, progress, duration, togglePlay, setVolume, seekTo, dominantColor } = useMusicStore();
   const [hoverProgress, setHoverProgress] = useState(false);
 
   const progressPercent = duration > 0 ? (progress / duration) * 100 : 0;
@@ -65,8 +65,16 @@ export function BottomPlayer() {
 
       {/* Main player bar */}
       <div
-        className={`fixed ${bottomOffset} left-0 right-0 h-[var(--player-height)] bg-[rgba(8,8,8,0.95)] border-t border-[rgba(255,255,255,0.08)] z-40 flex items-center px-3 sm:px-5 gap-3`}
-        style={{ backdropFilter: 'blur(20px) saturate(180%)' }}
+        className={`fixed ${bottomOffset} left-0 right-0 bg-[rgba(8,8,8,0.95)] border-t border-[rgba(255,255,255,0.08)] z-40 flex items-center px-3 sm:px-5 gap-3`}
+        style={{
+          backdropFilter: 'blur(20px) saturate(180%)',
+          height: 'var(--player-height)',
+          paddingBottom: '0',
+          background: dominantColor
+            ? `linear-gradient(to right, rgba(${dominantColor}, 0.15), rgba(8, 8, 8, 0.95))`
+            : 'rgba(8, 8, 8, 0.95)',
+          transition: 'background 800ms ease',
+        }}
       >
         {/* Track info */}
         <div className="flex items-center gap-2.5 min-w-0 flex-1">
@@ -78,7 +86,13 @@ export function BottomPlayer() {
             )}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-[13px] sm:text-sm font-semibold text-[#F5F5F0] truncate">{currentTrack.title}</p>
+            <p
+              className="text-[13px] sm:text-sm font-semibold truncate"
+              style={{
+                color: dominantColor ? `rgb(${dominantColor})` : '#F5F5F0',
+                transition: 'color 800ms ease',
+              }}
+            >{currentTrack.title}</p>
             <p className="text-[11px] sm:text-xs text-[#666660] truncate">{currentTrack.artist}</p>
           </div>
         </div>

@@ -4,6 +4,18 @@ import { Track, Download } from '@/types/music';
 import { audioEngine } from '@/lib/audioEngine';
 import { searchDeezer, searchYouTube, getYouTubeStream } from '@/lib/api/musicApi';
 import { writeID3Tags } from '@/lib/id3Writer';
+import { extractDominantColor } from '@/lib/colorExtractor';
+import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { toast } from 'sonner';
+
+function getProgressLabel(progress: number): string {
+  if (progress >= 100) return '✓ Completado';
+  if (progress >= 90) return 'Guardando archivo...';
+  if (progress >= 70) return 'Escribiendo metadatos...';
+  if (progress >= 30) return 'Obteniendo audio...';
+  return 'Buscando en YouTube...';
+}
 
 interface MusicStore {
   // Player
@@ -29,6 +41,16 @@ interface MusicStore {
   downloads: Download[];
   startDownload: (track: Track) => void;
   removeDownload: (id: string) => void;
+
+  // Download folder (web only, not persisted)
+  downloadFolder: FileSystemDirectoryHandle | null;
+  downloadFolderName: string;
+  setDownloadFolder: (handle: FileSystemDirectoryHandle, name: string) => void;
+  clearDownloadFolder: () => void;
+
+  // Dynamic color
+  dominantColor: string | null;
+  setDominantColor: (color: string | null) => void;
 }
 
 export const useMusicStore = create<MusicStore>()(
@@ -67,6 +89,15 @@ export const useMusicStore = create<MusicStore>()(
             progress: 0,
             duration: track.duration,
           });
+
+          // Extract dominant color from cover
+          if (track.cover) {
+            extractDominantColor(track.cover).then((color) => {
+              set({ dominantColor: color });
+            });
+          } else {
+            set({ dominantColor: null });
+          }
 
           if (track.preview) {
             audioEngine.load(track.preview);
@@ -138,50 +169,112 @@ export const useMusicStore = create<MusicStore>()(
               downloads: s.downloads.map((d) => (d.id === id ? { ...d, ...patch } : d)),
             }));
 
-          try {
-            updateDl({ progress: 10 });
-            const results = await searchYouTube(`${track.title} ${track.artist}`);
-            if (!results.length) throw new Error('No se encontró en YouTube');
-            updateDl({ progress: 30 });
+          const maxAttempts = 3;
 
-            const streamData = await getYouTubeStream(results[0].videoId);
-            const mp3Url = streamData.stream?.url;
-            if (!mp3Url) throw new Error('No se pudo obtener el MP3');
-            updateDl({ progress: 60 });
+          for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+              const attemptLabel = maxAttempts > 1 ? ` (intento ${attempt}/${maxAttempts})` : '';
 
-            const response = await fetch(mp3Url);
-            if (!response.ok) throw new Error('Error descargando el archivo');
-            const mp3Buffer = await response.arrayBuffer();
-            updateDl({ progress: 80 });
+              updateDl({ progress: 10, error: attempt > 1 ? `Reintentando...${attemptLabel}` : undefined });
+              const results = await searchYouTube(`${track.title} ${track.artist}`);
+              if (!results.length) throw new Error('No se encontró en YouTube');
+              updateDl({ progress: 30 });
 
-            const taggedBlob = await writeID3Tags(mp3Buffer, {
-              title: track.title,
-              artist: track.artist,
-              album: track.album,
-              coverUrl: track.cover,
-            });
-            updateDl({ progress: 95 });
+              const streamData = await getYouTubeStream(results[0].videoId);
+              const mp3Url = streamData.stream?.url;
+              if (!mp3Url) throw new Error('No se pudo obtener el MP3');
+              updateDl({ progress: 60 });
 
-            const fileName = `${track.title} - ${track.artist}.mp3`.replace(/[/\\?%*:|"<>]/g, '');
-            const blobUrl = URL.createObjectURL(taggedBlob);
-            const a = document.createElement('a');
-            a.href = blobUrl;
-            a.download = fileName;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+              const response = await fetch(mp3Url);
+              if (!response.ok) throw new Error('Error descargando el archivo');
+              const mp3Buffer = await response.arrayBuffer();
+              updateDl({ progress: 80 });
 
-            updateDl({ progress: 100, status: 'completed' });
-          } catch (error) {
-            const msg = error instanceof Error ? error.message : 'Download failed';
-            console.error('Download error:', msg);
-            updateDl({ status: 'error', error: msg });
+              const taggedBlob = await writeID3Tags(mp3Buffer, {
+                title: track.title,
+                artist: track.artist,
+                album: track.album,
+                coverUrl: track.cover,
+              });
+              updateDl({ progress: 95 });
+
+              const fileName = `${track.title} - ${track.artist}.mp3`.replace(/[/\\?%*:|"<>]/g, '');
+
+              if (Capacitor.isNativePlatform()) {
+                const buffer = await taggedBlob.arrayBuffer();
+                const base64 = btoa(
+                  new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
+                );
+                await Filesystem.writeFile({
+                  path: `MHL Music/${fileName}`,
+                  data: base64,
+                  directory: Directory.Documents,
+                  recursive: true,
+                });
+              } else {
+                const { downloadFolder } = get();
+                if (downloadFolder) {
+                  try {
+                    const fileHandle = await downloadFolder.getFileHandle(fileName, { create: true });
+                    const writable = await fileHandle.createWritable();
+                    await writable.write(taggedBlob);
+                    await writable.close();
+                  } catch {
+                    // Fallback to anchor-tag download if folder access fails
+                    const blobUrl = URL.createObjectURL(taggedBlob);
+                    const a = document.createElement('a');
+                    a.href = blobUrl;
+                    a.download = fileName;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+                  }
+                } else {
+                  const blobUrl = URL.createObjectURL(taggedBlob);
+                  const a = document.createElement('a');
+                  a.href = blobUrl;
+                  a.download = fileName;
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                  setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+                }
+              }
+
+              updateDl({ progress: 100, status: 'completed', error: undefined });
+              toast.success(`✓ Descargado: ${track.title} - ${track.artist}`, { duration: 4000 });
+              return; // Success — exit retry loop
+            } catch (error) {
+              const msg = error instanceof Error ? error.message : 'Download failed';
+              console.error(`Download attempt ${attempt}/${maxAttempts} failed:`, msg);
+
+              if (attempt === maxAttempts) {
+                updateDl({ status: 'error', error: `Error tras ${maxAttempts} intentos: ${msg}` });
+              } else {
+                updateDl({
+                  status: 'downloading',
+                  progress: 0,
+                  error: `Reintentando... (intento ${attempt + 1}/${maxAttempts})`,
+                });
+                await new Promise((resolve) => setTimeout(resolve, 2000));
+              }
+            }
           }
         },
 
         removeDownload: (id) =>
           set((s) => ({ downloads: s.downloads.filter((d) => d.id !== id) })),
+
+        // ─── Download Folder ───
+        downloadFolder: null,
+        downloadFolderName: '',
+        setDownloadFolder: (handle, name) => set({ downloadFolder: handle, downloadFolderName: name }),
+        clearDownloadFolder: () => set({ downloadFolder: null, downloadFolderName: '' }),
+
+        // ─── Dynamic Color ───
+        dominantColor: null,
+        setDominantColor: (color) => set({ dominantColor: color }),
       };
     },
     {
@@ -189,11 +282,13 @@ export const useMusicStore = create<MusicStore>()(
       partialize: (state) => ({
         downloads: state.downloads.filter((d) => d.status === 'completed' || d.status === 'error'),
         volume: state.volume,
+        downloadFolderName: state.downloadFolderName,
       }),
       merge: (persisted: any, current) => ({
         ...current,
         downloads: persisted?.downloads || [],
         volume: persisted?.volume ?? 0.8,
+        downloadFolderName: persisted?.downloadFolderName || '',
       }),
     }
   )
