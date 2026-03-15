@@ -100,6 +100,11 @@ function getFileName(track: Track, format: FileNameFormat): string {
   return `${name}.mp3`.replace(/[/\\?%*:|"<>]/g, '');
 }
 
+const historyAddingTimeout: { trackId: string | null; timeout: NodeJS.Timeout | null } = {
+  trackId: null,
+  timeout: null,
+};
+
 export const useMusicStore = create<MusicStore>()(
   persist(
     (set, get) => {
@@ -151,10 +156,26 @@ export const useMusicStore = create<MusicStore>()(
       };
 
       // Add to history when audio actually starts playing
+      // Uses debounce to prevent duplicate additions from multiple 'play' events
       audioEngine.onPlay = () => {
         const currentTrack = get().player.currentTrack;
-        if (currentTrack) {
+        if (!currentTrack) return;
+
+        // Clear previous timeout if track changed
+        if (historyAddingTimeout.trackId !== currentTrack.id) {
+          if (historyAddingTimeout.timeout) {
+            clearTimeout(historyAddingTimeout.timeout);
+          }
+          historyAddingTimeout.trackId = currentTrack.id;
+          
+          // Add to history immediately for new track
           get().addToHistoryIfNewTrack(currentTrack);
+          
+          // Set timeout to prevent adding again for 2 seconds
+          historyAddingTimeout.timeout = setTimeout(() => {
+            historyAddingTimeout.trackId = null;
+            historyAddingTimeout.timeout = null;
+          }, 2000);
         }
       };
 
