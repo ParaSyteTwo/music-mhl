@@ -330,6 +330,42 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Genre action
+    if (action === 'genre') {
+      const genreId = body.genreId;
+      if (!genreId) {
+        return new Response(
+          JSON.stringify({ error: 'genreId is required' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      try {
+        const genreRes = await fetch(`https://api.deezer.com/chart/${genreId}/tracks?limit=25`);
+        if (!genreRes.ok) {
+          throw new Error('Failed to fetch genre tracks');
+        }
+        const genreData = await genreRes.json();
+        const tracks = (genreData.data || []).map(transformTrack);
+        return new Response(
+          JSON.stringify({
+            success: true,
+            tracks,
+            total: genreData.total || tracks.length,
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      } catch (error) {
+        console.error('Genre action error:', error);
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: 'Failed to fetch genre data',
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+        );
+      }
+    }
+
     // Artist action
     if (action === 'artist') {
       if (!artistId) {

@@ -125,7 +125,19 @@ function AlbumCard({ album }: { album: any }) {
   );
 }
 
-function GenreGrid() {
+interface GenreGridProps {
+  onGenreClick: (genre: string, genreId: number) => void;
+}
+
+function GenreGrid({ onGenreClick }: GenreGridProps) {
+  const genreIds: Record<string, number> = {
+    Pop: 132,
+    Rap: 116,
+    Rock: 152,
+    Electronic: 106,
+    'R&B': 165,
+    Latin: 197,
+  };
   const genres = ['Pop', 'Rap', 'Rock', 'Electronic', 'R&B', 'Latin'];
 
   return (
@@ -133,7 +145,8 @@ function GenreGrid() {
       {genres.map((genre) => (
         <button
           key={genre}
-          className="aspect-square rounded-lg flex items-center justify-center font-syne font-bold text-lg hover:scale-105 transition-transform"
+          onClick={() => onGenreClick(genre, genreIds[genre])}
+          className="aspect-square rounded-lg flex items-center justify-center font-syne font-bold text-lg hover:scale-105 transition-transform cursor-pointer"
           style={{
             backgroundColor: `${genreColors[genre]}20`,
             color: genreColors[genre],
@@ -152,17 +165,53 @@ export function SearchPage() {
   const { recentSearches, clearHistory } = useSearchHistory();
   const [tab, setTab] = useState<SearchTab>('all');
   const [localQuery, setLocalQuery] = useState('');
+  const [activeGenre, setActiveGenre] = useState<{ name: string; id: number } | null>(null);
+  const [genreResults, setGenreResults] = useState<any[] | null>(null);
+  const [genreLoading, setGenreLoading] = useState(false);
 
-  const tabs: { id: SearchTab; label: string; count: number }[] = [
-    { id: 'all', label: 'Todo', count: results.tracks.length + results.artists.length + results.albums.length },
-    { id: 'tracks', label: 'Canciones', count: results.tracks.length },
-    { id: 'artists', label: 'Artistas', count: results.artists.length },
-    { id: 'albums', label: 'Álbumes', count: results.albums.length },
-  ];
+  const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+  const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
   const handleSearch = (q: string) => {
     setLocalQuery(q);
+    setActiveGenre(null);
     search(q);
+  };
+
+  const handleGenreClick = async (genreName: string, genreId: number) => {
+    setActiveGenre({ name: genreName, id: genreId });
+    setLocalQuery(genreName);
+    setGenreLoading(true);
+    
+    // Search by genre using edge function
+    try {
+      const response = await fetch(
+        `${SUPABASE_URL}/functions/v1/deezer-search`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${SUPABASE_KEY}`,
+          },
+          body: JSON.stringify({ action: 'genre', genreId }),
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        setGenreResults(data.tracks || []);
+      }
+    } catch (err) {
+      console.error('Genre search error:', err);
+    } finally {
+      setGenreLoading(false);
+    }
+  };
+
+  const handleClearGenre = () => {
+    setActiveGenre(null);
+    setLocalQuery('');
+    setGenreResults(null);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -171,6 +220,13 @@ export function SearchPage() {
       handleSearch(localQuery);
     }
   };
+
+  const tabs: { id: SearchTab; label: string; count: number }[] = [
+    { id: 'all', label: 'Todo', count: results.tracks.length + results.artists.length + results.albums.length },
+    { id: 'tracks', label: 'Canciones', count: results.tracks.length },
+    { id: 'artists', label: 'Artistas', count: results.artists.length },
+    { id: 'albums', label: 'Álbumes', count: results.albums.length },
+  ];
 
   return (
     <div className="min-h-screen bg-[#080808] pt-6 pb-32">
@@ -192,8 +248,8 @@ export function SearchPage() {
           </form>
         </div>
 
-        {/* NO QUERY */}
-        {!query && (
+        {/* NO QUERY OR NO ACTIVE GENRE */}
+        {!query && !activeGenre && (
           <>
             {recentSearches.length > 0 && (
               <section className="mb-12">
@@ -222,15 +278,31 @@ export function SearchPage() {
 
             <section>
               <h2 className="font-syne text-lg font-bold text-[#F5F5F0] mb-6">Explora géneros</h2>
-              <GenreGrid />
+              <GenreGrid onGenreClick={handleGenreClick} />
             </section>
           </>
         )}
 
-        {/* WITH QUERY */}
-        {query && (
+        {/* WITH QUERY OR ACTIVE GENRE */}
+        {(query || activeGenre) && (
           <>
-            {/* TABS */}
+            {/* BREADCRUMB FOR GENRE */}
+            {activeGenre && (
+              <div className="flex items-center gap-2 mb-6 pb-4 border-b border-[rgba(255,255,255,0.06)]">
+                <span className="text-sm text-[#666660]">Explorar</span>
+                <span className="text-[#333330]">→</span>
+                <span className="text-sm font-semibold text-[#F5F5F0]">{activeGenre.name}</span>
+                <button
+                  onClick={handleClearGenre}
+                  className="ml-auto text-xs px-3 py-1 text-[#666660] hover:text-[#F5F5F0] hover:bg-[rgba(255,255,255,0.08)] rounded transition-colors"
+                >
+                  ✕ Volver
+                </button>
+              </div>
+            )}
+
+            {/* TABS - Only show when searching, not for genre */}
+            {query && !activeGenre && (
             <div className="flex gap-2 mb-8 border-b border-[rgba(255,255,255,0.06)] pb-4">
               {tabs.map((t) => (
                 <button
@@ -246,9 +318,10 @@ export function SearchPage() {
                 </button>
               ))}
             </div>
+            )}
 
             {/* LOADING */}
-            {loading && (
+            {(loading || genreLoading) && (
               <div className="space-y-4">
                 {Array.from({ length: 5 }).map((_, i) => (
                   <Skeleton key={i} className="h-16 rounded-lg" />
@@ -264,10 +337,23 @@ export function SearchPage() {
             )}
 
             {/* RESULTS */}
-            {!loading && !error && (
+            {!loading && !error && !genreLoading && (
               <>
-                {/* ALL TAB */}
-                {tab === 'all' && (
+                {/* GENRE RESULTS */}
+                {activeGenre && genreResults && (
+                  <div className="space-y-2">
+                    {genreResults.length > 0 ? (
+                      genreResults.map((track) => (
+                        <TrackItem key={track.id} track={track} />
+                      ))
+                    ) : (
+                      <p className="text-center py-8 text-[#333330]">No se encontraron canciones en {activeGenre.name}</p>
+                    )}
+                  </div>
+                )}
+
+                {/* SEARCH RESULTS */}
+                {!activeGenre && query && (
                   <div className="space-y-12">
                     {/* Hero result */}
                     {results.tracks.length > 0 && <HeroResult track={results.tracks[0]} />}
@@ -341,6 +427,8 @@ export function SearchPage() {
                       <p className="col-span-full text-center py-8 text-[#333330]">No se encontraron álbumes</p>
                     )}
                   </div>
+                )}
+              </>
                 )}
               </>
             )}
