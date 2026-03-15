@@ -243,12 +243,9 @@ export const useMusicStore = create<MusicStore>()(
         playTrack: async (track) => {
           // Add to history (at the beginning, max 20 items, no duplicates anywhere)
           set((s) => {
-            const lastInHistory = s.history[0];
-            const isDuplicate = lastInHistory?.id === track.id;
-            if (isDuplicate) {
-              return {};
-            }
-            const newHistory = [track, ...s.history.filter(t => t.id !== track.id)].slice(0, 20);
+            // Always filter out any existing occurrence first, then add at the beginning
+            const filtered = s.history.filter(t => t.id !== track.id);
+            const newHistory = [track, ...filtered].slice(0, 20);
             return { history: newHistory };
           });
           // Add to queue if not already there
@@ -302,12 +299,9 @@ export const useMusicStore = create<MusicStore>()(
         playTrackWithYouTube: async (track) => {
           // Add to history (at the beginning, max 20 items, no duplicates anywhere)
           set((s) => {
-            const lastInHistory = s.history[0];
-            const isDuplicate = lastInHistory?.id === track.id;
-            if (isDuplicate) {
-              return {};
-            }
-            const newHistory = [track, ...s.history.filter(t => t.id !== track.id)].slice(0, 20);
+            // Always filter out any existing occurrence first, then add at the beginning
+            const filtered = s.history.filter(t => t.id !== track.id);
+            const newHistory = [track, ...filtered].slice(0, 20);
             return { history: newHistory };
           });
           
