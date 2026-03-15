@@ -66,8 +66,9 @@ function transformTrack(item: DeezerTrack) {
     artist: item.artist?.name || 'Unknown',
     album: item.album?.title || 'Unknown',
     duration: item.duration || 0,
-    cover: item.album?.cover_xl || item.album?.cover_big || item.album?.cover_medium || '',
-    coverSmall: item.album?.cover_small || '',
+    cover: item.album?.cover_big || item.album?.cover_medium || item.album?.cover_small || '',
+    coverSmall: item.album?.cover_medium || item.album?.cover_small || '',
+    coverXL: item.album?.cover_xl || item.album?.cover_big || '',
     preview: item.preview || '',
     artistId: item.artist?.id,
     albumId: item.album?.id,
@@ -81,8 +82,9 @@ function transformArtist(item: DeezerArtist) {
     id: `dz-artist-${item.id}`,
     deezerId: item.id,
     name: item.name,
-    picture: item.picture_xl || item.picture_big || item.picture_medium || '',
-    pictureSmall: item.picture_small || '',
+    picture: item.picture_big || item.picture_medium || item.picture_small || '',
+    pictureSmall: item.picture_medium || item.picture_small || '',
+    pictureXL: item.picture_xl || item.picture_big || '',
     fans: item.nb_fan,
   };
 }
@@ -95,8 +97,9 @@ function transformAlbum(item: DeezerAlbum) {
     title: item.title,
     artist: item.artist?.name || 'Unknown',
     artistId: item.artist?.id,
-    cover: item.cover_xl || item.cover_big || item.cover_medium || '',
-    coverSmall: item.cover_small || '',
+    cover: item.cover_big || item.cover_medium || item.cover_small || '',
+    coverSmall: item.cover_medium || item.cover_small || '',
+    coverXL: item.cover_xl || item.cover_big || '',
     releaseDate: item.release_date,
   };
 }

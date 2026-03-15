@@ -24,7 +24,7 @@ function HeroSection({ track }: { track: HomeTrack | null }) {
     <div
       className="relative h-72 rounded-2xl overflow-hidden mb-12 group cursor-pointer"
       style={{
-        backgroundImage: `url(${track.cover})`,
+        backgroundImage: `url(${track.coverXL || track.cover})`,
         backgroundSize: 'cover',
         backgroundPosition: 'center',
       }}

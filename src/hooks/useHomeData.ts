@@ -9,6 +9,7 @@ export interface HomeTrack {
   duration: number;
   cover: string;
   coverSmall: string;
+  coverXL?: string;
   preview: string;
   artistId?: number;
   albumId?: number;
@@ -21,6 +22,7 @@ export interface HomeArtist {
   name: string;
   picture: string;
   pictureSmall: string;
+  pictureXL?: string;
   fans: number;
 }
 
@@ -32,6 +34,7 @@ export interface HomeAlbum {
   artistId?: number;
   cover: string;
   coverSmall: string;
+  coverXL?: string;
   releaseDate: string;
 }
 

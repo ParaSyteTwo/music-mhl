@@ -6,6 +6,7 @@ export interface Track {
   duration: number;
   cover: string;
   coverSmall?: string;
+  coverXL?: string;
   url?: string;
   preview?: string; // Deezer 30s preview
   bitrate?: string;
