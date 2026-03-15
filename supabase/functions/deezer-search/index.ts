@@ -148,6 +148,43 @@ async function searchAll(query: string) {
   }
 }
 
+async function getArtistData(artistId: number) {
+  try {
+    const [infoRes, topRes, albumsRes, relatedRes] = await Promise.all([
+      fetch(`https://api.deezer.com/artist/${artistId}`),
+      fetch(`https://api.deezer.com/artist/${artistId}/top?limit=10`),
+      fetch(`https://api.deezer.com/artist/${artistId}/albums?limit=10`),
+      fetch(`https://api.deezer.com/artist/${artistId}/related?limit=8`),
+    ]);
+
+    if (!infoRes.ok || !topRes.ok || !albumsRes.ok || !relatedRes.ok) {
+      throw new Error('Failed to fetch artist data');
+    }
+
+    const [infoData, topData, albumsData, relatedData] = await Promise.all([
+      infoRes.json(),
+      topRes.json(),
+      albumsRes.json(),
+      relatedRes.json(),
+    ]);
+
+    return {
+      success: true,
+      info: {
+        id: infoData.id,
+        name: infoData.name,
+        picture: infoData.picture_xl || infoData.picture_big || infoData.picture_medium || '',
+        fans: infoData.nb_fan,
+      },
+      topTracks: (topData.data || []).map(transformTrack),
+      albums: (albumsData.data || []).map(transformAlbum),
+      related: (relatedData.data || []).map(transformArtist),
+    };
+  } catch (error) {
+    throw error;
+  }
+}
+
 async function getHomeData() {
   try {
     // Genre IDs: Pop=132, Rap=116, Rock=152, Electronic=106, R&B=165, Latin=197
@@ -245,9 +282,9 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { action, query, limit = 25 } = body;
+    const { action, query, artistId, limit = 25 } = body;
 
-    // Home action: fetch all data for homepage
+    // Home action
     if (action === 'home') {
       const homeData = await getHomeData();
       return new Response(JSON.stringify(homeData), {
@@ -255,30 +292,42 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Search all action: tracks + artists + albums
-    if (action === 'searchAll') {
-      if (!query || typeof query !== 'string') {
+    // Artist action
+    if (action === 'artist') {
+      if (!artistId) {
         return new Response(
-          JSON.stringify({ error: 'Query parameter is required for searchAll action' }),
+          JSON.stringify({ error: 'artistId is required' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
+      const artistData = await getArtistData(artistId);
+      return new Response(JSON.stringify(artistData), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
+    // Search all
+    if (action === 'searchAll') {
+      if (!query || typeof query !== 'string') {
+        return new Response(
+          JSON.stringify({ error: 'Query is required' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
       const result = await searchAll(query);
       return new Response(JSON.stringify(result), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Search action (default): search tracks only
+    // Search tracks (default)
     if (action === 'search' || !action) {
       if (!query || typeof query !== 'string') {
         return new Response(
-          JSON.stringify({ error: 'Query parameter is required for search action' }),
+          JSON.stringify({ error: 'Query is required' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-
       const result = await searchTracks(query, limit);
       return new Response(JSON.stringify(result), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
