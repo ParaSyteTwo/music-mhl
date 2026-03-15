@@ -627,7 +627,7 @@ export const useMusicStore = create<MusicStore>()(
         // ─── Lyrics ───
         loadLyrics: async (track) => {
           try {
-            const result = await fetchLyrics(track.title, track.artist, track.album, track.duration);
+            const result = await fetchLyrics(track.title, track.artist);
             if (result) {
               const updatedTrack = {
                 ...track,
