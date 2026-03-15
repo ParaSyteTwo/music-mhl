@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { fetchDeezerHome } from '@/lib/api/musicApi';
 
 export interface HomeTrack {
   id: string;
@@ -58,9 +59,6 @@ interface UseHomeDataState {
   error: string | null;
 }
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-
 export function useHomeData(): UseHomeDataState {
   const [state, setState] = useState<UseHomeDataState>({
     data: null,
@@ -73,23 +71,24 @@ export function useHomeData(): UseHomeDataState {
       try {
         setState({ data: null, loading: true, error: null });
 
-        const response = await fetch(
-          `${SUPABASE_URL}/functions/v1/deezer-search`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${SUPABASE_KEY}`,
-            },
-            body: JSON.stringify({ action: 'home' }),
-          }
-        );
+        const homeData = await fetchDeezerHome();
 
-        if (!response.ok) {
-          throw new Error(`API error: ${response.statusText}`);
-        }
+        const data: HomeData = {
+          topTracks: homeData.topTracks as HomeTrack[],
+          genres: [],
+          byGenre: Object.fromEntries(
+            Object.entries(homeData.byGenre).map(([genreName, tracks]) => [
+              genreName,
+              {
+                genreId: 0,
+                tracks: tracks as HomeTrack[],
+              },
+            ])
+          ),
+          trendingArtists: [],
+          newAlbums: [],
+        };
 
-        const data: HomeData = await response.json();
         setState({ data, loading: false, error: null });
       } catch (error) {
         const msg = error instanceof Error ? error.message : 'Failed to load home data';

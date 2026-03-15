@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Loader, AlertCircle, CheckCircle, Music, Grid3x3, List, AudioWaveform, Upload } from 'lucide-react';
 import { useMusicStore } from '../store/musicStore';
+import { identifyTrackWithShazam } from '../lib/api/musicApi';
 import { TrackCard } from '../components/music/TrackCard';
 import { TrackRow } from '../components/music/TrackRow';
 import type { Track, ViewMode } from '../types/music';
@@ -14,7 +15,6 @@ export default function IdentifyPage() {
   const [dragActive, setDragActive] = useState(false);
 
   const { addToLibrary } = useMusicStore();
-  const AUDD_API_KEY = import.meta.env.VITE_AUDD_API_KEY;
 
   const handleFileSelect = (selectedFile: File | null) => {
     if (!selectedFile) return;
@@ -59,68 +59,25 @@ export default function IdentifyPage() {
       return;
     }
 
-    if (!AUDD_API_KEY) {
-      setError('API key de AudD no configurada. Por favor define VITE_AUDD_API_KEY');
-      return;
-    }
-
     setLoading(true);
     setError(null);
 
     try {
-      const formData = new FormData();
-      // Only send first 1MB of file to API
-      const slicedFile = file.slice(0, 1024 * 1024);
-      formData.append('file', slicedFile, file.name);
-      formData.append('api_token', AUDD_API_KEY);
-      formData.append('return', 'apple_music,deezer');
+      const result = await identifyTrackWithShazam(file);
 
-      console.log('Enviando a AudD:', {
-        fileSize: file.size,
-        slicedSize: slicedFile.size,
-        apiKey: AUDD_API_KEY ? 'presente' : 'FALTA'
-      });
-
-      const response = await fetch('https://api.audd.io/', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error(`Error HTTP: ${response.status}`);
-      }
-
-      const data = await response.json();
-      console.log('Respuesta AudD:', JSON.stringify(data, null, 2));
-
-      // AudD returns status: 'success' not data.success
-      if (data.status !== 'success') {
-        setError(
-          data.result?.message || 'No se pudo identificar la canción. Intenta con otro archivo.'
-        );
-        console.error('AudD error:', data);
-        return;
-      }
-
-      if (!data.result) {
-        setError('No se encontró información de la canción');
-        return;
-      }
-
-      const { title, artist, album, duration } = data.result;
-
-      if (!title || !artist) {
-        setError('La respuesta de AudD no contiene información completa');
+      if (!result) {
+        setError('No se pudo identificar la canción. Intenta con otro archivo.');
+        setLoading(false);
         return;
       }
 
       const identifiedTrackData: Track = {
-        id: `audd-${Date.now()}`,
-        title,
-        artist,
-        album: album || 'Desconocido',
-        duration: duration || 0,
-        cover: '',
+        id: `shazam-${Date.now()}`,
+        title: result.title,
+        artist: result.artist,
+        album: result.album || 'Desconocido',
+        duration: 0,
+        cover: result.cover || '',
       };
 
       setIdentifiedTrack(identifiedTrackData);
@@ -128,7 +85,7 @@ export default function IdentifyPage() {
     } catch (err) {
       console.error('Error identificando canción:', err);
       setError(
-        err instanceof Error ? err.message : 'Error al conectar con AudD. Intenta de nuevo.'
+        err instanceof Error ? err.message : 'Error al conectar con Shazam. Intenta de nuevo.'
       );
     } finally {
       setLoading(false);
@@ -217,7 +174,7 @@ export default function IdentifyPage() {
             className="w-full mt-6 py-3 bg-[#C8F04B] hover:bg-[#D4FF57] disabled:bg-[#333330] text-[#080808] disabled:text-[#666660] rounded-lg font-semibold transition-all duration-200 flex items-center justify-center gap-2"
           >
             {loading && <Loader size={18} className="animate-spin" />}
-            {loading ? 'Escuchando...' : 'Identificar'}
+            {loading ? 'Identificando...' : 'Identificar'}
           </button>
         </div>
       ) : (
