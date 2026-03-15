@@ -15,14 +15,14 @@
     --popover-foreground: 0 0% 96.5%;
     --primary: 86 94% 54%;
     --primary-foreground: 0 0% 3.1%;
-    --secondary: 346 100% 62%;
-    --secondary-foreground: 0 0% 100%;
+    --secondary: 0 0% 62.7%;
+    --secondary-foreground: 0 0% 3.1%;
     --muted: 0 0% 40%;
     --muted-foreground: 0 0% 40%;
     --accent: 86 94% 54%;
     --accent-foreground: 0 0% 3.1%;
-    --destructive: 346 100% 62%;
-    --destructive-foreground: 0 0% 100%;
+    --destructive: 0 0% 62.7%;
+    --destructive-foreground: 0 0% 3.1%;
     --border: 0 0% 5.9%;
     --input: 0 0% 5.9%;
     --ring: 86 94% 54%;
@@ -42,7 +42,7 @@
     --color-bg-primary: #080808;
     --color-bg-surface: #0f0f0f;
     --color-accent-primary: #C8F04B;
-    --color-accent-secondary: #FF4D6D;
+    --color-accent-secondary: #A0A0A0;
     --color-text-primary: #F5F5F0;
     --color-text-secondary: #666660;
     --color-text-tertiary: #333330;
