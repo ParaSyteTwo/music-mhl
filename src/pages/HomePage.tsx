@@ -146,15 +146,15 @@ function TopGlobalSection({ tracks }: { tracks: HomeTrack[] }) {
               <span className="text-xs text-[#333330] font-mono flex-shrink-0">
                 {Math.floor(track.duration / 60)}:{(track.duration % 60).toString().padStart(2, '0')}
               </span>
-              <button
+              <div
                 onClick={(e) => {
                   e.stopPropagation();
                   playTrack(track);
                 }}
-                className="hidden group-hover:flex items-center justify-center w-8 h-8 rounded-full bg-[#C8F04B] text-black flex-shrink-0"
+                className="hidden group-hover:flex items-center justify-center w-8 h-8 rounded-full bg-[#C8F04B] text-black flex-shrink-0 cursor-pointer"
               >
                 <Play size={14} className="ml-0.5" />
-              </button>
+              </div>
             </button>
           );
         })}
@@ -166,7 +166,8 @@ function TopGlobalSection({ tracks }: { tracks: HomeTrack[] }) {
 function TrendingArtistsSection({ artists }: any) {
   if (!artists || artists.length === 0) return null;
 
-  const formatFans = (fans: number) => {
+  const formatFans = (fans?: number) => {
+    if (!fans) return '0';
     if (fans > 1000000) return `${(fans / 1000000).toFixed(1)}M`;
     if (fans > 1000) return `${(fans / 1000).toFixed(1)}K`;
     return fans.toString();
@@ -275,7 +276,7 @@ function NewAlbumsSection({ albums }: any) {
             <div className="space-y-1">
               <p className="text-xs font-syne font-semibold text-[#F5F5F0] line-clamp-2">{album.title}</p>
               <p className="text-xs text-[#666660] truncate">{album.artist}</p>
-              <p className="text-xs text-[#333330]">{album.releaseDate.split('-')[0]}</p>
+              <p className="text-xs text-[#333330]">{album.releaseDate ? album.releaseDate.split('-')[0] : 'N/A'}</p>
             </div>
           </button>
         ))}
