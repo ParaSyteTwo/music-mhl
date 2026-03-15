@@ -1,4 +1,4 @@
-import { Home, Search, Library, Download, Settings, Music2, ListMusic } from 'lucide-react';
+import { Home, Search, Library, Download, Settings, Music2, ListMusic, Mic2 } from 'lucide-react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useMusicStore } from '@/store/musicStore';
 import { motion } from 'framer-motion';
@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 const navItems = [
   { to: '/', icon: Home, label: 'Home' },
   { to: '/search', icon: Search, label: 'Search' },
+  { to: '/identify', icon: Mic2, label: 'Identify' },
   { to: '/library', icon: Library, label: 'Library' },
   { to: '/playlists', icon: ListMusic, label: 'Playlists' },
   { to: '/downloads', icon: Download, label: 'Downloads' },

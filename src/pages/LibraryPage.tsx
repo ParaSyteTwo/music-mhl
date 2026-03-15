@@ -3,6 +3,7 @@ import { TrackRow } from '@/components/music/TrackRow';
 import { Music, User, Disc, Play, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
+import TrackIdentifier from '@/components/music/TrackIdentifier';
 
 type LibraryTab = 'songs' | 'artists' | 'albums';
 
@@ -59,6 +60,11 @@ export default function LibraryPage() {
             <span className="timer-font text-[10px] sm:text-xs ml-0.5 sm:ml-1 opacity-60">{t.count}</span>
           </button>
         ))}
+      </div>
+
+      {/* Identificador de canciones AudD */}
+      <div className="mb-8">
+        <TrackIdentifier />
       </div>
 
       {/* Active filter */}
