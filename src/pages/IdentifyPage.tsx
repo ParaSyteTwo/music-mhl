@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { Loader, AlertCircle, CheckCircle, Music, Grid3x3, List, AudioWaveform, Upload } from 'lucide-react';
+import { Loader, AlertCircle, CheckCircle, Music, Grid3x3, List, AudioWaveform, Upload, Play } from 'lucide-react';
 import { useMusicStore } from '../store/musicStore';
-import { identifyTrackWithShazam } from '../lib/api/musicApi';
+import { identifyTrackWithShazam, searchDeezer } from '../lib/api/musicApi';
 import { TrackCard } from '../components/music/TrackCard';
 import { TrackRow } from '../components/music/TrackRow';
 import type { Track, ViewMode } from '../types/music';
@@ -14,7 +14,7 @@ export default function IdentifyPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [dragActive, setDragActive] = useState(false);
 
-  const { addToLibrary } = useMusicStore();
+  const { addToLibrary, playTrack } = useMusicStore();
 
   const handleFileSelect = (selectedFile: File | null) => {
     if (!selectedFile) return;
@@ -80,8 +80,24 @@ export default function IdentifyPage() {
         cover: result.cover || '',
       };
 
+      // Enrich with Deezer data (preview, duration, higher quality cover)
+      try {
+        const deezerResults = await searchDeezer(`${result.title} ${result.artist}`);
+        if (deezerResults.length > 0) {
+          const dz = deezerResults[0];
+          identifiedTrackData.preview = dz.preview;
+          identifiedTrackData.duration = dz.duration || 0;
+          identifiedTrackData.deezerId = dz.deezerId;
+          identifiedTrackData.cover = dz.coverXL || dz.cover || identifiedTrackData.cover;
+          identifiedTrackData.coverXL = dz.coverXL;
+          identifiedTrackData.album = dz.album || identifiedTrackData.album;
+          identifiedTrackData.id = dz.id; // Use Deezer ID for consistency
+        }
+      } catch (e) {
+        console.warn('Deezer enrichment failed:', e);
+      }
+
       setIdentifiedTrack(identifiedTrackData);
-      addToLibrary(identifiedTrackData);
     } catch (err) {
       console.error('Error identificando canción:', err);
       setError(
@@ -207,9 +223,23 @@ export default function IdentifyPage() {
 
             {/* Buttons */}
             <div className="flex gap-3 mt-6">
+              {identifiedTrack.preview && (
+                <button
+                  onClick={() => playTrack(identifiedTrack)}
+                  className="flex items-center gap-2 px-4 py-2 bg-[#C8F04B] hover:bg-[#D4FF57] text-[#080808] rounded-lg font-semibold transition-colors"
+                >
+                  <Play size={16} /> Reproducir
+                </button>
+              )}
+              <button
+                onClick={() => { addToLibrary(identifiedTrack); }}
+                className="flex-1 py-2 border border-[rgba(255,255,255,0.2)] text-[#F5F5F0] rounded-lg font-semibold hover:bg-[rgba(255,255,255,0.05)] transition-colors"
+              >
+                Añadir a biblioteca
+              </button>
               <button
                 onClick={handleNewSearch}
-                className="flex-1 py-2 bg-[#C8F04B] hover:bg-[#D4FF57] text-[#080808] rounded-lg font-semibold transition-colors"
+                className="flex-1 py-2 border border-[rgba(255,255,255,0.1)] text-[#666660] rounded-lg font-semibold hover:text-[#F5F5F0] hover:bg-[rgba(255,255,255,0.05)] transition-colors"
               >
                 Identificar otra
               </button>

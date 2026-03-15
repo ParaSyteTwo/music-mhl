@@ -1,17 +1,25 @@
 import { useMusicStore } from '@/store/musicStore';
 import { TrackRow } from '@/components/music/TrackRow';
-import { Music, User, Disc, Play } from 'lucide-react';
-import { useState } from 'react';
+import { Music, User, Disc, Play, Upload, AudioWaveform, Fingerprint } from 'lucide-react';
+import { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { EmptyState, VinylIcon } from '@/components/ui/empty-state';
+import { processLocalFiles } from '@/lib/localMusic';
+import { identifyTrackWithShazam, searchDeezer } from '@/lib/api/musicApi';
+import type { Track } from '@/types/music';
 
-type LibraryTab = 'songs' | 'artists' | 'albums';
+type LibraryTab = 'songs' | 'artists' | 'albums' | 'local';
 
 export default function LibraryPage() {
-  const { library, removeFromLibrary, playQueue } = useMusicStore();
+  const { library, removeFromLibrary, playQueue, addToLibrary, playTrack } = useMusicStore();
   const [tab, setTab] = useState<LibraryTab>('songs');
   const [artistFilter, setArtistFilter] = useState<string | null>(null);
   const [albumFilter, setAlbumFilter] = useState<string | null>(null);
+  const [localTracks, setLocalTracks] = useState<Track[]>([]);
+  const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState({ current: 0, total: 0 });
+  const [dragActive, setDragActive] = useState(false);
+  const [identifyingId, setIdentifyingId] = useState<string | null>(null);
 
   const artists = [...new Set(library.map(t => t.artist))];
   const albums = [...new Set(library.map(t => t.album))];
@@ -26,9 +34,73 @@ export default function LibraryPage() {
     { key: 'songs', label: 'Songs', icon: Music, count: library.length },
     { key: 'artists', label: 'Artists', icon: User, count: artists.length },
     { key: 'albums', label: 'Albums', icon: Disc, count: albums.length },
+    { key: 'local', label: 'Local', icon: Upload, count: localTracks.length },
   ];
 
   const clearFilters = () => { setArtistFilter(null); setAlbumFilter(null); };
+
+  const handleLocalFiles = useCallback(async (files: FileList | File[]) => {
+    const fileArray = Array.from(files);
+    if (fileArray.length === 0) return;
+    setImporting(true);
+    setImportProgress({ current: 0, total: fileArray.length });
+    try {
+      const results = await processLocalFiles(fileArray, (current, total) => {
+        setImportProgress({ current, total });
+      });
+      const newTracks = results.map((r) => r.track);
+      setLocalTracks((prev) => {
+        const ids = new Set(prev.map((t) => t.title + t.artist));
+        return [...prev, ...newTracks.filter((t) => !ids.has(t.title + t.artist))];
+      });
+    } catch (e) {
+      console.error('Local file import error:', e);
+    } finally {
+      setImporting(false);
+    }
+  }, []);
+
+  const handleIdentifyLocal = useCallback(async (track: Track) => {
+    setIdentifyingId(track.id);
+    try {
+      // Create a blob from the preview URL for Shazam
+      const res = await fetch(track.preview!);
+      const blob = await res.blob();
+      const file = new File([blob], `${track.title}.mp3`, { type: blob.type || 'audio/mpeg' });
+      
+      const result = await identifyTrackWithShazam(file);
+      if (!result) {
+        console.warn('Could not identify track');
+        return;
+      }
+
+      // Enrich with Deezer data
+      let enriched: Partial<Track> = {
+        title: result.title,
+        artist: result.artist,
+        album: result.album || track.album,
+      };
+      try {
+        const deezerResults = await searchDeezer(`${result.title} ${result.artist}`);
+        if (deezerResults.length > 0) {
+          const dz = deezerResults[0];
+          enriched.cover = dz.coverXL || dz.cover || result.cover;
+          enriched.duration = dz.duration || track.duration;
+          enriched.deezerId = dz.deezerId;
+          enriched.album = dz.album || enriched.album;
+        }
+      } catch {}
+
+      // Update the local track in place
+      setLocalTracks((prev) =>
+        prev.map((t) => (t.id === track.id ? { ...t, ...enriched } : t)),
+      );
+    } catch (e) {
+      console.error('Identify local track error:', e);
+    } finally {
+      setIdentifyingId(null);
+    }
+  }, []);
 
   return (
     <div className="px-4 sm:px-8 py-6 sm:py-10">
@@ -168,6 +240,93 @@ export default function LibraryPage() {
             <div className="col-span-full text-center py-20">
               <Disc className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
               <p className="text-muted-foreground text-sm">Sin álbumes</p>
+            </div>
+          )}
+        </div>
+      )}
+      {tab === 'local' && (
+        <div className="space-y-6">
+          {/* Drop zone */}
+          <div
+            className={`relative border-2 border-dashed rounded-[20px] p-8 transition-all duration-200 cursor-pointer ${
+              dragActive
+                ? 'border-[#C8F04B] bg-[rgba(200,240,75,0.08)]'
+                : 'border-[rgba(255,255,255,0.1)] bg-[rgba(255,255,255,0.02)] hover:border-[rgba(255,255,255,0.2)]'
+            }`}
+            onDragEnter={(e) => { e.preventDefault(); setDragActive(true); }}
+            onDragLeave={(e) => { e.preventDefault(); setDragActive(false); }}
+            onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragActive(false);
+              if (e.dataTransfer.files.length > 0) handleLocalFiles(e.dataTransfer.files);
+            }}
+            onClick={() => document.getElementById('local-file-input')?.click()}
+          >
+            <input
+              id="local-file-input"
+              type="file"
+              accept="audio/*"
+              multiple
+              onChange={(e) => { if (e.target.files) handleLocalFiles(e.target.files); e.target.value = ''; }}
+              className="hidden"
+            />
+            <div className="flex flex-col items-center gap-3 text-center">
+              <AudioWaveform size={40} className={dragActive ? 'text-[#C8F04B]' : 'text-[#333330]'} />
+              <div>
+                <p className="text-sm font-medium text-[#F5F5F0]">Arrastra archivos de audio aquí</p>
+                <p className="text-xs text-[#666660] mt-1">MP3, FLAC, M4A, WAV — o haz clic para seleccionar</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Import progress */}
+          {importing && (
+            <div className="flex items-center gap-3 p-4 bg-[rgba(200,240,75,0.05)] border border-[#C8F04B]/20 rounded-lg">
+              <div className="w-5 h-5 border-2 border-[#C8F04B] border-t-transparent rounded-full animate-spin" />
+              <span className="text-sm text-[#C8F04B]">
+                Procesando {importProgress.current}/{importProgress.total} archivos...
+              </span>
+            </div>
+          )}
+
+          {/* Local tracks list */}
+          {localTracks.length > 0 && (
+            <div className="space-y-1">
+              {localTracks.map((track, i) => (
+                <div key={track.id} className="flex items-center gap-3">
+                  <div className="flex-1">
+                    <TrackRow track={track} index={i} contextTracks={localTracks} />
+                  </div>
+                  <button
+                    onClick={() => handleIdentifyLocal(track)}
+                    disabled={identifyingId === track.id}
+                    className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-[rgba(200,240,75,0.1)] text-[#C8F04B] hover:bg-[rgba(200,240,75,0.2)] disabled:opacity-50 transition-colors"
+                    title="Identify with Shazam"
+                  >
+                    {identifyingId === track.id ? (
+                      <div className="w-3 h-3 border-2 border-[#C8F04B] border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <Fingerprint size={14} />
+                    )}
+                    <span className="hidden sm:inline">{identifyingId === track.id ? 'Identificando...' : 'Identificar'}</span>
+                  </button>
+                  <button
+                    onClick={() => { addToLibrary(track); }}
+                    className="flex-shrink-0 px-3 py-1.5 text-xs rounded-lg border border-[rgba(255,255,255,0.1)] text-[#666660] hover:text-[#F5F5F0] hover:bg-[rgba(255,255,255,0.05)] transition-colors"
+                  >
+                    + Biblioteca
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {localTracks.length === 0 && !importing && (
+            <div className="text-center py-12">
+              <Upload size={32} className="mx-auto text-[#333330] mb-3" />
+              <p className="text-sm text-[#666660]">No hay archivos locales importados</p>
+              <p className="text-xs text-[#333330] mt-1">Arrastra archivos o usa el botón para añadirlos</p>
             </div>
           )}
         </div>

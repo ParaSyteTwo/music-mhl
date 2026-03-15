@@ -61,6 +61,28 @@ export default defineConfig(({ mode }) => ({
             },
           },
           {
+            urlPattern: /^https:\/\/e-cdns-images\.dzcdn\.net\/.*/i,
+            handler: "CacheFirst",
+            options: {
+              cacheName: "deezer-images-cache",
+              expiration: {
+                maxEntries: 200,
+                maxAgeSeconds: 60 * 60 * 24 * 30,
+              },
+            },
+          },
+          {
+            urlPattern: /^https:\/\/cdns-preview-.*\.dzcdn\.net\/.*/i,
+            handler: "CacheFirst",
+            options: {
+              cacheName: "deezer-preview-cache",
+              expiration: {
+                maxEntries: 50,
+                maxAgeSeconds: 60 * 60 * 24 * 7,
+              },
+            },
+          },
+          {
             urlPattern: /^https:\/\/.*\.supabase\.co\/.*/i,
             handler: "NetworkFirst",
             options: {

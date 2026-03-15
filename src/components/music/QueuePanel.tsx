@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { X, GripVertical } from 'lucide-react';
+import { X, GripVertical, Trash2 } from 'lucide-react';
 import { useMusicStore } from '@/store/musicStore';
 import {
   DndContext,
@@ -34,6 +34,7 @@ interface QueueItemProps {
   duration: number;
   cover?: string;
   onClick: () => void;
+  onRemove: () => void;
 }
 
 function formatTime(seconds: number): string {
@@ -53,6 +54,7 @@ function QueueTrackItem({
   duration,
   cover,
   onClick,
+  onRemove,
 }: QueueItemProps) {
   const {
     attributes,
@@ -73,7 +75,7 @@ function QueueTrackItem({
     <div
       ref={setNodeRef}
       style={style}
-      className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
+      className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all group ${
         isCurrent
           ? 'bg-[rgba(200,240,75,0.08)] border-l-2 border-[#C8F04B]'
           : 'hover:bg-[rgba(255,255,255,0.04)]'
@@ -124,12 +126,23 @@ function QueueTrackItem({
       <span className="text-xs font-mono text-[#666660] w-12 text-right">
         {formatTime(duration)}
       </span>
+
+      {/* Remove button */}
+      {!isCurrent && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onRemove(); }}
+          className="opacity-0 group-hover:opacity-100 flex-shrink-0 p-1 text-[#666660] hover:text-[#FF4D6D] transition-all"
+          title="Remove from queue"
+        >
+          <X size={14} />
+        </button>
+      )}
     </div>
   );
 }
 
 export function QueuePanel({ isOpen, onClose }: QueuePanelProps) {
-  const { player, playQueue, playTrack } = useMusicStore();
+  const { player, playQueue, playTrack, clearQueue, removeFromQueue } = useMusicStore();
   const { currentTrack, queue = [], queueIndex = 0 } = player;
 
   // dnd-kit sensors
@@ -195,7 +208,15 @@ export function QueuePanel({ isOpen, onClose }: QueuePanelProps) {
               </div>
 
               <div className="flex gap-2">
-
+                {queue.length > 0 && (
+                  <button
+                    onClick={() => clearQueue()}
+                    className="p-1.5 text-[#666660] hover:text-[#FF4D6D] hover:bg-[rgba(255,77,109,0.08)] rounded-lg transition-colors text-xs flex items-center gap-1"
+                    title="Clear queue"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
                 <button
                   onClick={onClose}
                   className="p-1.5 text-[#666660] hover:text-[#F5F5F0] hover:bg-[rgba(255,255,255,0.04)] rounded-lg transition-colors"
@@ -229,6 +250,7 @@ export function QueuePanel({ isOpen, onClose }: QueuePanelProps) {
                           duration={track.duration}
                           cover={track.cover}
                           onClick={() => playTrack(track)}
+                          onRemove={() => removeFromQueue(index)}
                         />
                       ))}
                     </div>

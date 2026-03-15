@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { Track, Playlist, Download, AudioFormat, AudioSource } from '@/types/music';
 import { audioEngine } from '@/lib/audioEngine';
-import { searchDeezer, searchYouTube, getYouTubeStream, fetchLyrics } from '@/lib/api/musicApi';
+import { searchDeezer, searchYouTube, getYouTubeStream, fetchLyrics, translateText } from '@/lib/api/musicApi';
 import { writeID3Tags } from '@/lib/id3Writer';
 
 // ─── Settings ───
@@ -47,6 +47,8 @@ interface MusicStore {
   skipPrev: () => void;
   toggleShuffle: () => void;
   toggleRepeat: () => void;
+  clearQueue: () => void;
+  removeFromQueue: (index: number) => void;
 
   // History
   history: Track[];
@@ -265,6 +267,19 @@ export const useMusicStore = create<MusicStore>()(
           const modes: RepeatMode[] = ['off', 'all', 'one'];
           const idx = modes.indexOf(s.player.repeat);
           return { player: { ...s.player, repeat: modes[(idx + 1) % 3] } };
+        }),
+
+        clearQueue: () => set((s) => ({
+          player: { ...s.player, queue: [], queueIndex: -1 },
+        })),
+
+        removeFromQueue: (index: number) => set((s) => {
+          const newQueue = [...s.player.queue];
+          newQueue.splice(index, 1);
+          let newIndex = s.player.queueIndex;
+          if (index < newIndex) newIndex--;
+          else if (index === newIndex) newIndex = Math.min(newIndex, newQueue.length - 1);
+          return { player: { ...s.player, queue: newQueue, queueIndex: newIndex } };
         }),
 
         // ─── History ───
@@ -653,7 +668,30 @@ export const useMusicStore = create<MusicStore>()(
         },
 
         loadTranslation: async (track) => {
-          // Translation disabled - no longer needed
+          if (!track.lyrics) return;
+          const targetLang = navigator.language.split('-')[0];
+          if (targetLang === 'en') return; // Don't translate if already English
+
+          set((s) => ({ player: { ...s.player, isTranslating: true } }));
+          try {
+            const translated = await translateText(track.lyrics, targetLang);
+            if (translated) {
+              set((s) => ({
+                player: {
+                  ...s.player,
+                  isTranslating: false,
+                  currentTrack: s.player.currentTrack?.id === track.id
+                    ? { ...s.player.currentTrack, translatedLyrics: translated }
+                    : s.player.currentTrack,
+                },
+              }));
+            } else {
+              set((s) => ({ player: { ...s.player, isTranslating: false } }));
+            }
+          } catch (e) {
+            console.warn('Translation failed:', e);
+            set((s) => ({ player: { ...s.player, isTranslating: false } }));
+          }
         },
       };
     },
@@ -664,6 +702,8 @@ export const useMusicStore = create<MusicStore>()(
         playlists: state.playlists,
         downloads: state.downloads.filter(d => d.status === 'completed' || d.status === 'error'),
         settings: state.settings,
+        history: state.history,
+        lastPlayedTrackId: state.lastPlayedTrackId,
         player: {
           volume: state.player.volume,
           shuffle: state.player.shuffle,
@@ -675,6 +715,8 @@ export const useMusicStore = create<MusicStore>()(
         library: persisted?.library || [],
         playlists: persisted?.playlists || [],
         downloads: persisted?.downloads || [],
+        history: persisted?.history || [],
+        lastPlayedTrackId: persisted?.lastPlayedTrackId || null,
         settings: { ...current.settings, ...(persisted?.settings || {}) },
         player: {
           ...current.player,
