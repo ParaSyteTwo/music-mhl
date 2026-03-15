@@ -5,7 +5,7 @@ import { useMusicStore } from '../store/musicStore';
 import { Skeleton } from '../components/ui/skeleton';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 type ArtistTab = 'popular' | 'discography' | 'similar';
 
