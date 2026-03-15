@@ -5,6 +5,7 @@ class AudioEngine {
   private _onEnded: (() => void) | null = null;
   private _onLoadStart: (() => void) | null = null;
   private _onCanPlay: (() => void) | null = null;
+  private _onPlay: (() => void) | null = null;
   private _onError: ((error: string) => void) | null = null;
   private _onPlayControlPressed: (() => void) | null = null;
   private _onPauseControlPressed: (() => void) | null = null;
@@ -29,6 +30,10 @@ class AudioEngine {
 
     this.audio.addEventListener('canplay', () => {
       this._onCanPlay?.();
+    });
+
+    this.audio.addEventListener('play', () => {
+      this._onPlay?.();
     });
 
     this.audio.addEventListener('error', () => {
@@ -93,6 +98,10 @@ class AudioEngine {
 
   set onCanPlay(fn: (() => void) | null) {
     this._onCanPlay = fn;
+  }
+
+  set onPlay(fn: (() => void) | null) {
+    this._onPlay = fn;
   }
 
   set onError(fn: ((error: string) => void) | null) {

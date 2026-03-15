@@ -50,7 +50,9 @@ interface MusicStore {
 
   // History
   history: Track[];
+  lastPlayedTrackId: string | null;
   clearHistory: () => void;
+  addToHistoryIfNewTrack: (track: Track) => void;
 
   // Library
   library: Track[];
@@ -148,6 +150,14 @@ export const useMusicStore = create<MusicStore>()(
         get().skipPrev();
       };
 
+      // Add to history when audio actually starts playing
+      audioEngine.onPlay = () => {
+        const currentTrack = get().player.currentTrack;
+        if (currentTrack) {
+          get().addToHistoryIfNewTrack(currentTrack);
+        }
+      };
+
       return {
         // ─── Settings ───
         settings: {
@@ -238,16 +248,24 @@ export const useMusicStore = create<MusicStore>()(
 
         // ─── History ───
         history: [],
-        clearHistory: () => set({ history: [] }),
-
-        playTrack: async (track) => {
-          // Add to history (at the beginning, max 20 items, no duplicates anywhere)
+        lastPlayedTrackId: null,
+        clearHistory: () => set({ history: [], lastPlayedTrackId: null }),
+        addToHistoryIfNewTrack: (track) => {
+          // Only add if this is a different track from the last played one
+          const lastId = get().lastPlayedTrackId;
+          if (lastId === track.id) {
+            return; // Same track, don't add again
+          }
+          // Add to history and update lastPlayedTrackId
           set((s) => {
-            // Always filter out any existing occurrence first, then add at the beginning
             const filtered = s.history.filter(t => t.id !== track.id);
             const newHistory = [track, ...filtered].slice(0, 20);
-            return { history: newHistory };
+            return { history: newHistory, lastPlayedTrackId: track.id };
           });
+        },
+
+        playTrack: async (track) => {
+          // History is now added via addToHistoryIfNewTrack when audio actually plays
           // Add to queue if not already there
           const { queue } = get().player;
           const trackInQueue = queue.findIndex(t => t.id === track.id);
@@ -297,13 +315,7 @@ export const useMusicStore = create<MusicStore>()(
         },
 
         playTrackWithYouTube: async (track) => {
-          // Add to history (at the beginning, max 20 items, no duplicates anywhere)
-          set((s) => {
-            // Always filter out any existing occurrence first, then add at the beginning
-            const filtered = s.history.filter(t => t.id !== track.id);
-            const newHistory = [track, ...filtered].slice(0, 20);
-            return { history: newHistory };
-          });
+          // History is now added via addToHistoryIfNewTrack when audio actually plays
           
           // Strategy: Try YouTube first, fallback to preview if available
           let youtubeSucceeded = false;
