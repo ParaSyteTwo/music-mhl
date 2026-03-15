@@ -48,8 +48,8 @@ export function TrackCard({ track, index = 0 }: TrackCardProps) {
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.05, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-      className="track-card group p-3 rounded-lg"
-      onClick={() => navigate(`/track/${track.id}`)}
+      className="track-card group p-3 rounded-lg hover:bg-white/5 transition-colors cursor-pointer"
+      onClick={() => playTrack(track)}
     >
       {/* Cover */}
       <div className="aspect-square rounded-md bg-secondary overflow-hidden relative mb-3">
