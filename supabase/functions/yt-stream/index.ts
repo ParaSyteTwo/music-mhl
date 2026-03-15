@@ -6,11 +6,9 @@ const corsHeaders = {
 
 // ─── Invidious instances (with fallbacks) ───
 const INVIDIOUS_INSTANCES = [
+  "https://inv.riverside.rocks",
   "https://invidious.snopyta.org",
   "https://vid.puffyan.us",
-  "https://invidious.kavin.rocks",
-  "https://inv.nadeko.net",
-  "https://invidious.nerdvpn.de",
 ];
 
 async function fetchWithTimeout(url: string, opts: RequestInit = {}, timeoutMs = 8000): Promise<Response> {
@@ -24,13 +22,16 @@ async function fetchWithTimeout(url: string, opts: RequestInit = {}, timeoutMs =
   }
 }
 
-// ─── Try Invidious with fallback instances ───
+// ─── Try Invidious API ───
 async function tryInvidious(path: string): Promise<any | null> {
   for (const instance of INVIDIOUS_INSTANCES) {
     try {
       const url = `${instance}${path}`;
-      console.log(`[yt-stream] Trying Invidious ${instance}...`);
-      const res = await fetchWithTimeout(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, 8000);
+      console.log(`[yt-stream] Trying Invidious instance: ${instance}`);
+      
+      const res = await fetchWithTimeout(url, { 
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' } 
+      }, 8000);
       
       if (!res.ok) {
         console.warn(`[yt-stream] ${instance} returned ${res.status}`);
@@ -38,120 +39,117 @@ async function tryInvidious(path: string): Promise<any | null> {
       }
       
       const data = await res.json();
-      console.log(`[yt-stream] Invidious success with ${instance}`);
+      console.log(`[yt-stream] ✓ Success with Invidious: ${instance}`);
       return data;
     } catch (err) {
-      console.warn(`[yt-stream] ${instance} failed:`, err instanceof Error ? err.message : String(err));
+      console.warn(`[yt-stream] ✗ ${instance} failed:`, err instanceof Error ? err.message : String(err));
       continue;
     }
   }
+  console.warn('[yt-stream] All Invidious instances failed');
   return null;
 }
 
-// ─── RapidAPI YouTube MP3 Downloader ───
+// ─── RapidAPI YouTube MP3 (if available) ───
 async function tryRapidAPIYouTubeMp3(videoId: string): Promise<{ url: string; title?: string } | null> {
   const rapidApiKey = Deno.env.get('RAPIDAPI_YOUTUBE_MP3_KEY');
   if (!rapidApiKey) {
-    console.log('[yt-stream] RapidAPI key not configured, skipping');
     return null;
   }
 
   try {
+    console.log('[yt-stream] Attempting RapidAPI for videoId:', videoId);
     const res = await fetchWithTimeout(
       `https://youtube-mp36.p.rapidapi.com/dl?id=${videoId}`,
       {
         headers: {
           'X-RapidAPI-Key': rapidApiKey,
-          'X-RapidAPI-Host': 'youtube-mp36.p.rapidapi.com'
+          'X-RapidAPI-Host': 'youtube-mp36.p.rapidapi.com',
+          'User-Agent': 'Mozilla/5.0',
         }
       },
-      8000
+      15000
     );
 
     if (res.ok) {
       const data = await res.json() as any;
       if (data.link) {
-        console.log('[yt-stream] Got MP3 URL from RapidAPI');
+        console.log('[yt-stream] ✓ RapidAPI provided MP3 URL');
         return { url: data.link, title: data.title };
+      } else {
+        console.warn('[yt-stream] RapidAPI returned no link:', data);
       }
     } else {
       console.warn(`[yt-stream] RapidAPI returned ${res.status}`);
     }
   } catch (err) {
-    console.warn('[yt-stream] RapidAPI failed:', err instanceof Error ? err.message : String(err));
+    console.warn('[yt-stream] RapidAPI error:', err instanceof Error ? err.message : String(err));
   }
 
   return null;
 }
 
-// ─── Invidious search ───
+// ─── Invidious search - straightforward ───
 async function invidiousSearch(query: string) {
-  const path = `/api/v1/search?q=${encodeURIComponent(query)}&type=video&sort_by=relevance`;
+  const path = `/api/v1/search?q=${encodeURIComponent(query)}&type=video&sort_by=relevance&fields=videoId,title,author,lengthSeconds`;
   const data = await tryInvidious(path);
   
-  if (!data) return null;
+  if (!data || !Array.isArray(data)) {
+    console.warn('[yt-stream] Search returned invalid data:', typeof data);
+    return null;
+  }
   
-  return (data || [])
+  const results = data
     .filter((i: any) => i.type === "video")
-    .slice(0, 10)
+    .slice(0, 5)
     .map((i: any) => ({
-      videoId: i.videoId,
+      videoId: i.videoId || "",
       title: i.title || "",
-      artist: (i.author || "").replace(" - Topic", ""),
+      author: (i.author || "").replace(" - Topic", ""),
       duration: i.lengthSeconds || 0,
-      thumbnail: i.videoThumbnails?.[0]?.url || "",
     }));
+  
+  console.log(`[yt-stream] Search found ${results.length} results`);
+  return results.length > 0 ? results : null;
 }
 
-// ─── Invidious stream (audio only) - with CORS-friendly URL handling ───
-async function invidiousStream(videoId: string): Promise<{ url: string; quality: string } | null> {
-  const path = `/api/v1/videos/${videoId}`;
+// ─── Invidious stream - simplified ───
+async function invidiousStream(videoId: string): Promise<{ url: string; type: string } | null> {
+  const path = `/api/v1/videos/${videoId}?fields=formatStreams,adaptiveFormats`;
   const data = await tryInvidious(path);
   
-  if (!data) return null;
+  if (!data) {
+    console.warn('[yt-stream] No video data from Invidious');
+    return null;
+  }
 
-  // Find best audio format
+  // Priority 1: Audio-only formats
   const audioFormats = (data.adaptiveFormats || []).filter((f: any) => {
     const type = (f.type || "").toLowerCase();
-    return type.includes("audio") && (type.includes("mp4") || type.includes("webm"));
+    return type.includes("audio");
   });
 
   if (audioFormats.length > 0) {
-    // Sort by bitrate descending
-    audioFormats.sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0));
+    // Sort by bitrate
+    audioFormats.sort((a: any, b: any) => (parseInt(b.bitrate) || 0) - (parseInt(a.bitrate) || 0));
     const best = audioFormats[0];
-    
-    if (best.url) {
-      console.log(`[yt-stream] Found audio format: ${best.bitrate}bps`);
-      // Test if URL is valid by making a HEAD request
-      try {
-        const testRes = await fetchWithTimeout(best.url, { method: 'HEAD' }, 5000);
-        if (testRes.ok || testRes.status === 206) {
-          console.log('[yt-stream] Invidious URL is accessible');
-          return { url: best.url, quality: `${best.bitrate}bps` };
-        } else {
-          console.warn(`[yt-stream] Invidious URL returned ${testRes.status}`);
-        }
-      } catch (err) {
-        console.warn('[yt-stream] Invidious URL is not accessible:', err instanceof Error ? err.message : String(err));
-      }
+    if (best?.url) {
+      console.log(`[yt-stream] Using audio format: ${best.bitrate}bps`);
+      return { url: best.url, type: 'audio' };
     }
   }
 
-  // Fallback: use formatStreams (video+audio combined, less ideal but works)
-  const fallback = (data.formatStreams || [])[0];
-  if (fallback?.url) {
-    console.log(`[yt-stream] Using Invidious fallback format (video+audio)`);
-    try {
-      const testRes = await fetchWithTimeout(fallback.url, { method: 'HEAD' }, 5000);
-      if (testRes.ok || testRes.status === 206) {
-        return { url: fallback.url, quality: "auto" };
-      }
-    } catch (err) {
-      console.warn('[yt-stream] Fallback URL is not accessible');
+  // Fallback: Video + audio combined
+  const videoFormats = (data.formatStreams || []);
+  if (videoFormats.length > 0) {
+    const best = videoFormats[0];
+    if (best?.url) {
+      console.log('[yt-stream] Using video+audio fallback');
+      return { url: best.url, type: 'video' };
     }
   }
 
+  console.warn('[yt-stream] No playable format found');
   return null;
 }
 
