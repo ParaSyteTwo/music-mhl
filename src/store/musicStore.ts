@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { Track, Playlist, Download, AudioFormat, AudioSource } from '@/types/music';
 import { audioEngine } from '@/lib/audioEngine';
-import { searchDeezer, searchYouTube, getYouTubeStream, fetchLyrics, detectAndTranslate } from '@/lib/api/musicApi';
+import { searchDeezer, searchYouTube, getYouTubeStream, fetchLyrics } from '@/lib/api/musicApi';
 import { writeID3Tags } from '@/lib/id3Writer';
 
 // ─── Settings ───
@@ -653,29 +653,7 @@ export const useMusicStore = create<MusicStore>()(
         },
 
         loadTranslation: async (track) => {
-          const lyrics = track.lyrics;
-          if (!lyrics) return;
-          
-          set((s) => ({ player: { ...s.player, isTranslating: true } }));
-          
-          try {
-            const translated = await detectAndTranslate(lyrics);
-            if (translated) {
-              set((s) => ({
-                player: {
-                  ...s.player,
-                  isTranslating: false,
-                  currentTrack: s.player.currentTrack?.id === track.id
-                    ? { ...s.player.currentTrack, translatedLyrics: translated }
-                    : s.player.currentTrack,
-                }
-              }));
-            } else {
-              set((s) => ({ player: { ...s.player, isTranslating: false } }));
-            }
-          } catch {
-            set((s) => ({ player: { ...s.player, isTranslating: false } }));
-          }
+          // Translation disabled - no longer needed
         },
       };
     },
