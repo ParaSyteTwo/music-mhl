@@ -1,227 +1,82 @@
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// ─── Invidious instances (with fallbacks) ───
-const INVIDIOUS_INSTANCES = [
-  "https://inv.riverside.rocks",
-  "https://invidious.snopyta.org",
-  "https://vid.puffyan.us",
-];
-
-async function fetchWithTimeout(url: string, opts: RequestInit = {}, timeoutMs = 8000): Promise<Response> {
+async function fetchWithTimeout(url: string, opts: RequestInit = {}, timeoutMs = 10000): Promise<Response> {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(url, { ...opts, signal: controller.signal });
-    return res;
+    return await fetch(url, { ...opts, signal: controller.signal });
   } finally {
     clearTimeout(id);
   }
 }
 
-// ─── Try Invidious API ───
-async function tryInvidious(path: string): Promise<any | null> {
-  for (const instance of INVIDIOUS_INSTANCES) {
-    try {
-      const url = `${instance}${path}`;
-      console.log(`[yt-stream] Trying Invidious instance: ${instance}`);
-      
-      const res = await fetchWithTimeout(url, { 
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' } 
-      }, 8000);
-      
-      if (!res.ok) {
-        console.warn(`[yt-stream] ${instance} returned ${res.status}`);
-        continue;
-      }
-      
-      const data = await res.json();
-      console.log(`[yt-stream] ✓ Success with Invidious: ${instance}`);
-      return data;
-    } catch (err) {
-      console.warn(`[yt-stream] ✗ ${instance} failed:`, err instanceof Error ? err.message : String(err));
-      continue;
+// YouTube search using simple API
+async function searchYouTube(query: string) {
+  try {
+    // Using youtube-sr or similar lightweight search
+    const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}&sp=EgIQAQ%3D%3D`;
+    const html = await (await fetchWithTimeout(url)).text();
+    
+    // Extract first video ID from HTML (basic parser)
+    const match = html.match(/"videoId":"([a-zA-Z0-9_-]{11})"/);
+    if (match?.[1]) {
+      return { videoId: match[1], query };
     }
-  }
-  console.warn('[yt-stream] All Invidious instances failed');
-  return null;
-}
-
-// ─── RapidAPI YouTube MP3 (if available) ───
-async function tryRapidAPIYouTubeMp3(videoId: string): Promise<{ url: string; title?: string } | null> {
-  const rapidApiKey = Deno.env.get('RAPIDAPI_YOUTUBE_MP3_KEY');
-  if (!rapidApiKey) {
+    return null;
+  } catch {
     return null;
   }
+}
+
+// RapidAPI YouTube MP3 - the only strategy that works
+async function getYouTubeStream(videoId: string): Promise<string | null> {
+  const key = Deno.env.get('RAPIDAPI_YOUTUBE_MP3_KEY');
+  if (!key) return null;
 
   try {
-    console.log('[yt-stream] Attempting RapidAPI for videoId:', videoId);
-    const res = await fetchWithTimeout(
-      `https://youtube-mp36.p.rapidapi.com/dl?id=${videoId}`,
-      {
-        headers: {
-          'X-RapidAPI-Key': rapidApiKey,
-          'X-RapidAPI-Host': 'youtube-mp36.p.rapidapi.com',
-          'User-Agent': 'Mozilla/5.0',
-        }
-      },
-      15000
-    );
-
-    if (res.ok) {
-      const data = await res.json() as any;
-      if (data.link) {
-        console.log('[yt-stream] ✓ RapidAPI provided MP3 URL');
-        return { url: data.link, title: data.title };
-      } else {
-        console.warn('[yt-stream] RapidAPI returned no link:', data);
+    const res = await fetchWithTimeout(`https://youtube-mp36.p.rapidapi.com/dl?id=${videoId}`, {
+      headers: {
+        'X-RapidAPI-Key': key,
+        'X-RapidAPI-Host': 'youtube-mp36.p.rapidapi.com',
       }
-    } else {
-      console.warn(`[yt-stream] RapidAPI returned ${res.status}`);
-    }
-  } catch (err) {
-    console.warn('[yt-stream] RapidAPI error:', err instanceof Error ? err.message : String(err));
-  }
+    }, 10000);
 
-  return null;
-}
-
-// ─── Invidious search - straightforward ───
-async function invidiousSearch(query: string) {
-  const path = `/api/v1/search?q=${encodeURIComponent(query)}&type=video&sort_by=relevance&fields=videoId,title,author,lengthSeconds`;
-  const data = await tryInvidious(path);
-  
-  if (!data || !Array.isArray(data)) {
-    console.warn('[yt-stream] Search returned invalid data:', typeof data);
+    const data = await res.json() as any;
+    return data?.link || null;
+  } catch {
     return null;
   }
-  
-  const results = data
-    .filter((i: any) => i.type === "video")
-    .slice(0, 5)
-    .map((i: any) => ({
-      videoId: i.videoId || "",
-      title: i.title || "",
-      author: (i.author || "").replace(" - Topic", ""),
-      duration: i.lengthSeconds || 0,
-    }));
-  
-  console.log(`[yt-stream] Search found ${results.length} results`);
-  return results.length > 0 ? results : null;
-}
-
-// ─── Invidious stream - simplified ───
-async function invidiousStream(videoId: string): Promise<{ url: string; type: string } | null> {
-  const path = `/api/v1/videos/${videoId}?fields=formatStreams,adaptiveFormats`;
-  const data = await tryInvidious(path);
-  
-  if (!data) {
-    console.warn('[yt-stream] No video data from Invidious');
-    return null;
-  }
-
-  // Priority 1: Audio-only formats
-  const audioFormats = (data.adaptiveFormats || []).filter((f: any) => {
-    const type = (f.type || "").toLowerCase();
-    return type.includes("audio");
-  });
-
-  if (audioFormats.length > 0) {
-    // Sort by bitrate
-    audioFormats.sort((a: any, b: any) => (parseInt(b.bitrate) || 0) - (parseInt(a.bitrate) || 0));
-    const best = audioFormats[0];
-    if (best?.url) {
-      console.log(`[yt-stream] Using audio format: ${best.bitrate}bps`);
-      return { url: best.url, type: 'audio' };
-    }
-  }
-
-  // Fallback: Video + audio combined
-  const videoFormats = (data.formatStreams || []);
-  if (videoFormats.length > 0) {
-    const best = videoFormats[0];
-    if (best?.url) {
-      console.log('[yt-stream] Using video+audio fallback');
-      return { url: best.url, type: 'video' };
-    }
-  }
-
-  console.warn('[yt-stream] No playable format found');
-  return null;
 }
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { 
-      status: 200,
-      headers: corsHeaders 
-    });
+    return new Response(null, { status: 200, headers: corsHeaders });
   }
 
-  const respond = (body: unknown, status = 200) =>
-    new Response(JSON.stringify(body), {
+  const respond = (success: boolean, data: any = null, error: string | null = null, status = 200) =>
+    new Response(JSON.stringify({ success, ...(data && { ...data }), ...(error && { error }) }), {
       status,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
 
   try {
-    const body = await req.json();
-    const action = body.action as string;
+    const { action, query, videoId } = await req.json() as any;
 
     if (action === "search") {
-      const query = (body.query || "").trim().slice(0, 200);
-      if (!query) return respond({ error: "query required" }, 400);
-
-      console.log("[yt-stream] searching:", query);
-
-      const results = await invidiousSearch(query);
-
-      if (!results) {
-        return respond({ success: false, error: "All search providers failed" }, 502);
-      }
-
-      console.log("[yt-stream] found:", results.length, "results");
-      return respond({ success: true, results });
+      const result = await searchYouTube(query);
+      return respond(!!result, result ? { results: [result] } : null, result ? null : "Not found");
     }
 
     if (action === "stream") {
-      const videoId = (body.videoId || "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 20);
-      if (!videoId) return respond({ error: "videoId required" }, 400);
-
-      console.log("[yt-stream] fetching stream for videoId:", videoId);
-
-      // Strategy 1: Try RapidAPI YouTube MP3 first (most reliable)
-      let stream = await tryRapidAPIYouTubeMp3(videoId);
-      if (stream) {
-        console.log("[yt-stream] success: RapidAPI YouTube MP3");
-        return respond({ success: true, stream, source: 'rapidapi' });
-      }
-
-      // Strategy 2: Fall back to Invidious
-      console.log("[yt-stream] Trying Invidious fallback...");
-      stream = await invidiousStream(videoId);
-      if (stream) {
-        console.log("[yt-stream] success: Invidious");
-        return respond({ success: true, stream, source: 'invidious' });
-      }
-
-      // All strategies failed
-      return respond({ 
-        success: false, 
-        error: "No se pudo obtener el stream de audio. Usa el preview de Deezer como alternativa.",
-        helpText: "Configure RAPIDAPI_YOUTUBE_MP3_KEY en las variables de entorno para mejor soporte de YouTube"
-      }, 502);
+      const url = await getYouTubeStream(videoId);
+      return respond(!!url, url ? { stream: { url } } : null, url ? null : "Stream not available");
     }
 
-    return respond({ error: 'Use action: "search" or "stream"' }, 400);
-  } catch (err: unknown) {
-    console.error("[yt-stream] error:", err);
-    return respond(
-      { success: false, error: err instanceof Error ? err.message : "Unknown error" },
-      500
-    );
+    return respond(false, null, "Invalid action", 400);
+  } catch (err) {
+    return respond(false, null, err instanceof Error ? err.message : "Server error", 500);
   }
 });

@@ -48,7 +48,8 @@ export async function getTrendingTracks(limit: number = 20): Promise<Track[]> {
   }
 }
 
-// ─── YouTube Audio ───
+
+// ─── YouTube Audio (simple search + stream) ───
 export async function searchYouTube(query: string) {
   const { data, error } = await supabase.functions.invoke('yt-stream', {
     body: { action: 'search', query },
@@ -73,19 +74,16 @@ export async function getYouTubeStream(videoId: string) {
 export async function fetchLyrics(
   title: string,
   artist: string,
-  album?: string,
-  duration?: number
 ): Promise<{ lyrics: string; syncedLyrics: string | null } | null> {
   try {
     const params = new URLSearchParams({
       track_name: title,
       artist_name: artist,
     });
-    if (album) params.set('album_name', album);
-    if (duration) params.set('duration', String(duration));
 
     const response = await fetch(`https://lrclib.net/api/get?${params.toString()}`, {
-      headers: { 'User-Agent': 'MHL v1.0 (https://mhl.app)' },
+      headers: { 'User-Agent': 'MHL v1.0' },
+      signal: AbortSignal.timeout(5000),
     });
 
     if (!response.ok) return null;
@@ -100,145 +98,3 @@ export async function fetchLyrics(
   }
 }
 
-// ─── Language Detection ───
-export async function detectLanguage(text: string): Promise<string | null> {
-  try {
-    const response = await fetch('https://api.libretranslate.de/detect', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ q: text }),
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!response.ok) return null;
-    const data = await response.json();
-    return data.result?.language || null;
-  } catch (error) {
-    console.warn('[detectLanguage] failed:', error instanceof Error ? error.message : String(error));
-    return null;
-  }
-}
-
-// ─── Smart Translation with Fallbacks ───
-export async function detectAndTranslate(lyrics: string): Promise<string | null> {
-  try {
-    // Get system language
-    const systemLang = navigator.language.split('-')[0];
-    
-    // Skip if system language is English
-    if (systemLang === 'en') return null;
-
-    // Detect lyrics language with timeout
-    let detectedLang: string | null = null;
-    try {
-      detectedLang = await detectLanguage(lyrics);
-    } catch (err) {
-      console.warn('[detectAndTranslate] Language detection failed, skipping:', err);
-      return null;
-    }
-    
-    // Skip if detected language matches system language
-    if (detectedLang === systemLang) return null;
-
-    // Split into chunks (max 400 chars, break at newlines)
-    const chunks: string[] = [];
-    let currentChunk = '';
-    
-    for (const line of lyrics.split('\n')) {
-      if ((currentChunk + line).length > 400) {
-        if (currentChunk) chunks.push(currentChunk);
-        currentChunk = line;
-      } else {
-        currentChunk += (currentChunk ? '\n' : '') + line;
-      }
-    }
-    if (currentChunk) chunks.push(currentChunk);
-
-    // Try translation services
-    let translated = '';
-    const deepLKey = import.meta.env.VITE_DEEPL_API_KEY;
-    
-    // Try DeepL first
-    if (deepLKey) {
-      try {
-        const deepLResult = await Promise.all(
-          chunks.map((chunk) =>
-            fetch('https://api-free.deepl.com/v1/translate', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                text: chunk,
-                source_lang: detectedLang?.toUpperCase() || 'AUTO',
-                target_lang: systemLang.toUpperCase(),
-                auth_key: deepLKey,
-              }),
-            }).then((r) => (r.ok ? r.json() : null))
-          )
-        );
-        if (deepLResult.every(Boolean)) {
-          translated = deepLResult.map((r) => r.translations[0].text).join('\n');
-          return translated;
-        }
-      } catch {
-        // Fall through to LibreTranslate
-      }
-    }
-
-    // Try LibreTranslate
-    try {
-      const libreResult = await Promise.all(
-        chunks.map((chunk) =>
-          fetch('https://api.libretranslate.de/translate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              q: chunk,
-              source_language: detectedLang || 'auto',
-              target_language: systemLang,
-            }),
-          }).then((r) => (r.ok ? r.json() : null))
-        )
-      );
-      if (libreResult.every(Boolean)) {
-        translated = libreResult.map((r) => r.translatedText).join('\n');
-        return translated;
-      }
-    } catch {
-      // Fall through to MyMemory
-    }
-
-    // Try MyMemory (last resort)
-    try {
-      const memoryResult = await Promise.all(
-        chunks.map((chunk) =>
-          fetch(
-            `https://api.mymemory.translated.net/get?q=${encodeURIComponent(chunk.slice(0, 500))}&langpair=${detectedLang || 'en'}|${systemLang}`
-          ).then((r) => (r.ok ? r.json() : null))
-        )
-      );
-      if (memoryResult.every(Boolean)) {
-        translated = memoryResult.map((r) => r.responseData?.translatedText || '').join('\n');
-        if (translated) return translated;
-      }
-    } catch {
-      // All failed
-    }
-
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-// ─── Translate text (simple free translation) ───
-export async function translateText(text: string, targetLang: string = 'es'): Promise<string> {
-  try {
-    const response = await fetch(
-      `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text.slice(0, 500))}&langpair=en|${targetLang}`
-    );
-    if (!response.ok) return text;
-    const data = await response.json();
-    return data.responseData?.translatedText || text;
-  } catch {
-    return text;
-  }
-}
