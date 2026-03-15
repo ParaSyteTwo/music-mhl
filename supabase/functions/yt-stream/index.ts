@@ -157,7 +157,10 @@ async function invidiousStream(videoId: string): Promise<{ url: string; quality:
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { 
+      status: 200,
+      headers: corsHeaders 
+    });
   }
 
   const respond = (body: unknown, status = 200) =>

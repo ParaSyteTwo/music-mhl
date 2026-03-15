@@ -54,14 +54,22 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          if (response.ok) {
-            const cache = caches.open(CACHE_NAME);
-            cache.then((c) => c.put(request, response.clone()));
+          // Clone BEFORE determining if we should cache
+          if (response.ok && response.status === 200) {
+            try {
+              // Cache in background (don't await)
+              caches.open(CACHE_NAME).then((cache) => {
+                cache.put(request, response.clone());
+              });
+            } catch (err) {
+              console.warn('[SW] Failed to cache response:', err);
+            }
           }
           return response;
         })
         .catch(() => {
-          return caches.match(request) || new Response('Offline');
+          // On network error, try to return cached version
+          return caches.match(request).catch(() => new Response('Offline'));
         })
     );
     return;

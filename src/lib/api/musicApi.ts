@@ -107,11 +107,13 @@ export async function detectLanguage(text: string): Promise<string | null> {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ q: text }),
+      signal: AbortSignal.timeout(5000),
     });
     if (!response.ok) return null;
     const data = await response.json();
     return data.result?.language || null;
-  } catch {
+  } catch (error) {
+    console.warn('[detectLanguage] failed:', error instanceof Error ? error.message : String(error));
     return null;
   }
 }
@@ -125,8 +127,14 @@ export async function detectAndTranslate(lyrics: string): Promise<string | null>
     // Skip if system language is English
     if (systemLang === 'en') return null;
 
-    // Detect lyrics language
-    const detectedLang = await detectLanguage(lyrics);
+    // Detect lyrics language with timeout
+    let detectedLang: string | null = null;
+    try {
+      detectedLang = await detectLanguage(lyrics);
+    } catch (err) {
+      console.warn('[detectAndTranslate] Language detection failed, skipping:', err);
+      return null;
+    }
     
     // Skip if detected language matches system language
     if (detectedLang === systemLang) return null;
