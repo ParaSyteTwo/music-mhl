@@ -189,7 +189,7 @@ export function LyricsPanel() {
               div::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
               div::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
             `}</style>
-            <pre className="whitespace-pre-wrap break-words font-dm-sans">
+            <pre className="whitespace-pre-wrap break-words font-dm-sans text-[#F5F5F0]">
               {displayLyrics || 'No hay letra disponible'}
             </pre>
           </div>

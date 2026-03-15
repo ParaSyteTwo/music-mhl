@@ -21,7 +21,11 @@ export function AppLayout() {
           <div className={`flex-1 transition-all duration-300 ${showLyrics && !isMobile ? 'mr-[400px]' : ''}`}>
             <Outlet />
           </div>
-          {showLyrics && !isMobile && <LyricsPanel />}
+          {showLyrics && !isMobile && (
+            <div className="w-[400px] fixed right-0 top-0 bottom-[var(--player-height)] bg-[rgba(12,12,12,0.95)] border-l border-[rgba(255,255,255,0.06)] overflow-y-auto p-6">
+              <LyricsPanel />
+            </div>
+          )}
         </div>
       </main>
       <BottomPlayer />
