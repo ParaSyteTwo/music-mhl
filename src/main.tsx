@@ -22,3 +22,12 @@ if (!Capacitor.isNativePlatform() && 'serviceWorker' in navigator) {
       .catch((error) => console.warn('Service Worker registration failed:', error));
   });
 }
+
+// Register Service Worker for PWA (skip on native platforms)
+if (!Capacitor.isNativePlatform() && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js', { scope: '/' })
+      .then(() => console.log('Service Worker registered'))
+      .catch((error) => console.warn('Service Worker registration failed:', error));
+  });
+}
