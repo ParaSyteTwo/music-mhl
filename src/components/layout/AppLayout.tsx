@@ -1,4 +1,5 @@
 import { Outlet, NavLink } from 'react-router-dom';
+import { useEffect } from 'react';
 import { BottomPlayer } from './BottomPlayer';
 import { Search, Download, Library, ListMusic, Settings } from 'lucide-react';
 import { useMusicStore } from '@/store/musicStore';
@@ -7,6 +8,12 @@ export function AppLayout() {
   const downloadCount = useMusicStore((s) => s.downloads.filter((d) => d.status === 'downloading').length);
   const dominantColor = useMusicStore((s) => s.dominantColor);
   const currentTrack = useMusicStore((s) => s.currentTrack);
+  const rescanLocalLibrary = useMusicStore((s) => s.rescanLocalLibrary);
+
+  // Rescan local library on mount (for Android persistence)
+  useEffect(() => {
+    rescanLocalLibrary();
+  }, [rescanLocalLibrary]);
 
   return (
     <div className="flex flex-col h-[100dvh] bg-background overflow-hidden">

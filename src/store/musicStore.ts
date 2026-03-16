@@ -1,10 +1,11 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { Track, Download } from '@/types/music';
+import { Track, Download, LocalTrack } from '@/types/music';
 import { audioEngine } from '@/lib/audioEngine';
 import { searchDeezer, searchYouTube, getYouTubeStream } from '@/lib/api/musicApi';
 import { writeID3Tags } from '@/lib/id3Writer';
 import { extractDominantColor } from '@/lib/colorExtractor';
+import { parseLocalFiles } from '@/lib/localMusicParser';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { toast } from 'sonner';
@@ -55,6 +56,19 @@ interface MusicStore {
   // Dynamic color
   dominantColor: string | null;
   setDominantColor: (color: string | null) => void;
+
+  // ─── Local Library ───
+  localLibrary: LocalTrack[];
+  localFileRefs: Map<string, File>;
+  isImporting: boolean;
+  savedLocalPaths: string[];
+
+  importLocalFiles: (files: FileList | File[]) => Promise<void>;
+  rescanLocalLibrary: () => Promise<void>;
+  playLocalTrack: (id: string) => Promise<void>;
+  removeLocalTrack: (id: string) => void;
+  clearLocalLibrary: () => void;
+  incrementPlayCount: (id: string) => void;
 }
 
 export const useMusicStore = create<MusicStore>()(
@@ -309,6 +323,176 @@ export const useMusicStore = create<MusicStore>()(
         // ─── Dynamic Color ───
         dominantColor: null,
         setDominantColor: (color) => set({ dominantColor: color }),
+
+        // ─── Local Library ───
+        localLibrary: [],
+        localFileRefs: new Map(),
+        isImporting: false,
+        savedLocalPaths: [],
+
+        importLocalFiles: async (files) => {
+          set({ isImporting: true });
+          try {
+            console.log(`Importing ${files.length} files...`);
+            const parsed = await parseLocalFiles(files);
+            console.log(`Successfully parsed ${parsed.length} files`);
+            const existingPaths = new Set(get().localLibrary.map((t) => t.localPath));
+            const newTracks = parsed.filter((t) => !existingPaths.has(t.localPath));
+
+            const newRefs = new Map(get().localFileRefs);
+            Array.from(files).forEach((file) => {
+              const match = newTracks.find((t) => t.localPath === file.name);
+              if (match) newRefs.set(match.id, file);
+            });
+
+            // Save paths for Android rescan
+            const newPaths = newTracks.map((t) => t.localPath);
+
+            set((s) => ({
+              localLibrary: [...s.localLibrary, ...newTracks],
+              localFileRefs: newRefs,
+              savedLocalPaths: [...s.savedLocalPaths, ...newPaths],
+              isImporting: false,
+            }));
+
+            const skipped = parsed.length - newTracks.length;
+            if (newTracks.length > 0) {
+              const plural = newTracks.length > 1 ? 's' : '';
+              const dupMsg = skipped > 0 ? ` (${skipped} duplicadas)` : '';
+              toast.success(`${newTracks.length} pista${plural} importada${plural}${dupMsg}`);
+            } else {
+              toast('No se añadieron pistas nuevas');
+            }
+          } catch (e) {
+            const errorMsg = e instanceof Error ? e.message : String(e);
+            console.error('Import failed:', e);
+            set({ isImporting: false });
+            toast.error(`Error al importar: ${errorMsg}`);
+          }
+        },
+
+        rescanLocalLibrary: async () => {
+          if (!Capacitor.isNativePlatform() || get().savedLocalPaths.length === 0) return;
+
+          try {
+            console.log(`Rescanning ${get().savedLocalPaths.length} saved paths...`);
+            const filesData = await Promise.all(
+              get().savedLocalPaths.map(async (path) => {
+                try {
+                  const data = await Filesystem.readFile({
+                    path: `MHL Music/${path}`,
+                    directory: Directory.Documents,
+                  });
+                  const binaryStr = atob(data.data as string);
+                  const bytes = new Uint8Array(binaryStr.length);
+                  for (let i = 0; i < binaryStr.length; i++) {
+                    bytes[i] = binaryStr.charCodeAt(i);
+                  }
+                  return new File([bytes], path, { type: 'audio/mpeg' });
+                } catch (e) {
+                  console.warn(`Could not read ${path}:`, e);
+                  return null;
+                }
+              })
+            );
+
+            const validFiles = filesData.filter((f) => f !== null) as File[];
+            if (validFiles.length === 0) return;
+
+            const parsed = await parseLocalFiles(validFiles);
+            const newRefs = new Map(get().localFileRefs);
+            validFiles.forEach((file) => {
+              const match = parsed.find((t) => t.localPath === file.name);
+              if (match) newRefs.set(match.id, file);
+            });
+
+            set((s) => ({
+              localLibrary: parsed.length > 0 ? parsed : s.localLibrary,
+              localFileRefs: newRefs,
+            }));
+
+            console.log(`Rescanned ${validFiles.length} files successfully`);
+          } catch (e) {
+            console.error('Rescan failed:', e);
+          }
+        },
+
+        playLocalTrack: async (id) => {
+          const track = get().localLibrary.find((t) => t.id === id);
+          if (!track) return;
+
+          const fileRef = get().localFileRefs.get(id);
+          if (!fileRef) {
+            toast.error('Archivo no disponible — vuelve a importarlo');
+            return;
+          }
+
+          const objectUrl = URL.createObjectURL(fileRef);
+
+          // Revoke previous blob URL to prevent memory leaks
+          if (get().currentTrack?.preview?.startsWith('blob:')) {
+            URL.revokeObjectURL(get().currentTrack.preview);
+          }
+
+          set({
+            currentTrack: { ...track, preview: objectUrl },
+            isPlaying: false,
+            isLoading: true,
+            progress: 0,
+            duration: track.duration,
+          });
+
+          document.title = `${track.title} · ${track.artist} — MHL Music`;
+
+          if (track.cover) {
+            extractDominantColor(track.cover).then((color) => set({ dominantColor: color }));
+          } else {
+            set({ dominantColor: null });
+          }
+
+          audioEngine.load(objectUrl);
+          audioEngine.setVolume(get().volume);
+          audioEngine.updateMediaSession({
+            title: track.title,
+            artist: track.artist,
+            album: track.album,
+            artwork: track.cover || undefined,
+          });
+
+          audioEngine.play().then(() => {
+            set({ isPlaying: true, isLoading: false });
+            get().incrementPlayCount(id);
+          });
+        },
+
+        removeLocalTrack: (id) => {
+          const track = get().localLibrary.find((t) => t.id === id);
+          if (track?.cover?.startsWith('blob:')) {
+            URL.revokeObjectURL(track.cover);
+          }
+          const newRefs = new Map(get().localFileRefs);
+          newRefs.delete(id);
+          set((s) => ({
+            localLibrary: s.localLibrary.filter((t) => t.id !== id),
+            localFileRefs: newRefs,
+          }));
+        },
+
+        clearLocalLibrary: () => {
+          get().localLibrary.forEach((track) => {
+            if (track.cover?.startsWith('blob:')) {
+              URL.revokeObjectURL(track.cover);
+            }
+          });
+          set({ localLibrary: [], localFileRefs: new Map() });
+        },
+
+        incrementPlayCount: (id) =>
+          set((s) => ({
+            localLibrary: s.localLibrary.map((t) =>
+              t.id === id ? { ...t, playCount: (t.playCount ?? 0) + 1 } : t
+            ),
+          })),
       };
     },
     {
@@ -317,12 +501,16 @@ export const useMusicStore = create<MusicStore>()(
         downloads: state.downloads.filter((d) => d.status === 'completed' || d.status === 'error'),
         volume: state.volume,
         downloadFolderName: state.downloadFolderName,
+        localLibrary: state.localLibrary,
+        // localFileRefs intentionally excluded — File objects cannot be serialized
       }),
       merge: (persisted: any, current) => ({
         ...current,
         downloads: persisted?.downloads || [],
         volume: persisted?.volume ?? 0.8,
         downloadFolderName: persisted?.downloadFolderName || '',
+        localLibrary: persisted?.localLibrary || [],
+        localFileRefs: new Map(), // Always starts empty — files must be re-imported each session
       }),
     }
   )
