@@ -54,8 +54,12 @@
     /* Layout */
     --player-height: 72px;
     --nav-height: 0px;
-    --safe-top: env(safe-area-inset-top, 0px);
-    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --sat: env(safe-area-inset-top, 20px);
+    --sab: env(safe-area-inset-bottom, 0px);
+    --sal: env(safe-area-inset-left, 0px);
+    --sar: env(safe-area-inset-right, 0px);
+    --safe-top: var(--sat);
+    --safe-bottom: var(--sab);
     
     /* Legacy tokens for compatibility */
     --glass-bg: rgba(15, 15, 15, 0.95);
@@ -75,6 +79,12 @@
 @layer base {
   * {
     @apply border-border;
+    touch-action: pan-y;
+  }
+
+  html, body {
+    overflow-x: hidden;
+    overscroll-behavior: none;
   }
 
   body {

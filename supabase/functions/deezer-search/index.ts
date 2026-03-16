@@ -104,9 +104,9 @@ function transformAlbum(item: DeezerAlbum) {
   };
 }
 
-async function searchTracks(query: string, limit: number = 25) {
+async function searchTracks(query: string, limit: number = 25, offset: number = 0) {
   const sanitizedQuery = query.trim().slice(0, 200);
-  const url = `https://api.deezer.com/search?q=${encodeURIComponent(sanitizedQuery)}&limit=${Math.min(limit, 50)}`;
+  const url = `https://api.deezer.com/search?q=${encodeURIComponent(sanitizedQuery)}&limit=${Math.min(limit, 50)}&index=${offset}`;
 
   const response = await fetch(url);
   if (!response.ok) {
@@ -323,7 +323,7 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { action, query, artistId, limit = 25 } = body;
+    const { action, query, artistId, limit = 25, offset = 0 } = body;
 
     // Home action
     if (action === 'home') {
@@ -420,7 +420,7 @@ Deno.serve(async (req) => {
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-      const result = await searchTracks(query, limit);
+      const result = await searchTracks(query, limit, offset);
       return new Response(JSON.stringify(result), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });

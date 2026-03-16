@@ -23,9 +23,9 @@ async function callDeezerProxy(body: Record<string, unknown>) {
 }
 
 // ─── Deezer Search ───
-export async function searchDeezer(query: string): Promise<Track[]> {
+export async function searchDeezer(query: string, offset = 0, limit = 25): Promise<Track[]> {
   try {
-    const data = await callDeezerProxy({ action: 'search', query, limit: 25 });
+    const data = await callDeezerProxy({ action: 'search', query, limit, offset });
     return (data.tracks || []).map(mapProxiedTrack);
   } catch (error) {
     console.error('Deezer search error:', error);

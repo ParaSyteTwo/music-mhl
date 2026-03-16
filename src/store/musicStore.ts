@@ -35,7 +35,11 @@ interface MusicStore {
   searchQuery: string;
   searchResults: Track[];
   isSearching: boolean;
+  searchOffset: number;
+  hasMoreResults: boolean;
+  isLoadingMore: boolean;
   performSearch: (query: string) => Promise<void>;
+  loadMoreResults: () => Promise<void>;
 
   // Downloads
   downloads: Download[];
@@ -90,6 +94,8 @@ export const useMusicStore = create<MusicStore>()(
             duration: track.duration,
           });
 
+          document.title = `${track.title} · ${track.artist} — MHL Music`;
+
           // Extract dominant color from cover
           if (track.cover) {
             extractDominantColor(track.cover).then((color) => {
@@ -139,19 +145,47 @@ export const useMusicStore = create<MusicStore>()(
         searchQuery: '',
         searchResults: [],
         isSearching: false,
+        searchOffset: 0,
+        hasMoreResults: true,
+        isLoadingMore: false,
 
         performSearch: async (query) => {
           if (!query.trim()) {
-            set({ searchResults: [], isSearching: false, searchQuery: '' });
+            set({ searchResults: [], isSearching: false, searchQuery: '', searchOffset: 0, hasMoreResults: true });
+            document.title = 'MHL Music';
             return;
           }
-          set({ isSearching: true, searchQuery: query });
+          set({ isSearching: true, searchQuery: query, searchOffset: 0, hasMoreResults: true });
           try {
-            const tracks = await searchDeezer(query);
-            set({ searchResults: tracks, isSearching: false });
+            const tracks = await searchDeezer(query, 0, 25);
+            set({ searchResults: tracks, isSearching: false, hasMoreResults: tracks.length >= 25 });
+            // Save to recent searches
+            try {
+              const stored = JSON.parse(localStorage.getItem('mhl-recent-searches') || '[]') as string[];
+              const updated = [query, ...stored.filter((s) => s.toLowerCase() !== query.toLowerCase())].slice(0, 5);
+              localStorage.setItem('mhl-recent-searches', JSON.stringify(updated));
+            } catch { /* ignore */ }
           } catch (error) {
             console.error('Search error:', error);
             set({ isSearching: false });
+          }
+        },
+
+        loadMoreResults: async () => {
+          const { isLoadingMore, hasMoreResults, searchQuery, searchOffset, searchResults } = get();
+          if (isLoadingMore || !hasMoreResults || !searchQuery.trim()) return;
+          set({ isLoadingMore: true });
+          try {
+            const newOffset = searchOffset + 25;
+            const tracks = await searchDeezer(searchQuery, newOffset, 25);
+            if (tracks.length < 25) set({ hasMoreResults: false });
+            // Deduplicate by id
+            const existingIds = new Set(searchResults.map((t) => t.id));
+            const newTracks = tracks.filter((t) => !existingIds.has(t.id));
+            set({ searchResults: [...searchResults, ...newTracks], searchOffset: newOffset, isLoadingMore: false });
+          } catch (error) {
+            console.error('Load more error:', error);
+            set({ isLoadingMore: false });
           }
         },
 

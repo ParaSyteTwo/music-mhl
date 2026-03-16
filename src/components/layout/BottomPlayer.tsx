@@ -16,8 +16,8 @@ export function BottomPlayer() {
 
   const progressPercent = duration > 0 ? (progress / duration) * 100 : 0;
 
-  // On mobile, offset by nav height
-  const bottomOffset = 'bottom-[var(--nav-height)]';
+  // On mobile, offset by nav height + safe-area
+  const bottomStyle = 'calc(var(--nav-height) + var(--sab))';
 
   if (!currentTrack) return null;
 
@@ -25,8 +25,8 @@ export function BottomPlayer() {
     <>
       {/* Progress bar */}
       <div
-        className={`fixed ${bottomOffset} left-0 right-0 z-40`}
-        style={{ marginBottom: 'var(--player-height)' }}
+        className="fixed left-0 right-0 z-40"
+        style={{ bottom: `calc(${bottomStyle} + var(--player-height))` }}
       >
         <div
           className="h-1 group cursor-pointer bg-[rgba(255,255,255,0.08)] transition-all duration-200 hover:h-[5px]"
@@ -65,11 +65,11 @@ export function BottomPlayer() {
 
       {/* Main player bar */}
       <div
-        className={`fixed ${bottomOffset} left-0 right-0 bg-[rgba(8,8,8,0.95)] border-t border-[rgba(255,255,255,0.08)] z-40 flex items-center px-3 sm:px-5 gap-3`}
+        className="fixed left-0 right-0 bg-[rgba(8,8,8,0.95)] border-t border-[rgba(255,255,255,0.08)] z-40 flex items-center px-3 sm:px-5 gap-3"
         style={{
+          bottom: bottomStyle,
           backdropFilter: 'blur(20px) saturate(180%)',
           height: 'var(--player-height)',
-          paddingBottom: '0',
           background: dominantColor
             ? `linear-gradient(to right, rgba(${dominantColor}, 0.15), rgba(8, 8, 8, 0.95))`
             : 'rgba(8, 8, 8, 0.95)',

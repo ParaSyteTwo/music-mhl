@@ -13,6 +13,11 @@ const config: CapacitorConfig = {
     captureInput: true,
   },
   plugins: {
+    StatusBar: {
+      overlaysWebView: true,
+      style: 'DARK',
+      backgroundColor: '#080808',
+    },
     SplashScreen: {
       launchAutoHide: true,
       backgroundColor: '#080808',

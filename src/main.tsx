@@ -3,6 +3,15 @@ import { Capacitor } from "@capacitor/core";
 import App from "./App.tsx";
 import "./index.css";
 
+// Configure StatusBar on native platforms
+if (Capacitor.getPlatform() !== 'web') {
+  import('@capacitor/status-bar').then(({ StatusBar, Style }) => {
+    StatusBar.setOverlaysWebView({ overlay: true });
+    StatusBar.setStyle({ style: Style.Dark });
+    StatusBar.setBackgroundColor({ color: '#080808' });
+  });
+}
+
 createRoot(document.getElementById("root")!).render(<App />);
 
 // Register Service Worker for PWA (skip on native platforms)
