@@ -1,7 +1,3 @@
-Aquí tienes el README completo listo para copiar y pegar:
-
----
-
 ```markdown
 # 🎵 MHL Music
 
@@ -85,7 +81,7 @@ Sin paywalls. Sin anuncios. Sin restricciones artificiales.
 
 ```bash
 # Clonar el repositorio
-git clone https://github.com/TU_USUARIO/music-mhl.git
+git clone https://github.com/ParaSyteTwo/music-mhl.git
 cd music-mhl
 
 # Instalar dependencias
@@ -217,6 +213,5 @@ protegido por derechos de autor.
 MIT License — úsalo, modifícalo y distribúyelo libremente.
 
 ---
-
 Hecho con ♥ por [Paul](https://github.com/ParaSyteTwo/)
 ```
