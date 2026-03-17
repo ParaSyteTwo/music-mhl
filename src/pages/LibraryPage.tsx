@@ -129,10 +129,19 @@ export default function LibraryPage() {
         toast.loading(`Importando ${totalFiles} archivo${totalFiles > 1 ? 's' : ''}...`);
 
         // Helper function to convert single file
-        const convertFile = async (pickedFile: any): Promise<File> => {
-          const data = await Filesystem.readFile({ path: pickedFile.path });
+        const AUDIO_EXTENSIONS = ['mp3', 'm4a', 'aac', 'flac', 'ogg', 'opus', 'webm', 'wav'];
+
+        const convertFile = async (pickedFile: any): Promise<File | null> => {
           const fileName = pickedFile.name || 'audio';
           const ext = fileName.toLowerCase().split('.').pop() || '';
+
+          // Validate file extension
+          if (!AUDIO_EXTENSIONS.includes(ext)) {
+            console.warn(`Skipping non-audio file: ${fileName} (${ext})`);
+            return null;
+          }
+
+          const data = await Filesystem.readFile({ path: pickedFile.path });
 
           let mimeType = 'audio/mpeg'; // default
           if (ext === 'm4a' || ext === 'aac') mimeType = 'audio/mp4';
@@ -153,15 +162,36 @@ export default function LibraryPage() {
         // Process files in batches of 5 to avoid memory overload
         const BATCH_SIZE = 5;
         const fileObjects: File[] = [];
+        let skippedCount = 0;
 
         for (let i = 0; i < result.files.length; i += BATCH_SIZE) {
           const batch = result.files.slice(i, i + BATCH_SIZE);
           const batchResults = await Promise.all(batch.map(convertFile));
-          fileObjects.push(...batchResults);
+
+          // Filter out null values (non-audio files)
+          batchResults.forEach((file) => {
+            if (file) {
+              fileObjects.push(file);
+            } else {
+              skippedCount++;
+            }
+          });
+        }
+
+        if (fileObjects.length === 0) {
+          toast.error('No se encontraron archivos de audio válidos. Asegúrate de que sean MP3, M4A, FLAC, etc.');
+          setShowImportOptions(false);
+          return;
         }
 
         await importLocalFiles(fileObjects);
-        toast.success(`${fileObjects.length} archivo${fileObjects.length > 1 ? 's' : ''} importado${fileObjects.length > 1 ? 's' : ''}`);
+
+        // Show summary with skipped files
+        let message = `${fileObjects.length} archivo${fileObjects.length > 1 ? 's' : ''} importado${fileObjects.length > 1 ? 's' : ''}`;
+        if (skippedCount > 0) {
+          message += ` (${skippedCount} archivo${skippedCount > 1 ? 's' : ''} no-audio ignorado${skippedCount > 1 ? 's' : ''})`;
+        }
+        toast.success(message);
       } else {
         // Web: trigger file input
         fileInputRef.current?.click();
