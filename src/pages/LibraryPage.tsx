@@ -43,6 +43,13 @@ export default function LibraryPage() {
     if (Capacitor.isNativePlatform()) {
       // Android: scan MHL Music/ directory
       try {
+        // Request permission to read files
+        const permResult = await Filesystem.requestPermissions();
+        if (permResult.publicStorage !== 'granted') {
+          toast.error('Permiso denegado. Ve a Configuración > Permisos > Almacenamiento');
+          return;
+        }
+
         const result = await Filesystem.readdir({
           path: 'MHL Music',
           directory: Directory.Documents,
@@ -53,11 +60,11 @@ export default function LibraryPage() {
           .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
         if (mp3Files.length === 0) {
-          toast('No hay archivos MP3 en MHL Music/');
+          toast.info('No hay archivos MP3 en Documents/MHL Music/. Copia música ahí primero.');
           return;
         }
 
-        toast.loading(`Escaneando ${mp3Files.length} archivos...`);
+        toast.loading(`Escaneando ${mp3Files.length} archivo${mp3Files.length > 1 ? 's' : ''}...`);
 
         const fileObjects: File[] = await Promise.all(
           mp3Files.map(async (f) => {
@@ -76,8 +83,16 @@ export default function LibraryPage() {
 
         await importLocalFiles(fileObjects);
       } catch (e) {
-        console.error('Android import error:', e);
-        toast.error('No se pudo leer la carpeta de música');
+        const errorMsg = e instanceof Error ? e.message : String(e);
+        console.error('Android import error:', errorMsg);
+
+        if (errorMsg.includes('ENOENT') || errorMsg.includes('not found')) {
+          toast.error('Carpeta no encontrada. Crea Documents/MHL Music/ y copia MP3s ahí');
+        } else if (errorMsg.includes('Permission')) {
+          toast.error('Permiso denegado. Verifica permisos en Configuración');
+        } else {
+          toast.error(`Error: ${errorMsg}`);
+        }
       }
     } else {
       // Web: trigger file input
