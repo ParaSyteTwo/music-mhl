@@ -33,6 +33,44 @@ export async function searchDeezer(query: string, offset = 0, limit = 25): Promi
   }
 }
 
+// ─── Helper: Score a YouTube video for being an official audio version ───
+function scoreVideoForOfficial(title: string, duration: number): number {
+  const lowerTitle = title.toLowerCase();
+  let score = 0;
+
+  // BOOST: Official versions
+  if (lowerTitle.includes('official audio') || lowerTitle.includes('official')) score += 100;
+  if (lowerTitle.includes('official video')) score += 80;
+  if (lowerTitle.includes('audio')) score += 70;
+  if (lowerTitle.includes('radio') || lowerTitle.includes('radio edit') || lowerTitle.includes('radio version')) score += 60;
+  if (lowerTitle.includes('lyric video')) score += 50;
+
+  // PENALTY: Non-audio versions
+  if (lowerTitle.includes('videoclip') || lowerTitle.includes('video clip')) score -= 200;
+  if (lowerTitle.includes('mv') && !lowerTitle.includes('official')) score -= 150;
+  if (lowerTitle.includes('live')) score -= 100;
+  if (lowerTitle.includes('cover')) score -= 80;
+  if (lowerTitle.includes('remix')) score -= 70;
+  if (lowerTitle.includes('extended')) score -= 60;
+  if (lowerTitle.includes('mix')) score -= 50;
+  if (lowerTitle.includes('instrumental')) score -= 40;
+  if (lowerTitle.includes('slowed') || lowerTitle.includes('sped')) score -= 90;
+  if (lowerTitle.includes('edit') && !lowerTitle.includes('radio edit')) score -= 30;
+  if (lowerTitle.includes('compilation')) score -= 40;
+  if (lowerTitle.includes('karaoke')) score -= 100;
+  if (lowerTitle.includes('without')) score -= 50; // "without vocals" etc
+  if (lowerTitle.includes('reaction')) score -= 150;
+  if (lowerTitle.includes('dance') && !lowerTitle.includes('official')) score -= 50;
+
+  // DURATION CHECK: Official songs are usually 3-5 minutes (allow up to 8 for some edits)
+  if (duration < 120 || duration > 600) score -= 100; // Too short or too long
+
+  // BOOST: Long titles suggest official uploads (with label info)
+  if (title.length > 40) score += 10;
+
+  return score;
+}
+
 // ─── YouTube Search (youtube138 RapidAPI) ───
 export async function searchYouTube(query: string): Promise<{ videoId: string; title: string }[]> {
   const apiKey = import.meta.env.VITE_RAPIDAPI_KEY;
@@ -40,8 +78,11 @@ export async function searchYouTube(query: string): Promise<{ videoId: string; t
 
   const host = import.meta.env.VITE_RAPIDAPI_HOST_YTSEARCH || 'youtube138.p.rapidapi.com';
 
+  // Boost search query to prioritize official versions
+  const enhancedQuery = `${query} official audio OR radio`;
+
   const res = await fetch(
-    `https://${host}/search/?q=${encodeURIComponent(query)}&hl=en&gl=US`,
+    `https://${host}/search/?q=${encodeURIComponent(enhancedQuery)}&hl=en&gl=US`,
     {
       headers: {
         'X-RapidAPI-Key': apiKey,
@@ -55,13 +96,32 @@ export async function searchYouTube(query: string): Promise<{ videoId: string; t
   const data = await res.json();
 
   const items = data.contents || [];
-  return items
+
+  // Filter for videos, score them, sort by relevance
+  const videos = items
     .filter((item: any) => item.type === 'video' && item.video?.videoId)
-    .slice(0, 5)
-    .map((item: any) => ({
-      videoId: item.video.videoId,
-      title: item.video.title || '',
-    }));
+    .map((item: any) => {
+      const duration = item.video?.duration || 0; // in seconds
+      const title = item.video?.title || '';
+      const score = scoreVideoForOfficial(title, duration);
+
+      return {
+        videoId: item.video.videoId,
+        title,
+        duration,
+        score,
+      };
+    })
+    // Sort by score (highest first)
+    .sort((a: any, b: any) => b.score - a.score)
+    .slice(0, 5);
+
+  console.log('YouTube search results (sorted by official score):', videos.map(v => ({ title: v.title, score: v.score })));
+
+  return videos.map(v => ({
+    videoId: v.videoId,
+    title: v.title,
+  }));
 }
 
 // ─── YouTube MP3 Download (youtube-mp36 RapidAPI) ───
