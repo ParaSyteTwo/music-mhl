@@ -6,14 +6,31 @@
 
 Reproductor de música web y Android. Buscar, escuchar y descargar música gratis, sin paywalls. Open-source.
 
-## Estado: v0.2.1 → v0.3.0 (en progreso)
+## Estado: v0.3.0 OFICIAL ✅ → v0.4.0 (Personal Music Library v2)
 
-**v0.2.1 funcional:** Búsqueda (Deezer), reproducción (previews 30s), cola con controles, letras sincronizadas (LRCLIB) con traducción, descarga MP3 con metadatos ID3, Shazam, importación local de MP3, biblioteca local con tabs (Albums/Artists/Genres/TopPlayed), APK Android, deploy Vercel.
-
-**v0.3.0 en FASE 1 (Estabilidad Core):**
+**v0.3.0 COMPLETADO (FASE 1 — Estabilidad Core):** ✅ 100% DONE
 - ✅ Service Worker duplicado arreglado
-- 📝 Tests suite (62 tests: musicStore, audioEngine, localMusicParser)
-- 🔧 Bugs críticos identificados (localFileRefs en Android, audioEngine error handling)
+- ✅ Android library permissions (runtime requests)
+- ✅ Multi-formato audio (8 formatos soportados)
+- ✅ Dual import options (auto-scan + manual file picker)
+- ✅ Capacitor FilePicker (native Android picker)
+- ✅ Batch processing (100+ archivos sin crash)
+- ✅ Metadata optimization (256KB slices)
+- ✅ Audio file validation (rejects non-audio)
+- ✅ Smart YouTube search (prioritizes official audio)
+- ✅ Error handling con MediaError mapping
+- ✅ 62/62 tests passing, clean build
+
+**v0.4.0 REPLANIFICADO (FASE 2 — Personal Music Library v2) — NO streaming APIs:**
+Enfoque realista: MHL Music es gestor de biblioteca personal, NO Spotify clone.
+- Batch download & smart quality selection
+- Auto-fix metadata (Musicbrainz integration)
+- Library statistics & listening trends
+- Smart playlists (mood, year, rating, play count)
+- Export/import (JSON, CSV, text formats)
+- Advanced search with filters
+**Estimado:** 2-3 semanas (vs 4+ para YouTube streaming)
+**Razón:** APIs frágiles, ToS violations, RapidAPI rate limits — enfoque local es sustentable
 
 ## Stack
 
@@ -76,52 +93,81 @@ Acciones: play/pause/togglePlay, next/previous, addToQueue, createPlaylist, addT
 
 ## Roadmap v1.0.0
 
-### FASE 1: Estabilidad Core (v0.3.0) — EN PROGRESO
-1.1 Bugs críticos (Service Worker ✅, localFileRefs, audioEngine)
-1.2 Tests suite (musicStore ✅, audioEngine, localMusicParser)
-1.3 Documentación (flujo reproducción, arquitectura, edge cases)
+### FASE 1: Estabilidad Core (v0.3.0) — ✅ COMPLETADA
+- ✅ 3 bugs críticos arreglados
+- ✅ 62/62 tests pasando
+- ✅ 10 features implementadas
+- ✅ Build limpio, zero critical issues
 
-### FASE 2: Full-Stream YouTube & Android Background (v0.4.0)
-- YouTube full stream (no solo 30s)
-- Android background audio (Service nativo + Media notifications)
-- Media Session API para hardware controls
+### FASE 2: Personal Music Library v2 (v0.4.0) — EN PLANIFICACIÓN
 
-### FASE 3: UX Polish & Discovery (v0.5.0)
-- Frontend design audit + responsive design (mobile-first)
+**Sprint 1: Smart Download (2-3 días)**
+1. Batch download UI (select 5+ tracks → download all)
+2. Duplicate detection (fuzzy match on artist+title)
+3. Format selection before download
+4. Quality verification (bitrate, format available)
+
+**Sprint 2: Library Organization (3-4 días)**
+5. Metadata auto-fix (Musicbrainz integration)
+6. Auto-capitalize, fill missing genre/year
+7. Duplicate marking & management
+8. Library cleanup UI
+
+**Sprint 3: Statistics (2-3 días)**
+9. Stats calculation engine (total tracks, size, formats)
+10. Smart playlists (by mood, year, rating, play count)
+11. Listening trends (week, month, all-time)
+12. Stats UI dashboard
+
+**Sprint 4: Sharing & Export (1-2 días)**
+13. Export playlists (JSON, CSV, text)
+14. Import from formats
+15. Share links (if backend available)
+
+**Sprint 5: Advanced Search (2-3 días)**
+16. Filter UI (genre, year, format, quality, play count)
+17. Metadata search engine (regex support)
+18. Save searches as smart playlists
+19. Performance optimization
+
+### FASE 3: UX Polish & Discovery (v0.5.0) — FUTURO
+- Frontend design audit + responsive mobile-first
 - Páginas artista/álbum + recomendaciones
 - Charts por país (integración API)
-- Performance: React Query, IndexedDB caching, code-splitting
+- Infinite scroll optimization
+- Dark/Light mode toggle
 
-### FASE 4: Release Candidate & v1.0.0
+### FASE 4: Release Candidate & v1.0.0 — FUTURO
 - Testing final (>80% coverage, E2E Playwright)
 - Beta testing (3-5 usuarios)
-- Deploy web (Vercel automático) + APK en GitHub releases
+- APK en Google Play (opcional)
 - Documentación final + roadmap v1.1+
 
-## Problemas conocidos & FASE 1 Progress
+## Problemas conocidos & Estado
 
-### Arreglados (v0.3.0)
-- ✅ Service Worker duplicado en src/main.tsx
+### Completados (v0.3.0)
+- ✅ Service Worker duplicado
+- ✅ localFileRefs vacío en Android
+- ✅ audioEngine error handling
+- ✅ Test coverage (62/62)
+- ✅ Multi-format audio
+- ✅ Android file picker
+- ✅ Batch import optimization
+- ✅ Audio file validation
+- ✅ Smart YouTube search
 
-### En progreso (FASE 1 — v0.3.0)
-1. **localFileRefs vacío en Android al recargar**
-   - Causa: File objects no serializables, localFileRefs inicia vacío cada sesión
-   - Fix: Ejecutar `rescanLocalLibrary()` en mount de App.tsx para Android
-   - Estado: Identificado, fix pendiente
+### Deferred / Removed from v0.4.0
+- ❌ YouTube full-stream (REMOVED — APIs frágiles, ToS risk, rate limits)
+- ❌ Android background audio (REMOVED — no es critical, enfoque local first)
+- ❌ React Query/IndexedDB (REMOVED — premature optimization)
+- ⏸️ Offline mode enhancements (v0.5.0+)
+- ⏸️ Queue persistence (v0.5.0+ — nice-to-have)
+- ⏸️ Hardware media buttons (works via MediaSession, no need for native Service)
 
-2. **audioEngine silent failures**
-   - Causa: play() y error handler no dan feedback descriptivo al usuario
-   - Fix: Mejorar error code mapping (MEDIA_ERR_NETWORK, DECODE, etc) + UI feedback
-   - Estado: Identificado, tests creados, fix pendiente
-
-3. **Test coverage**
-   - Estado: 62 tests creados, 44/62 pasando (necesitan ajustes de mocking)
-
-### Futuros (v0.4.0+)
-- YouTube full-stream (no solo 30s)
-- Android background audio (Service nativo)
-- LibreTranslate lento — usar DeepL con límites
-- Shazam limitado a free tier RapidAPI
+**Why:**
+- MHL Music is NOT a Spotify clone
+- Streaming APIs are unreliable → focus on what works: local library management
+- User feedback: "no quiero que sea un dispositivo de streaming, sobre todo si las apis podrian fallar en cualquier momento"
 
 ## Reglas para trabajar en este proyecto
 
