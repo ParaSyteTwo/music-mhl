@@ -125,34 +125,40 @@ export default function LibraryPage() {
           return;
         }
 
-        // Convert picked files to File objects
-        const fileObjects: File[] = await Promise.all(
-          result.files.map(async (pickedFile) => {
-            // FilePicker returns file URI, need to read file content
-            const data = await Filesystem.readFile({
-              path: pickedFile.path,
-            });
+        const totalFiles = result.files.length;
+        toast.loading(`Importando ${totalFiles} archivo${totalFiles > 1 ? 's' : ''}...`);
 
-            // Determine MIME type from file extension or name
-            const fileName = pickedFile.name || 'audio';
-            const ext = fileName.toLowerCase().split('.').pop() || '';
-            let mimeType = 'audio/mpeg'; // default
-            if (ext === 'm4a' || ext === 'aac') mimeType = 'audio/mp4';
-            else if (ext === 'flac') mimeType = 'audio/flac';
-            else if (ext === 'ogg' || ext === 'opus') mimeType = 'audio/ogg';
-            else if (ext === 'webm') mimeType = 'audio/webm';
-            else if (ext === 'wav') mimeType = 'audio/wav';
+        // Helper function to convert single file
+        const convertFile = async (pickedFile: any): Promise<File> => {
+          const data = await Filesystem.readFile({ path: pickedFile.path });
+          const fileName = pickedFile.name || 'audio';
+          const ext = fileName.toLowerCase().split('.').pop() || '';
 
-            // Decode base64 data to bytes
-            const binaryStr = atob(data.data as string);
-            const bytes = new Uint8Array(binaryStr.length);
-            for (let i = 0; i < binaryStr.length; i++) {
-              bytes[i] = binaryStr.charCodeAt(i);
-            }
+          let mimeType = 'audio/mpeg'; // default
+          if (ext === 'm4a' || ext === 'aac') mimeType = 'audio/mp4';
+          else if (ext === 'flac') mimeType = 'audio/flac';
+          else if (ext === 'ogg' || ext === 'opus') mimeType = 'audio/ogg';
+          else if (ext === 'webm') mimeType = 'audio/webm';
+          else if (ext === 'wav') mimeType = 'audio/wav';
 
-            return new File([bytes], fileName, { type: mimeType });
-          })
-        );
+          const binaryStr = atob(data.data as string);
+          const bytes = new Uint8Array(binaryStr.length);
+          for (let i = 0; i < binaryStr.length; i++) {
+            bytes[i] = binaryStr.charCodeAt(i);
+          }
+
+          return new File([bytes], fileName, { type: mimeType });
+        };
+
+        // Process files in batches of 5 to avoid memory overload
+        const BATCH_SIZE = 5;
+        const fileObjects: File[] = [];
+
+        for (let i = 0; i < result.files.length; i += BATCH_SIZE) {
+          const batch = result.files.slice(i, i + BATCH_SIZE);
+          const batchResults = await Promise.all(batch.map(convertFile));
+          fileObjects.push(...batchResults);
+        }
 
         await importLocalFiles(fileObjects);
         toast.success(`${fileObjects.length} archivo${fileObjects.length > 1 ? 's' : ''} importado${fileObjects.length > 1 ? 's' : ''}`);
@@ -163,7 +169,7 @@ export default function LibraryPage() {
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       console.error('File picker error:', errorMsg);
-      toast.error(`Error al abrir selector de archivos: ${errorMsg}`);
+      toast.error(`Error: ${errorMsg}`);
     }
     setShowImportOptions(false);
   };
