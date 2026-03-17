@@ -9,7 +9,15 @@ async function extractID3Tags(file: File): Promise<{
   duration?: number;
 }> {
   try {
-    const buffer = await file.arrayBuffer();
+    // OPTIMIZATION: Read only first 256KB of file (ID3 tags are at beginning)
+    // This reduces memory usage dramatically for large files
+    const READ_SIZE = 256 * 1024; // 256KB
+    const fileSize = file.size;
+    const readSize = Math.min(READ_SIZE, fileSize);
+
+    // Use slice to read only the needed portion
+    const fileSlice = file.slice(0, readSize);
+    const buffer = await fileSlice.arrayBuffer();
     const view = new Uint8Array(buffer);
     
     // Check for ID3v2 header
@@ -224,28 +232,44 @@ export async function parseLocalFile(file: File): Promise<LocalTrack> {
 
 export async function parseLocalFiles(files: FileList | File[]): Promise<LocalTrack[]> {
   const fileArray = Array.from(files);
-  console.log(`Parsing ${fileArray.length} files:`, fileArray.map(f => f.name));
+  console.log(`Parsing ${fileArray.length} files`);
 
-  const results = await Promise.allSettled(fileArray.map((file) => {
-    console.log(`Started parsing: ${file.name}`);
-    return parseLocalFile(file)
-      .then(result => {
-        console.log(`Successfully parsed: ${file.name}`, result);
-        return result;
+  const fulfilled: LocalTrack[] = [];
+  const failed: any[] = [];
+
+  // Process in batches of 3 to limit concurrent metadata extraction
+  // (each file slice + ID3 parsing is I/O intensive)
+  const BATCH_SIZE = 3;
+
+  for (let i = 0; i < fileArray.length; i += BATCH_SIZE) {
+    const batch = fileArray.slice(i, i + BATCH_SIZE);
+
+    const results = await Promise.allSettled(
+      batch.map((file) => {
+        console.log(`Started parsing: ${file.name}`);
+        return parseLocalFile(file)
+          .then(result => {
+            console.log(`Successfully parsed: ${file.name}`);
+            return result;
+          })
+          .catch(err => {
+            console.error(`Failed to parse ${file.name}:`, err);
+            throw err;
+          });
       })
-      .catch(err => {
-        console.error(`Failed to parse ${file.name}:`, err);
-        throw err;
-      });
-  }));
+    );
 
-  const fulfilled = results
-    .filter((r): r is PromiseFulfilledResult<LocalTrack> => r.status === 'fulfilled')
-    .map((r) => r.value);
+    results.forEach((result) => {
+      if (result.status === 'fulfilled') {
+        fulfilled.push(result.value);
+      } else {
+        failed.push(result);
+      }
+    });
+  }
 
-  const failed = results.filter((r) => r.status === 'rejected');
   if (failed.length > 0) {
-    console.warn(`${failed.length} files failed to parse:`, failed);
+    console.warn(`${failed.length} files failed to parse`);
   }
 
   console.log(`Parse complete: ${fulfilled.length} succeeded, ${failed.length} failed`);
