@@ -100,6 +100,9 @@ export const useMusicStore = create<MusicStore>()(
         duration: 0,
 
         playTrack: (track) => {
+          // Pause current track to avoid listener desync
+          audioEngine.pause();
+
           set({
             currentTrack: track,
             isPlaying: false,
@@ -128,7 +131,13 @@ export const useMusicStore = create<MusicStore>()(
               album: track.album,
               artwork: track.cover,
             });
-            audioEngine.play().then(() => set({ isPlaying: true, isLoading: false }));
+            audioEngine.play()
+              .then(() => set({ isPlaying: true, isLoading: false }))
+              .catch((error) => {
+                console.error('Play failed:', error);
+                set({ isLoading: false, isPlaying: false });
+                toast.error('No se pudo reproducir la canción');
+              });
           } else {
             set({ isLoading: false });
           }
@@ -139,8 +148,10 @@ export const useMusicStore = create<MusicStore>()(
           if (!currentTrack) return;
           if (isPlaying) {
             audioEngine.pause();
+            audioEngine.setPlaybackState('paused');
           } else {
             audioEngine.play();
+            audioEngine.setPlaybackState('playing');
           }
           set({ isPlaying: !isPlaying });
         },

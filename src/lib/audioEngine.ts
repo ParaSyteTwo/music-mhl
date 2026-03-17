@@ -38,7 +38,28 @@ class AudioEngine {
 
     this.audio.addEventListener('error', () => {
       const err = this.audio.error;
-      this._onError?.(err?.message || 'Audio playback error');
+      let errorMsg = 'Error al reproducir audio';
+
+      if (err) {
+        switch (err.code) {
+          case MediaError.MEDIA_ERR_ABORTED:
+            errorMsg = 'Reproducción cancelada';
+            break;
+          case MediaError.MEDIA_ERR_NETWORK:
+            errorMsg = 'Error de red — verifica tu conexión';
+            break;
+          case MediaError.MEDIA_ERR_DECODE:
+            errorMsg = 'Formato no soportado o archivo corrupto';
+            break;
+          case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
+            errorMsg = 'Formato no soportado por tu navegador';
+            break;
+          default:
+            errorMsg = err.message || 'Error desconocido al reproducir';
+        }
+      }
+
+      this._onError?.(errorMsg);
     });
   }
 
