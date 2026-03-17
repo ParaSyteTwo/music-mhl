@@ -55,19 +55,26 @@ export default function LibraryPage() {
           directory: Directory.Documents,
         });
 
-        const mp3Files = result.files
-          .filter((f) => f.name && f.name.endsWith('.mp3'))
+        const audioFiles = result.files
+          .filter((f) => {
+            if (!f.name) return false;
+            const ext = f.name.toLowerCase();
+            return ext.endsWith('.mp3') || ext.endsWith('.m4a') ||
+                   ext.endsWith('.aac') || ext.endsWith('.flac') ||
+                   ext.endsWith('.ogg') || ext.endsWith('.webm') ||
+                   ext.endsWith('.wav') || ext.endsWith('.opus');
+          })
           .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
-        if (mp3Files.length === 0) {
-          toast.info('No hay archivos MP3 en Documents/MHL Music/. Copia música ahí primero.');
+        if (audioFiles.length === 0) {
+          toast.info('No hay archivos de audio en Documents/MHL Music/. Soportados: MP3, M4A, AAC, FLAC, OGG, WebM, WAV, Opus');
           return;
         }
 
-        toast.loading(`Escaneando ${mp3Files.length} archivo${mp3Files.length > 1 ? 's' : ''}...`);
+        toast.loading(`Escaneando ${audioFiles.length} archivo${audioFiles.length > 1 ? 's' : ''}...`);
 
         const fileObjects: File[] = await Promise.all(
-          mp3Files.map(async (f) => {
+          audioFiles.map(async (f) => {
             const data = await Filesystem.readFile({
               path: `MHL Music/${f.name}`,
               directory: Directory.Documents,
@@ -77,7 +84,16 @@ export default function LibraryPage() {
             for (let i = 0; i < binaryStr.length; i++) {
               bytes[i] = binaryStr.charCodeAt(i);
             }
-            return new File([bytes], f.name!, { type: 'audio/mpeg' });
+            // Detect MIME type based on extension
+            const ext = f.name!.toLowerCase().split('.').pop();
+            let mimeType = 'audio/mpeg';
+            if (ext === 'm4a' || ext === 'aac') mimeType = 'audio/mp4';
+            else if (ext === 'flac') mimeType = 'audio/flac';
+            else if (ext === 'ogg' || ext === 'opus') mimeType = 'audio/ogg';
+            else if (ext === 'webm') mimeType = 'audio/webm';
+            else if (ext === 'wav') mimeType = 'audio/wav';
+
+            return new File([bytes], f.name!, { type: mimeType });
           })
         );
 
@@ -158,7 +174,7 @@ export default function LibraryPage() {
         ref={fileInputRef}
         type="file"
         multiple
-        accept="audio/mpeg,.mp3,audio/mp4,.m4a,audio/aac,.aac,audio/x-flac,.flac,audio/ogg,.ogg,audio/webm,.webm,audio/*"
+        accept="audio/mpeg,.mp3,audio/mp4,.m4a,audio/aac,.aac,audio/x-flac,.flac,audio/ogg,.ogg,audio/opus,.opus,audio/webm,.webm,audio/wav,.wav,audio/*"
         onChange={handleFileInput}
         className="hidden"
       />

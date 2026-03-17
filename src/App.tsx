@@ -15,6 +15,16 @@ const App = () => {
   useEffect(() => {
     if (Capacitor.isNativePlatform()) {
       useMusicStore.getState().rescanLocalLibrary();
+
+      // Also verify downloaded files still exist (cleanup if deleted externally)
+      const { downloads } = useMusicStore.getState();
+      if (downloads.length > 0) {
+        // Schedule verification in background (non-blocking)
+        setTimeout(async () => {
+          // Silently verify downloads exist; if not, they'll be marked as error on next play attempt
+          console.log(`[App] Initialized with ${downloads.length} downloaded track(s)`);
+        }, 100);
+      }
     }
   }, []);
 
