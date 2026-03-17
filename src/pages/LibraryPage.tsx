@@ -25,6 +25,7 @@ type Tab = 'albums' | 'artists' | 'genres' | 'topPlayed' | 'tracks';
 export default function LibraryPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = useState<Tab>('albums');
+  const [showImportOptions, setShowImportOptions] = useState(false);
 
   const {
     localLibrary,
@@ -39,81 +40,91 @@ export default function LibraryPage() {
   const genres = useMemo(() => deriveGenres(localLibrary), [localLibrary]);
   const topPlayed = useMemo(() => deriveTopPlayed(localLibrary), [localLibrary]);
 
-  const handleImport = async () => {
-    if (Capacitor.isNativePlatform()) {
-      // Android: scan MHL Music/ directory
-      try {
-        // Request permission to read files
-        const permResult = await Filesystem.requestPermissions();
-        if (permResult.publicStorage !== 'granted') {
-          toast.error('Permiso denegado. Ve a Configuración > Permisos > Almacenamiento');
-          return;
-        }
+  const handleImportAuto = async () => {
+    // Auto-scan Documents/MHL Music/
+    if (!Capacitor.isNativePlatform()) {
+      fileInputRef.current?.click();
+      return;
+    }
 
-        const result = await Filesystem.readdir({
-          path: 'MHL Music',
-          directory: Directory.Documents,
-        });
-
-        const audioFiles = result.files
-          .filter((f) => {
-            if (!f.name) return false;
-            const ext = f.name.toLowerCase();
-            return ext.endsWith('.mp3') || ext.endsWith('.m4a') ||
-                   ext.endsWith('.aac') || ext.endsWith('.flac') ||
-                   ext.endsWith('.ogg') || ext.endsWith('.webm') ||
-                   ext.endsWith('.wav') || ext.endsWith('.opus');
-          })
-          .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-
-        if (audioFiles.length === 0) {
-          toast.info('No hay archivos de audio en Documents/MHL Music/. Soportados: MP3, M4A, AAC, FLAC, OGG, WebM, WAV, Opus');
-          return;
-        }
-
-        toast.loading(`Escaneando ${audioFiles.length} archivo${audioFiles.length > 1 ? 's' : ''}...`);
-
-        const fileObjects: File[] = await Promise.all(
-          audioFiles.map(async (f) => {
-            const data = await Filesystem.readFile({
-              path: `MHL Music/${f.name}`,
-              directory: Directory.Documents,
-            });
-            const binaryStr = atob(data.data as string);
-            const bytes = new Uint8Array(binaryStr.length);
-            for (let i = 0; i < binaryStr.length; i++) {
-              bytes[i] = binaryStr.charCodeAt(i);
-            }
-            // Detect MIME type based on extension
-            const ext = f.name!.toLowerCase().split('.').pop();
-            let mimeType = 'audio/mpeg';
-            if (ext === 'm4a' || ext === 'aac') mimeType = 'audio/mp4';
-            else if (ext === 'flac') mimeType = 'audio/flac';
-            else if (ext === 'ogg' || ext === 'opus') mimeType = 'audio/ogg';
-            else if (ext === 'webm') mimeType = 'audio/webm';
-            else if (ext === 'wav') mimeType = 'audio/wav';
-
-            return new File([bytes], f.name!, { type: mimeType });
-          })
-        );
-
-        await importLocalFiles(fileObjects);
-      } catch (e) {
-        const errorMsg = e instanceof Error ? e.message : String(e);
-        console.error('Android import error:', errorMsg);
-
-        if (errorMsg.includes('ENOENT') || errorMsg.includes('not found')) {
-          toast.error('Carpeta no encontrada. Crea Documents/MHL Music/ y copia MP3s ahí');
-        } else if (errorMsg.includes('Permission')) {
-          toast.error('Permiso denegado. Verifica permisos en Configuración');
-        } else {
-          toast.error(`Error: ${errorMsg}`);
-        }
+    try {
+      const permResult = await Filesystem.requestPermissions();
+      if (permResult.publicStorage !== 'granted') {
+        toast.error('Permiso denegado. Ve a Configuración > Permisos > Almacenamiento');
+        return;
       }
+
+      const result = await Filesystem.readdir({
+        path: 'MHL Music',
+        directory: Directory.Documents,
+      });
+
+      const audioFiles = result.files
+        .filter((f) => {
+          if (!f.name) return false;
+          const ext = f.name.toLowerCase();
+          return ext.endsWith('.mp3') || ext.endsWith('.m4a') ||
+                 ext.endsWith('.aac') || ext.endsWith('.flac') ||
+                 ext.endsWith('.ogg') || ext.endsWith('.webm') ||
+                 ext.endsWith('.wav') || ext.endsWith('.opus');
+        })
+        .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
+      if (audioFiles.length === 0) {
+        toast.info('No hay archivos en Documents/MHL Music/. Usa "Seleccionar carpeta" para otra ubicación.');
+        return;
+      }
+
+      toast.loading(`Escaneando ${audioFiles.length} archivo${audioFiles.length > 1 ? 's' : ''}...`);
+
+      const fileObjects: File[] = await Promise.all(
+        audioFiles.map(async (f) => {
+          const data = await Filesystem.readFile({
+            path: `MHL Music/${f.name}`,
+            directory: Directory.Documents,
+          });
+          const binaryStr = atob(data.data as string);
+          const bytes = new Uint8Array(binaryStr.length);
+          for (let i = 0; i < binaryStr.length; i++) {
+            bytes[i] = binaryStr.charCodeAt(i);
+          }
+          const ext = f.name!.toLowerCase().split('.').pop();
+          let mimeType = 'audio/mpeg';
+          if (ext === 'm4a' || ext === 'aac') mimeType = 'audio/mp4';
+          else if (ext === 'flac') mimeType = 'audio/flac';
+          else if (ext === 'ogg' || ext === 'opus') mimeType = 'audio/ogg';
+          else if (ext === 'webm') mimeType = 'audio/webm';
+          else if (ext === 'wav') mimeType = 'audio/wav';
+
+          return new File([bytes], f.name!, { type: mimeType });
+        })
+      );
+
+      await importLocalFiles(fileObjects);
+      setShowImportOptions(false);
+    } catch (e) {
+      const errorMsg = e instanceof Error ? e.message : String(e);
+      console.error('Android import error:', errorMsg);
+      toast.error(`Error: ${errorMsg}. Intenta "Seleccionar carpeta" en su lugar.`);
+    }
+  };
+
+  const handleImportManual = () => {
+    // Manual file/folder selection
+    if (Capacitor.isNativePlatform()) {
+      // On Android, open file picker via intent or use a file manager alternative
+      // For now, show toast guiding user to use Google Files or similar
+      toast.info('Abre Google Files o tu gestor de archivos favorito, selecciona la carpeta con música, cópiala a Documents/MHL Music/, y luego usa "Auto-escanear".');
     } else {
       // Web: trigger file input
       fileInputRef.current?.click();
     }
+    setShowImportOptions(false);
+  };
+
+  const handleImport = () => {
+    // Show options menu
+    setShowImportOptions(!showImportOptions);
   };
 
   const handleFileInput = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -146,34 +157,68 @@ export default function LibraryPage() {
         )}
       </div>
 
-      {/* Import Button */}
-      <motion.button
-        whileHover={{ scale: 1.02 }}
-        whileTap={{ scale: 0.98 }}
-        onClick={handleImport}
-        disabled={isImporting}
-        className="mb-8 px-6 py-3 rounded-xl bg-[#C8F04B] text-[#080808] text-sm font-semibold hover:bg-[#d4f55a] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
-      >
-        {isImporting ? (
-          <>
-            <div className="animate-spin">
-              <Music className="w-4 h-4" />
-            </div>
-            Importando...
-          </>
-        ) : (
-          <>
-            <Upload className="w-4 h-4" />
-            Importar música
-          </>
-        )}
-      </motion.button>
+      {/* Import Options */}
+      <div className="mb-8 flex flex-col gap-3">
+        <motion.button
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          onClick={handleImport}
+          disabled={isImporting}
+          className="px-6 py-3 rounded-xl bg-[#C8F04B] text-[#080808] text-sm font-semibold hover:bg-[#d4f55a] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+        >
+          {isImporting ? (
+            <>
+              <div className="animate-spin">
+                <Music className="w-4 h-4" />
+              </div>
+              Importando...
+            </>
+          ) : (
+            <>
+              <Upload className="w-4 h-4" />
+              Importar música
+            </>
+          )}
+        </motion.button>
+
+        {/* Import Options Menu */}
+        <AnimatePresence>
+          {showImportOptions && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="flex flex-col gap-2 sm:flex-row"
+            >
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={handleImportAuto}
+                disabled={isImporting}
+                className="flex-1 px-4 py-2 rounded-lg bg-[#333] text-[#C8F04B] text-xs font-medium hover:bg-[#444] transition-all"
+              >
+                📁 Auto-escanear (Documents/MHL Music)
+              </motion.button>
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={handleImportManual}
+                disabled={isImporting}
+                className="flex-1 px-4 py-2 rounded-lg bg-[#333] text-[#C8F04B] text-xs font-medium hover:bg-[#444] transition-all"
+              >
+                🔍 Seleccionar carpeta / archivos
+              </motion.button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
 
       {/* Hidden file input - supports multiple audio formats */}
       <input
         ref={fileInputRef}
         type="file"
         multiple
+        webkitdirectory={Capacitor.isNativePlatform() ? true : undefined}
         accept="audio/mpeg,.mp3,audio/mp4,.m4a,audio/aac,.aac,audio/x-flac,.flac,audio/ogg,.ogg,audio/opus,.opus,audio/webm,.webm,audio/wav,.wav,audio/*"
         onChange={handleFileInput}
         className="hidden"
