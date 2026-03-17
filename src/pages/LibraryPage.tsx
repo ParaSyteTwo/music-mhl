@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
+import { FilePicker } from '@capawesome/capacitor-file-picker';
 import { toast } from 'sonner';
 import type { LocalTrack } from '@/types/music';
 
@@ -109,15 +110,60 @@ export default function LibraryPage() {
     }
   };
 
-  const handleImportManual = () => {
+  const handleImportManual = async () => {
     // Manual file/folder selection
-    if (Capacitor.isNativePlatform()) {
-      // On Android, open file picker via intent or use a file manager alternative
-      // For now, show toast guiding user to use Google Files or similar
-      toast.info('Abre Google Files o tu gestor de archivos favorito, selecciona la carpeta con música, cópiala a Documents/MHL Music/, y luego usa "Auto-escanear".');
-    } else {
-      // Web: trigger file input
-      fileInputRef.current?.click();
+    try {
+      if (Capacitor.isNativePlatform()) {
+        // Android: use native file picker
+        const result = await FilePicker.pickFiles({
+          types: ['audio/mpeg', 'audio/mp4', 'audio/aac', 'audio/flac', 'audio/ogg', 'audio/opus', 'audio/webm', 'audio/wav'],
+          multiple: true,
+        });
+
+        if (!result.files || result.files.length === 0) {
+          setShowImportOptions(false);
+          return;
+        }
+
+        // Convert picked files to File objects
+        const fileObjects: File[] = await Promise.all(
+          result.files.map(async (pickedFile) => {
+            // FilePicker returns file URI, need to read file content
+            const data = await Filesystem.readFile({
+              path: pickedFile.path,
+            });
+
+            // Determine MIME type from file extension or name
+            const fileName = pickedFile.name || 'audio';
+            const ext = fileName.toLowerCase().split('.').pop() || '';
+            let mimeType = 'audio/mpeg'; // default
+            if (ext === 'm4a' || ext === 'aac') mimeType = 'audio/mp4';
+            else if (ext === 'flac') mimeType = 'audio/flac';
+            else if (ext === 'ogg' || ext === 'opus') mimeType = 'audio/ogg';
+            else if (ext === 'webm') mimeType = 'audio/webm';
+            else if (ext === 'wav') mimeType = 'audio/wav';
+
+            // Decode base64 data to bytes
+            const binaryStr = atob(data.data as string);
+            const bytes = new Uint8Array(binaryStr.length);
+            for (let i = 0; i < binaryStr.length; i++) {
+              bytes[i] = binaryStr.charCodeAt(i);
+            }
+
+            return new File([bytes], fileName, { type: mimeType });
+          })
+        );
+
+        await importLocalFiles(fileObjects);
+        toast.success(`${fileObjects.length} archivo${fileObjects.length > 1 ? 's' : ''} importado${fileObjects.length > 1 ? 's' : ''}`);
+      } else {
+        // Web: trigger file input
+        fileInputRef.current?.click();
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.error('File picker error:', errorMsg);
+      toast.error(`Error al abrir selector de archivos: ${errorMsg}`);
     }
     setShowImportOptions(false);
   };
