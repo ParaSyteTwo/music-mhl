@@ -6,7 +6,7 @@
 
 Reproductor de música web y Android. Buscar, escuchar y descargar música gratis, sin paywalls. Open-source.
 
-## Estado: v0.3.0 OFICIAL ✅ → v0.4.0 (Personal Music Library v2)
+## Estado: v0.3.0 OFICIAL ✅ → v0.4.0 (Gestión Profesional de Metadatos)
 
 **v0.3.0 COMPLETADO (FASE 1 — Estabilidad Core):** ✅ 100% DONE
 - ✅ Service Worker duplicado arreglado
@@ -21,16 +21,18 @@ Reproductor de música web y Android. Buscar, escuchar y descargar música grati
 - ✅ Error handling con MediaError mapping
 - ✅ 62/62 tests passing, clean build
 
-**v0.4.0 REPLANIFICADO (FASE 2 — Personal Music Library v2) — NO streaming APIs:**
-Enfoque realista: MHL Music es gestor de biblioteca personal, NO Spotify clone.
-- Batch download & smart quality selection
-- Auto-fix metadata (Musicbrainz integration)
-- Library statistics & listening trends
-- Smart playlists (mood, year, rating, play count)
-- Export/import (JSON, CSV, text formats)
-- Advanced search with filters
-**Estimado:** 2-3 semanas (vs 4+ para YouTube streaming)
-**Razón:** APIs frágiles, ToS violations, RapidAPI rate limits — enfoque local es sustentable
+**v0.4.0 REPLANIFICADO (FASE 2 — Gestión de Metadatos Profesional):**
+Enfoque: MHL Music es gestor profesional de metadatos para tu biblioteca local.
+- ✅ Lectura completa de ID3 (título, artista, álbum, género)
+- ✅ Arreglar imágenes cortadas en álbumes (CSS aspect ratio)
+- ✅ Descarga automática de covers (CoverArtArchive)
+- ✅ Enriquecimiento con MusicBrainz (género, año)
+- ✅ Renombramiento automático ("Título - Artista")
+- ✅ Sincronización metadatos ↔ nombre archivo
+- ✅ Edición intuitiva de tags (UI modal)
+- ✅ Covers en descargas también
+**Estimado:** 3-4 semanas (5 sprints estructurados)
+**Razón:** Metadatos consistentes = biblioteca profesional y funcional
 
 ## Stack
 
@@ -99,36 +101,41 @@ Acciones: play/pause/togglePlay, next/previous, addToQueue, createPlaylist, addT
 - ✅ 10 features implementadas
 - ✅ Build limpio, zero critical issues
 
-### FASE 2: Personal Music Library v2 (v0.4.0) — EN PLANIFICACIÓN
+### FASE 2: Gestión de Metadatos Profesional (v0.4.0) — EN PLANIFICACIÓN
 
-**Sprint 1: Smart Download (2-3 días)**
-1. Batch download UI (select 5+ tracks → download all)
-2. Duplicate detection (fuzzy match on artist+title)
-3. Format selection before download
-4. Quality verification (bitrate, format available)
+**Sprint 1: Lectura de Metadatos + Covers (3 días)**
+1. Parser ID3 mejorado (título, artista, álbum, género)
+2. Arreglar CSS imágenes (aspect ratio, no cortadas)
+3. CoverArtArchive API integration
+4. Auto-descarga de covers para importados
+5. UI progreso descarga covers
 
-**Sprint 2: Library Organization (3-4 días)**
-5. Metadata auto-fix (Musicbrainz integration)
-6. Auto-capitalize, fill missing genre/year
-7. Duplicate marking & management
-8. Library cleanup UI
+**Sprint 2: Enriquecimiento + Renombramiento (5 días)**
+6. MusicBrainz API integration
+7. UI modal para editar metadatos
+8. Auto-capitalize títulos y artistas
+9. Detección de nombres incorrectos
+10. Renombramiento automático ("Título - Artista")
+11. Sincronización ID3 ↔ nombre archivo
+12. Confirmación antes de cambios
 
-**Sprint 3: Statistics (2-3 días)**
-9. Stats calculation engine (total tracks, size, formats)
-10. Smart playlists (by mood, year, rating, play count)
-11. Listening trends (week, month, all-time)
-12. Stats UI dashboard
+**Sprint 3: Descargas con Metadatos (3 días)**
+13. Modificar descarga para incluir covers
+14. Aplicar renombramiento a descargas
+15. Garantizar ID3 completo en descargas
+16. Validación archivo guardado
 
-**Sprint 4: Sharing & Export (1-2 días)**
-13. Export playlists (JSON, CSV, text)
-14. Import from formats
-15. Share links (if backend available)
+**Sprint 4: UI Gestión Avanzada (3 días)**
+17. Vista archivos con metadatos incompletos
+18. Batch edit (editar múltiples a la vez)
+19. Preview antes de guardar
+20. Historial de cambios
 
-**Sprint 5: Advanced Search (2-3 días)**
-16. Filter UI (genre, year, format, quality, play count)
-17. Metadata search engine (regex support)
-18. Save searches as smart playlists
-19. Performance optimization
+**Sprint 5: Testing + Polish (2 días)**
+21. Tests para ID3 parser
+22. Tests para MusicBrainz lookup
+23. Tests para renombramiento
+24. Pruebas manuales (100+ archivos)
 
 ### FASE 3: UX Polish & Discovery (v0.5.0) — FUTURO
 - Frontend design audit + responsive mobile-first
