@@ -62,41 +62,55 @@ interface DownloadOptions {
 
 // ─── Download track audio ───
 // Android: yt-dlp local (via YtDlpPlugin nativo)
-// Web: no disponible — descarga solo desde la app Android
+// Web: YouTube Search And Download API (via RapidAPI proxy en Edge Function)
 export async function downloadTrackAudio(
   track: Track,
   onProgress?: (progress: number) => void,
   options: DownloadOptions = {},
 ): Promise<ArrayBuffer> {
-  if (!Capacitor.isNativePlatform()) {
-    throw new Error('Descarga disponible solo en la app Android');
-  }
+  if (Capacitor.isNativePlatform()) {
+    const { searchYouTubeNative, downloadMp3Native } = await import('@/lib/ytdlpBridge');
+    const query = `${track.title} ${track.artist}`;
 
-  const { searchYouTubeNative, downloadMp3Native } = await import('@/lib/ytdlpBridge');
-  const query = `${track.title} ${track.artist}`;
+    onProgress?.(15);
+    const nativeResults = await searchYouTubeNative(`${query} official audio`);
+    if (!nativeResults.length) throw new Error('No se encontró en YouTube');
 
-  onProgress?.(15);
-  const nativeResults = await searchYouTubeNative(`${query} official audio`);
-  if (!nativeResults.length) throw new Error('No se encontró en YouTube');
+    onProgress?.(25);
+    const candidates = nativeResults.slice(0, 4);
+    let lastError = '';
 
-  onProgress?.(25);
-  const candidates = nativeResults.slice(0, 4);
-  let lastError = '';
-
-  for (const candidate of candidates) {
-    try {
-      const buffer = await downloadMp3Native(candidate.videoId, {
-        format: options.format,
-        quality: options.quality,
-      });
-      return buffer;
-    } catch (e) {
-      lastError = e instanceof Error ? e.message : 'Failed';
-      continue;
+    for (const candidate of candidates) {
+      try {
+        const buffer = await downloadMp3Native(candidate.videoId, {
+          format: options.format,
+          quality: options.quality,
+        });
+        return buffer;
+      } catch (e) {
+        lastError = e instanceof Error ? e.message : 'Failed';
+        continue;
+      }
     }
+    throw new Error(lastError || 'No se pudo descargar');
   }
 
-  throw new Error(lastError || 'No se pudo descargar');
+  // Web: usar RapidAPI via Edge Function
+  onProgress?.(15);
+  const data = await callDeezerProxy({
+    action: 'webDownload',
+    title: track.title,
+    artist: track.artist,
+  });
+  if (!data?.url) throw new Error('No se encontró audio para esta canción');
+
+  onProgress?.(40);
+  const audioRes = await fetch(data.url);
+  if (!audioRes.ok) throw new Error('Error descargando audio');
+
+  onProgress?.(80);
+  const buffer = await audioRes.arrayBuffer();
+  return buffer;
 }
 
 // ─── Lyrics (LRCLIB) ───

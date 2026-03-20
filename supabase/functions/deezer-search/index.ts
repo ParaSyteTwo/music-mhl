@@ -231,6 +231,54 @@ async function getAlbumData(albumId: number) {
   }
 }
 
+// ─── YouTube Search (for web download) ───
+async function searchYouTubeWeb(query: string): Promise<string | null> {
+  const rapidApiKey = Deno.env.get('RAPIDAPI_KEY');
+  if (!rapidApiKey) throw new Error('RAPIDAPI_KEY not set');
+
+  const url = `https://youtube-search-and-download.p.rapidapi.com/search?query=${encodeURIComponent(query)}&hl=en&gl=US`;
+  const res = await fetch(url, {
+    headers: {
+      'x-rapidapi-key': rapidApiKey,
+      'x-rapidapi-host': 'youtube-search-and-download.p.rapidapi.com',
+    },
+  });
+  if (!res.ok) throw new Error(`YouTube search failed: ${res.status}`);
+  const data = await res.json();
+  const contents = data.contents || [];
+  for (const item of contents) {
+    const videoId = item?.video?.videoId;
+    if (videoId) return videoId;
+  }
+  return null;
+}
+
+// ─── YouTube Download URL (for web download) ───
+async function getYouTubeDownloadUrl(videoId: string): Promise<{ url: string; ext: string } | null> {
+  const rapidApiKey = Deno.env.get('RAPIDAPI_KEY');
+  if (!rapidApiKey) throw new Error('RAPIDAPI_KEY not set');
+
+  const res = await fetch(`https://youtube-search-and-download.p.rapidapi.com/video/download?id=${videoId}`, {
+    headers: {
+      'x-rapidapi-key': rapidApiKey,
+      'x-rapidapi-host': 'youtube-search-and-download.p.rapidapi.com',
+    },
+  });
+  if (!res.ok) throw new Error(`YouTube download failed: ${res.status}`);
+  const data = await res.json();
+  const medias = (data.medias || []) as { type: string; ext: string; url: string; label: string }[];
+
+  // Prefer m4a at highest bitrate
+  const audios = medias.filter((m) => m.type === 'audio');
+  if (!audios.length) return null;
+  audios.sort((a, b) => {
+    const bitrateA = parseInt(a.label) || 0;
+    const bitrateB = parseInt(b.label) || 0;
+    return bitrateB - bitrateA;
+  });
+  return { url: audios[0].url, ext: audios[0].ext };
+}
+
 async function getHomeData() {
   try {
     // Genre IDs: Pop=132, Rap=116, Rock=152, Electronic=106, R&B=165, Latin=197
@@ -401,6 +449,36 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify(albumData), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
+
+    // Web download (YouTube Search + Download URL via RapidAPI)
+    if (action === 'webDownload') {
+      const { title, artist } = body;
+      if (!title || !artist) {
+        return new Response(
+          JSON.stringify({ error: 'title and artist are required' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      const searchQuery = `${title} ${artist} official audio`;
+      const videoId = await searchYouTubeWeb(searchQuery);
+      if (!videoId) {
+        return new Response(
+          JSON.stringify({ error: 'No YouTube results found' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      const download = await getYouTubeDownloadUrl(videoId);
+      if (!download) {
+        return new Response(
+          JSON.stringify({ error: 'No audio stream found' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      return new Response(
+        JSON.stringify({ success: true, videoId, url: download.url, ext: download.ext }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     // Search all

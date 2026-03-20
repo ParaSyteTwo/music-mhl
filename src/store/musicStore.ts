@@ -262,8 +262,8 @@ export const useMusicStore = create<MusicStore>()(
               }, { format: downloadFormat, quality: mp3Quality });
               updateDl({ progress: 80 });
 
-              if (downloadFormat === 'mp3') {
-                // Fetch genre from Deezer album if available
+              if (downloadFormat === 'mp3' && Capacitor.isNativePlatform()) {
+                // Android: escribir ID3 tags completos con género
                 const genre = track.deezerId
                   ? await getDeezerTrackGenre(track.deezerId).catch(() => null)
                   : null;
@@ -278,31 +278,23 @@ export const useMusicStore = create<MusicStore>()(
                 updateDl({ progress: 95 });
 
                 const fileName = `${track.title} - ${track.artist}.mp3`.replace(/[/\\?%*:|"<>]/g, '');
-
-                if (Capacitor.isNativePlatform()) {
-                  const arr = await taggedBlob.arrayBuffer();
-                  const base64 = btoa(new Uint8Array(arr).reduce((data, byte) => data + String.fromCharCode(byte), ''));
-                  await Filesystem.writeFile({ path: `MHL Music/${fileName}`, data: base64, directory: Directory.Documents, recursive: true });
-                } else {
-                  const { downloadFolder } = get();
-                  if (downloadFolder) {
-                    try {
-                      const fileHandle = await downloadFolder.getFileHandle(fileName, { create: true });
-                      const writable = await fileHandle.createWritable();
-                      await writable.write(taggedBlob);
-                      await writable.close();
-                    } catch {
-                      const blobUrl = URL.createObjectURL(taggedBlob);
-                      const a = document.createElement('a');
-                      a.href = blobUrl;
-                      a.download = fileName;
-                      document.body.appendChild(a);
-                      a.click();
-                      document.body.removeChild(a);
-                      setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
-                    }
-                  } else {
-                    const blobUrl = URL.createObjectURL(taggedBlob);
+                const arr = await taggedBlob.arrayBuffer();
+                const base64 = btoa(new Uint8Array(arr).reduce((data, byte) => data + String.fromCharCode(byte), ''));
+                await Filesystem.writeFile({ path: `MHL Music/${fileName}`, data: base64, directory: Directory.Documents, recursive: true });
+              } else if (!Capacitor.isNativePlatform()) {
+                // Web: audio m4a desde RapidAPI — guardar directamente sin re-encodear
+                const fileName = `${track.title} - ${track.artist}.m4a`.replace(/[/\\?%*:|"<>]/g, '');
+                updateDl({ progress: 95 });
+                const blob = new Blob([audioBuffer], { type: 'audio/mp4' });
+                const { downloadFolder } = get();
+                if (downloadFolder) {
+                  try {
+                    const fileHandle = await downloadFolder.getFileHandle(fileName, { create: true });
+                    const writable = await fileHandle.createWritable();
+                    await writable.write(blob);
+                    await writable.close();
+                  } catch {
+                    const blobUrl = URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = blobUrl;
                     a.download = fileName;
@@ -311,6 +303,15 @@ export const useMusicStore = create<MusicStore>()(
                     document.body.removeChild(a);
                     setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
                   }
+                } else {
+                  const blobUrl = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = blobUrl;
+                  a.download = fileName;
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                  setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
                 }
               } else {
                 // AAC — save raw buffer as .m4a
