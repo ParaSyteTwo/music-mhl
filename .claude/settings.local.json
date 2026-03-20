@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cmd /c \"dir \"\"%LOCALAPPDATA%\\\\Android\\\\Sdk\\\\platform-tools\\\\adb.exe\"\"\")",
+      "Bash(npx tsc:*)",
+      "Bash(cmd /c \"set PATH=%PATH%;%LOCALAPPDATA%\\\\Android\\\\Sdk\\\\platform-tools && adb version\")",
+      "Bash(cmd /c \"dir /s /b \"\"%LOCALAPPDATA%\\\\Android\\\\Sdk\\\\platform-tools\\\\adb.exe\"\" 2>nul && dir /s /b \"\"C:\\\\Android\\\\platform-tools\\\\adb.exe\"\" 2>nul && dir /s /b \"\"C:\\\\Users\\\\Paul\\\\AppData\\\\Local\\\\Android\\\\Sdk\\\\platform-tools\\\\adb.exe\"\" 2>nul\")",
+      "Bash(curl -L \"https://dl.google.com/android/repository/platform-tools-latest-windows.zip\" -o \"D:/Proyectos/music-mhl/tools/platform-tools.zip\")",
+      "Bash(unzip -q platform-tools.zip)",
+      "Bash(rm platform-tools.zip)",
+      "Bash(ls -lh /d/Proyectos/music-mhl/*.apk)",
+      "Bash(wc -l /d/Proyectos/music-mhl/src/lib/*.ts /d/Proyectos/music-mhl/src/lib/api/*.ts)",
+      "Bash(rm -f src/lib/ytdlpBridge.ts src/lib/localMusicParser.ts src/lib/colorExtractor.ts playwright-fixture.ts bun.lockb)",
+      "Bash(rm -rf ytdlp-service/)",
+      "Bash(npm run:*)",
+      "Bash(npm uninstall:*)"
+    ]
+  }
+}

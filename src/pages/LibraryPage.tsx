@@ -139,6 +139,7 @@ export default function LibraryPage() {
         // Helper function to convert single file
         const AUDIO_EXTENSIONS = ['mp3', 'm4a', 'aac', 'flac', 'ogg', 'opus', 'webm', 'wav'];
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const convertFile = async (pickedFile: any): Promise<File | null> => {
           const fileName = pickedFile.name || 'audio';
           const ext = fileName.toLowerCase().split('.').pop() || '';

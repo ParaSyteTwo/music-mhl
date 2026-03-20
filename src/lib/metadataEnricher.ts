@@ -110,6 +110,7 @@ async function extractID3Tags(file: File): Promise<{
         }
         
         // Clean up
+        // eslint-disable-next-line no-control-regex
         frameData = frameData.replace(/\0/g, '').replace(/[\x00-\x1F\x7F]/g, '').trim();
         
         if (frameID === 'TIT2') result.title = frameData; // Title
@@ -244,7 +245,7 @@ export async function parseLocalFiles(files: FileList | File[]): Promise<LocalTr
   console.log(`Parsing ${fileArray.length} files`);
 
   const fulfilled: LocalTrack[] = [];
-  const failed: any[] = [];
+  const failed: unknown[] = [];
 
   // Process in batches of 3 to limit concurrent metadata extraction
   // (each file slice + ID3 parsing is I/O intensive)

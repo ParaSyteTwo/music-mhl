@@ -13,9 +13,11 @@ function normalizeQuery(query: string): string {
   return query.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapYouTubeResults(data: any): YouTubeSearchResult[] {
   const raw = Array.isArray(data?.results) ? data.results : [];
   return raw
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .map((item: any) => ({
       videoId: typeof item?.videoId === 'string' ? item.videoId : '',
       title: typeof item?.title === 'string' ? item.title : '',
@@ -25,6 +27,7 @@ function mapYouTubeResults(data: any): YouTubeSearchResult[] {
 }
 
 // ─── Map pre-transformed data from edge function ───
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapProxiedTrack(t: any): Track {
   return {
     id: t.id || `dz-${t.deezerId}`,

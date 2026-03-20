@@ -85,6 +85,7 @@ interface MusicStore {
 // WiFi-only detection (web Network Information API)
 function isOnWifi(): boolean {
   try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const nav = navigator as any;
     const conn = nav.connection || nav.mozConnection || nav.webkitConnection;
     if (!conn) return true; // unknown → allow
@@ -562,6 +563,7 @@ export const useMusicStore = create<MusicStore>()(
         appLanguage: state.appLanguage,
         // localFileRefs excluded — File objects cannot be serialized
       }),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       merge: (persisted: any, current) => ({
         ...current,
         downloads: persisted?.downloads || [],

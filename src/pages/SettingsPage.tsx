@@ -19,6 +19,7 @@ export default function SettingsPage() {
   const handlePickFolder = async () => {
     if (!supportsDirectoryPicker) return;
     try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const dirHandle = await (window as any).showDirectoryPicker({ mode: 'readwrite' });
       setDownloadFolder(dirHandle, dirHandle.name);
     } catch {
