@@ -237,30 +237,27 @@ function scoreYouTubeResult(title: string, channelName: string, duration: number
   const c = channelName.toLowerCase();
   let score = 0;
 
-  // Boost: official audio indicators
-  if (t.includes('official audio')) score += 30;
-  if (t.includes('official music video')) score += 10;
-  if (t.includes('audio only')) score += 20;
-  if (t.includes('lyric') || t.includes('lyrics')) score += 10;
-  if (t.includes('radio edit')) score += 15;
-  if (c.includes(targetArtist.toLowerCase())) score += 25; // official artist channel
+  // Boost: prefer audio over video
+  if (t.includes('official audio')) score += 20;
+  if (t.includes('audio only')) score += 15;
+  if (t.includes('lyric') || t.includes('lyrics')) score += 8;
+  if (t.includes('radio edit')) score += 10;
+  if (c.includes(targetArtist.toLowerCase())) score += 15;
 
-  // Penalize: not the song itself
-  if (t.includes('live')) score -= 20;
-  if (t.includes('remix') && !t.includes('official')) score -= 15;
-  if (t.includes('cover')) score -= 20;
-  if (t.includes('karaoke')) score -= 30;
-  if (t.includes('slowed')) score -= 20;
-  if (t.includes('reverb')) score -= 10;
-  if (t.includes('reaction')) score -= 30;
-  if (t.includes('tutorial')) score -= 30;
+  // Small penalty for clearly wrong content (not the song)
+  if (t.includes('karaoke')) score -= 25;
+  if (t.includes('reaction')) score -= 25;
+  if (t.includes('tutorial')) score -= 25;
+  if (t.includes('cover') && !c.includes(targetArtist.toLowerCase())) score -= 10;
+  if (t.includes('slowed')) score -= 10;
+  if (t.includes('live') && (t.includes('concert') || t.includes('tour'))) score -= 10;
 
-  // Duration check: prefer tracks between 1:30 and 7:00 (typical song length)
-  if (duration > 90 && duration < 420) score += 10;
-  if (duration > 600) score -= 15; // too long, likely a concert/mix
+  // Duration: prefer typical song length (1:30 - 8:00)
+  if (duration > 90 && duration < 480) score += 8;
+  if (duration > 900) score -= 10; // likely a concert or mix
 
-  // Boost: title match
-  if (t.includes(targetTitle.toLowerCase())) score += 20;
+  // Title match boost
+  if (t.includes(targetTitle.toLowerCase())) score += 15;
 
   return score;
 }
