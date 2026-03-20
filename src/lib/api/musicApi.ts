@@ -95,21 +95,29 @@ export async function downloadTrackAudio(
     throw new Error(lastError || 'No se pudo descargar');
   }
 
-  // Web: usar RapidAPI via Edge Function
+  // Web: Edge Function descarga el audio server-side (evita CORS de googlevideo.com)
+  // Usamos fetch directo para recibir bytes en lugar de JSON
   onProgress?.(15);
-  const data = await callDeezerProxy({
-    action: 'webDownload',
-    title: track.title,
-    artist: track.artist,
-  });
-  if (!data?.url) throw new Error('No se encontró audio para esta canción');
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+  const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
 
-  onProgress?.(40);
-  const audioRes = await fetch(data.url);
-  if (!audioRes.ok) throw new Error('Error descargando audio');
+  const res = await fetch(`${supabaseUrl}/functions/v1/deezer-search`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': supabaseKey,
+      'Authorization': `Bearer ${supabaseKey}`,
+    },
+    body: JSON.stringify({ action: 'webDownload', title: track.title, artist: track.artist }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Error desconocido' }));
+    throw new Error(err.error || 'Error descargando audio');
+  }
 
   onProgress?.(80);
-  const buffer = await audioRes.arrayBuffer();
+  const buffer = await res.arrayBuffer();
   return buffer;
 }
 

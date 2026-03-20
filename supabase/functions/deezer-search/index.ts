@@ -514,10 +514,23 @@ Deno.serve(async (req) => {
           { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-      return new Response(
-        JSON.stringify({ success: true, videoId, url: download.url, ext: download.ext }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+
+      // Fetch audio server-side to avoid CORS — stream bytes directly to client
+      const audioRes = await fetch(download.url);
+      if (!audioRes.ok) {
+        return new Response(
+          JSON.stringify({ error: 'Failed to fetch audio' }),
+          { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      const audioBuffer = await audioRes.arrayBuffer();
+      return new Response(audioBuffer, {
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'audio/mp4',
+          'Content-Length': String(audioBuffer.byteLength),
+        },
+      });
     }
 
     // Search all
