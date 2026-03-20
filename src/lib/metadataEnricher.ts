@@ -9,9 +9,8 @@ async function extractID3Tags(file: File): Promise<{
   duration?: number;
 }> {
   try {
-    // OPTIMIZATION: Read only first 256KB of file (ID3 tags are at beginning)
-    // This reduces memory usage dramatically for large files
-    const READ_SIZE = 256 * 1024; // 256KB
+    // Read first 512KB — covers large embedded album art (typical JPEG cover = 100-300KB)
+    const READ_SIZE = 512 * 1024; // 512KB
     const fileSize = file.size;
     const readSize = Math.min(READ_SIZE, fileSize);
 
@@ -25,20 +24,30 @@ async function extractID3Tags(file: File): Promise<{
     if (id3Header !== 'ID3') {
       return {}; // No ID3 tags
     }
-    
+
+    // ID3v2 version byte: 3 = ID3v2.3 (big-endian frame sizes), 4 = ID3v2.4 (synchsafe)
+    const id3Version = view[3];
+
     // Parse basic ID3v2 structure
     const result: Record<string, string | undefined> = {};
     let coverUrl = '';
-    
+
     // Skip ID3 header (10 bytes) and read frames
     let pos = 10;
-    const maxPos = Math.min(buffer.byteLength, 50000); // Look in first 50KB for cover
-    
+    const maxPos = buffer.byteLength; // Scan the full read buffer for APIC frames
+
     while (pos + 10 < maxPos) {
       const frameID = String.fromCharCode(view[pos], view[pos + 1], view[pos + 2], view[pos + 3]);
-      const frameSize = (view[pos + 4] << 21) | (view[pos + 5] << 14) | (view[pos + 6] << 7) | view[pos + 7];
-      
-      if (frameSize === 0 || frameSize > buffer.byteLength) break;
+
+      // ID3v2.4 uses synchsafe integers (7 bits per byte), v2.3 uses normal big-endian 32-bit
+      let frameSize: number;
+      if (id3Version >= 4) {
+        frameSize = (view[pos + 4] << 21) | (view[pos + 5] << 14) | (view[pos + 6] << 7) | view[pos + 7];
+      } else {
+        frameSize = (view[pos + 4] << 24) | (view[pos + 5] << 16) | (view[pos + 6] << 8) | view[pos + 7];
+      }
+
+      if (frameSize <= 0 || frameSize > buffer.byteLength - pos) break;
       
       // Read frame data with proper encoding detection
       const frameDataBytes = view.slice(pos + 10, pos + 10 + Math.min(frameSize, 500000));

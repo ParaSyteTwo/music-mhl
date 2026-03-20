@@ -1,13 +1,20 @@
-import { Settings, Folder, AlertTriangle } from 'lucide-react';
+import { Settings, Folder, AlertTriangle, Wifi } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useMusicStore } from '@/store/musicStore';
+import { t } from '@/lib/i18n';
 import { Capacitor } from '@capacitor/core';
 
 const isAndroid = Capacitor.getPlatform() === 'android';
 const supportsDirectoryPicker = !isAndroid && typeof window !== 'undefined' && 'showDirectoryPicker' in window;
 
 export default function SettingsPage() {
-  const { downloadFolderName, setDownloadFolder, clearDownloadFolder } = useMusicStore();
+  const {
+    downloadFolderName, setDownloadFolder, clearDownloadFolder,
+    downloadFormat, setDownloadFormat,
+    mp3Quality, setMp3Quality,
+    downloadWifiOnly, setDownloadWifiOnly,
+    appLanguage, setAppLanguage
+  } = useMusicStore();
 
   const handlePickFolder = async () => {
     if (!supportsDirectoryPicker) return;
@@ -29,7 +36,68 @@ export default function SettingsPage() {
       <h1 className="text-lg sm:text-2xl font-semibold tracking-tighter mb-1 sm:mb-2">Ajustes</h1>
       <p className="text-xs sm:text-sm text-[#666660] mb-6 sm:mb-8">Configuración de la app</p>
 
-      {/* Download Folder Section */}
+      {/* Formato de descarga */}
+      <section className="mb-8">
+        <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">{t('downloadFormat')}</h2>
+        <div className="flex gap-4 items-center p-4 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)]">
+            <label className="flex items-center gap-2 cursor-pointer">
+            <input type="radio" name="format" value="mp3" checked={downloadFormat === 'mp3'} onChange={() => setDownloadFormat('mp3')} />
+            <span className="text-sm">{t('mp3')}</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="radio" name="format" value="aac" checked={downloadFormat === 'aac'} onChange={() => setDownloadFormat('aac')} />
+            <span className="text-sm">{t('aac')}</span>
+          </label>
+        </div>
+      </section>
+
+      {/* Calidad MP3 */}
+      {downloadFormat === 'mp3' && (
+        <section className="mb-8">
+          <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">{t('mp3Quality')}</h2>
+          <div className="flex gap-4 items-center p-4 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)]">
+              <label className="flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="mp3q" value="alta" checked={mp3Quality === 'alta'} onChange={() => setMp3Quality('alta')} />
+              <span className="text-sm">Alta (192kbps)</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="mp3q" value="media" checked={mp3Quality === 'media'} onChange={() => setMp3Quality('media')} />
+              <span className="text-sm">Media (128kbps)</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="mp3q" value="baja" checked={mp3Quality === 'baja'} onChange={() => setMp3Quality('baja')} />
+              <span className="text-sm">Baja (96kbps)</span>
+            </label>
+          </div>
+        </section>
+      )}
+
+      {/* Solo WiFi */}
+      <section className="mb-8">
+        <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">{t('wifiOnly')}</h2>
+        <div className="flex items-center gap-3 p-4 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)]">
+          <Wifi className="w-5 h-5 text-[#C8F04B] flex-shrink-0" />
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={downloadWifiOnly} onChange={e => setDownloadWifiOnly(e.target.checked)} />
+            <span className="text-sm">Permitir descargas solo cuando haya conexión WiFi</span>
+          </label>
+        </div>
+      </section>
+
+      {/* Selector de idioma */}
+      <section className="mb-8">
+        <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">{t('appLanguage')}</h2>
+        <div className="flex gap-4 items-center p-4 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)]">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="radio" name="lang" value="es" checked={appLanguage === 'es'} onChange={() => setAppLanguage('es')} />
+            <span className="text-sm">Español</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="radio" name="lang" value="en" checked={appLanguage === 'en'} onChange={() => setAppLanguage('en')} />
+            <span className="text-sm">Inglés</span>
+          </label>
+        </div>
+      </section>
       <section className="mb-8">
         <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">Carpeta de descargas</h2>
 

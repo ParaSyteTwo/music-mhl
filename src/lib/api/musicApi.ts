@@ -1,6 +1,29 @@
 import { Track } from '@/types/music';
 import { supabase } from '@/integrations/supabase/client';
 
+type YouTubeSearchResult = {
+  videoId: string;
+  title: string;
+};
+
+const SEARCH_CACHE_TTL_MS = 10 * 60 * 1000;
+const searchCache = new Map<string, { expiresAt: number; results: YouTubeSearchResult[] }>();
+
+function normalizeQuery(query: string): string {
+  return query.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function mapYouTubeResults(data: any): YouTubeSearchResult[] {
+  const raw = Array.isArray(data?.results) ? data.results : [];
+  return raw
+    .map((item: any) => ({
+      videoId: typeof item?.videoId === 'string' ? item.videoId : '',
+      title: typeof item?.title === 'string' ? item.title : '',
+    }))
+    .filter((item: YouTubeSearchResult) => item.videoId && item.title)
+    .slice(0, 6);
+}
+
 // ─── Map pre-transformed data from edge function ───
 function mapProxiedTrack(t: any): Track {
   return {
@@ -73,81 +96,100 @@ function scoreVideoForOfficial(title: string, duration: number): number {
 
 // ─── YouTube Search (youtube138 RapidAPI) ───
 export async function searchYouTube(query: string): Promise<{ videoId: string; title: string }[]> {
-  const apiKey = import.meta.env.VITE_RAPIDAPI_KEY;
-  if (!apiKey) throw new Error('VITE_RAPIDAPI_KEY not configured');
+  const normalized = normalizeQuery(query);
+  if (!normalized) return [];
 
-  const host = import.meta.env.VITE_RAPIDAPI_HOST_YTSEARCH || 'youtube138.p.rapidapi.com';
+  const cached = searchCache.get(normalized);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.results;
+  }
 
-  // Boost search query to prioritize official versions
-  const enhancedQuery = `${query} official audio OR radio`;
+  try {
+    const { data, error } = await supabase.functions.invoke('yt-stream', {
+      body: { action: 'search', query: `${query} official audio` },
+    });
 
-  const res = await fetch(
-    `https://${host}/search/?q=${encodeURIComponent(enhancedQuery)}&hl=en&gl=US`,
-    {
-      headers: {
-        'X-RapidAPI-Key': apiKey,
-        'X-RapidAPI-Host': host,
-      },
-      signal: AbortSignal.timeout(10000),
+    if (error || !data?.success) {
+      console.warn('[YouTube search]', error?.message || data?.error || 'No search provider available');
+      return [];
     }
-  );
 
-  if (!res.ok) throw new Error('YouTube search failed');
-  const data = await res.json();
+    const roughResults = mapYouTubeResults(data);
+    const scored = roughResults
+      .map((item) => ({
+        ...item,
+        score: scoreVideoForOfficial(item.title, 0),
+      }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5)
+      .map(({ videoId, title }) => ({ videoId, title }));
 
-  const items = data.contents || [];
+    searchCache.set(normalized, {
+      expiresAt: Date.now() + SEARCH_CACHE_TTL_MS,
+      results: scored,
+    });
 
-  // Filter for videos, score them, sort by relevance
-  const videos = items
-    .filter((item: any) => item.type === 'video' && item.video?.videoId)
-    .map((item: any) => {
-      const duration = item.video?.duration || 0; // in seconds
-      const title = item.video?.title || '';
-      const score = scoreVideoForOfficial(title, duration);
-
-      return {
-        videoId: item.video.videoId,
-        title,
-        duration,
-        score,
-      };
-    })
-    // Sort by score (highest first)
-    .sort((a: any, b: any) => b.score - a.score)
-    .slice(0, 5);
-
-  console.log('YouTube search results (sorted by official score):', videos.map(v => ({ title: v.title, score: v.score })));
-
-  return videos.map(v => ({
-    videoId: v.videoId,
-    title: v.title,
-  }));
+    return scored;
+  } catch (searchError) {
+    console.error('[YouTube search error]', searchError);
+    return [];
+  }
 }
 
 // ─── YouTube MP3 Download (youtube-mp36 RapidAPI) ───
 export async function getYouTubeStream(videoId: string): Promise<{ stream: { url: string } }> {
-  const apiKey = import.meta.env.VITE_RAPIDAPI_KEY;
-  if (!apiKey) throw new Error('VITE_RAPIDAPI_KEY not configured');
+  const { data, error } = await supabase.functions.invoke('yt-stream', {
+    body: { action: 'stream', videoId },
+  });
 
-  const host = import.meta.env.VITE_RAPIDAPI_HOST_YTMP3 || 'youtube-mp36.p.rapidapi.com';
-
-  const res = await fetch(
-    `https://${host}/dl?id=${encodeURIComponent(videoId)}`,
-    {
-      headers: {
-        'X-RapidAPI-Key': apiKey,
-        'X-RapidAPI-Host': host,
-      },
-      signal: AbortSignal.timeout(30000),
-    }
-  );
-
-  if (!res.ok) throw new Error('YouTube MP3 conversion failed');
-  const data = await res.json();
-
-  if (data.status !== 'ok' || !data.link) {
-    throw new Error(data.msg || 'Failed to get MP3 link');
+  if (error) {
+    throw new Error(error.message || 'YouTube stream failed');
   }
 
-  return { stream: { url: data.link } };
+  const streamUrl = typeof data?.stream?.url === 'string' ? data.stream.url : '';
+  if (!streamUrl) {
+    throw new Error(typeof data?.error === 'string' ? data.error : 'No stream provider available');
+  }
+
+  return { stream: { url: streamUrl } };
+}
+
+interface DownloadOptions {
+  format?: 'mp3' | 'aac';
+  quality?: 'alta' | 'media' | 'baja';
+}
+
+// ─── Download track audio (native yt-dlp on Android, edge function on web) ───
+export async function downloadTrackAudio(
+  track: Track,
+  onProgress?: (progress: number) => void,
+  _options: DownloadOptions = {},
+): Promise<ArrayBuffer> {
+  const query = `${track.title} ${track.artist}`;
+
+  // Web/native path: edge function search + stream + fetch
+  onProgress?.(15);
+  const results = await searchYouTube(query);
+  if (!results.length) throw new Error('No se encontró en YouTube');
+
+  onProgress?.(30);
+  const candidates = results.slice(0, 4);
+  let lastError = '';
+
+  for (const candidate of candidates) {
+    try {
+      const streamData = await getYouTubeStream(candidate.videoId);
+      if (!streamData.stream?.url) continue;
+
+      onProgress?.(60);
+      const response = await fetch(streamData.stream.url);
+      if (!response.ok) throw new Error('HTTP error ' + response.status);
+      return await response.arrayBuffer();
+    } catch (e) {
+      lastError = e instanceof Error ? e.message : 'Failed';
+      continue;
+    }
+  }
+
+  throw new Error(lastError || 'No se pudo obtener el audio');
 }

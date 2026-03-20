@@ -76,33 +76,41 @@ export default function LibraryPage() {
         return;
       }
 
-      toast.loading(`Escaneando ${audioFiles.length} archivo${audioFiles.length > 1 ? 's' : ''}...`);
+      const scanToastId = toast.loading(`Escaneando ${audioFiles.length} archivo${audioFiles.length > 1 ? 's' : ''}...`);
 
-      const fileObjects: File[] = await Promise.all(
-        audioFiles.map(async (f) => {
-          const data = await Filesystem.readFile({
-            path: `MHL Music/${f.name}`,
-            directory: Directory.Documents,
-          });
-          const binaryStr = atob(data.data as string);
-          const bytes = new Uint8Array(binaryStr.length);
-          for (let i = 0; i < binaryStr.length; i++) {
-            bytes[i] = binaryStr.charCodeAt(i);
-          }
-          const ext = f.name!.toLowerCase().split('.').pop();
-          let mimeType = 'audio/mpeg';
-          if (ext === 'm4a' || ext === 'aac') mimeType = 'audio/mp4';
-          else if (ext === 'flac') mimeType = 'audio/flac';
-          else if (ext === 'ogg' || ext === 'opus') mimeType = 'audio/ogg';
-          else if (ext === 'webm') mimeType = 'audio/webm';
-          else if (ext === 'wav') mimeType = 'audio/wav';
+      try {
+        const fileObjects: File[] = await Promise.all(
+          audioFiles.map(async (f) => {
+            const data = await Filesystem.readFile({
+              path: `MHL Music/${f.name}`,
+              directory: Directory.Documents,
+            });
+            const binaryStr = atob(data.data as string);
+            const bytes = new Uint8Array(binaryStr.length);
+            for (let i = 0; i < binaryStr.length; i++) {
+              bytes[i] = binaryStr.charCodeAt(i);
+            }
+            const ext = f.name!.toLowerCase().split('.').pop();
+            let mimeType = 'audio/mpeg';
+            if (ext === 'm4a' || ext === 'aac') mimeType = 'audio/mp4';
+            else if (ext === 'flac') mimeType = 'audio/flac';
+            else if (ext === 'ogg' || ext === 'opus') mimeType = 'audio/ogg';
+            else if (ext === 'webm') mimeType = 'audio/webm';
+            else if (ext === 'wav') mimeType = 'audio/wav';
 
-          return new File([bytes], f.name!, { type: mimeType });
-        })
-      );
+            return new File([bytes], f.name!, { type: mimeType });
+          })
+        );
 
-      await importLocalFiles(fileObjects);
-      setShowImportOptions(false);
+        toast.dismiss(scanToastId);
+        await importLocalFiles(fileObjects);
+        setShowImportOptions(false);
+      } catch (e) {
+        toast.dismiss(scanToastId);
+        const errorMsg = e instanceof Error ? e.message : String(e);
+        console.error('Android import error:', errorMsg);
+        toast.error(`Error: ${errorMsg}. Intenta "Seleccionar carpeta" en su lugar.`);
+      }
     } catch (e) {
       const errorMsg = e instanceof Error ? e.message : String(e);
       console.error('Android import error:', errorMsg);
@@ -126,7 +134,7 @@ export default function LibraryPage() {
         }
 
         const totalFiles = result.files.length;
-        toast.loading(`Importando ${totalFiles} archivo${totalFiles > 1 ? 's' : ''}...`);
+        const importToastId = toast.loading(`Importando ${totalFiles} archivo${totalFiles > 1 ? 's' : ''}...`);
 
         // Helper function to convert single file
         const AUDIO_EXTENSIONS = ['mp3', 'm4a', 'aac', 'flac', 'ogg', 'opus', 'webm', 'wav'];
@@ -179,11 +187,13 @@ export default function LibraryPage() {
         }
 
         if (fileObjects.length === 0) {
+          toast.dismiss(importToastId);
           toast.error('No se encontraron archivos de audio válidos. Asegúrate de que sean MP3, M4A, FLAC, etc.');
           setShowImportOptions(false);
           return;
         }
 
+        toast.dismiss(importToastId);
         await importLocalFiles(fileObjects);
 
         // Show summary with skipped files
@@ -191,7 +201,7 @@ export default function LibraryPage() {
         if (skippedCount > 0) {
           message += ` (${skippedCount} archivo${skippedCount > 1 ? 's' : ''} no-audio ignorado${skippedCount > 1 ? 's' : ''})`;
         }
-        toast.success(message);
+        toast.success(message, { duration: 4000 });
       } else {
         // Web: trigger file input
         fileInputRef.current?.click();
@@ -199,7 +209,7 @@ export default function LibraryPage() {
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       console.error('File picker error:', errorMsg);
-      toast.error(`Error: ${errorMsg}`);
+      toast.error(`Error: ${errorMsg}`, { duration: 5000 });
     }
     setShowImportOptions(false);
   };

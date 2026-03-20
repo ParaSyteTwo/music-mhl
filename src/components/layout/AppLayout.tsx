@@ -1,7 +1,8 @@
-import { Outlet, NavLink } from 'react-router-dom';
+import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useEffect } from 'react';
 import { BottomPlayer } from './BottomPlayer';
 import { Search, Download, Library, ListMusic, Settings } from 'lucide-react';
+import { t } from '@/lib/i18n';
 import { useMusicStore } from '@/store/musicStore';
 
 export function AppLayout() {
@@ -9,6 +10,7 @@ export function AppLayout() {
   const dominantColor = useMusicStore((s) => s.dominantColor);
   const currentTrack = useMusicStore((s) => s.currentTrack);
   const rescanLocalLibrary = useMusicStore((s) => s.rescanLocalLibrary);
+  const navigate = useNavigate();
 
   // Rescan local library on mount (for Android persistence)
   useEffect(() => {
@@ -28,6 +30,26 @@ export function AppLayout() {
         />
       )}
 
+      {/* Mobile top bar — only visible on mobile, shows app name + settings icon */}
+      <header
+        className="sm:hidden flex items-center justify-between px-4 bg-[rgba(8,8,8,0.9)] border-b border-[rgba(255,255,255,0.06)] flex-shrink-0 z-30"
+        style={{
+          backdropFilter: 'blur(12px)',
+          paddingTop: 'calc(var(--sat) + 10px)',
+          paddingBottom: '10px',
+          minHeight: 'calc(44px + var(--sat))',
+        }}
+      >
+        <span className="text-sm font-semibold tracking-tight text-[#F5F5F0]">MHL Music</span>
+        <button
+          onClick={() => navigate('/settings')}
+          className="w-9 h-9 flex items-center justify-center rounded-xl text-[#999] active:text-[#C8F04B] active:bg-[rgba(200,240,75,0.1)] transition-colors"
+          aria-label="Ajustes"
+        >
+          <Settings className="w-5 h-5" />
+        </button>
+      </header>
+
       {/* Desktop top nav */}
       <nav
         className="hidden sm:flex sticky top-0 z-30 items-center gap-6 px-8 bg-[rgba(8,8,8,0.9)] border-b border-[rgba(255,255,255,0.06)] flex-shrink-0"
@@ -39,21 +61,18 @@ export function AppLayout() {
         }}
       >
         <NavLink to="/" className={({ isActive }) => `flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors ${isActive ? 'text-[#C8F04B] bg-[rgba(200,240,75,0.1)]' : 'text-[#999] hover:text-[#F5F5F0]'}`}>
-          <Search className="w-4 h-4" /> Buscar
+          <Search className="w-4 h-4" /> {t('search')}
         </NavLink>
         <NavLink to="/downloads" className={({ isActive }) => `flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors ${isActive ? 'text-[#C8F04B] bg-[rgba(200,240,75,0.1)]' : 'text-[#999] hover:text-[#F5F5F0]'}`}>
-          <Download className="w-4 h-4" /> Descargas
+          <Download className="w-4 h-4" /> {t('downloads')}
         </NavLink>
         <NavLink to="/library" className={({ isActive }) => `flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors ${isActive ? 'text-[#C8F04B] bg-[rgba(200,240,75,0.1)]' : 'text-[#999] hover:text-[#F5F5F0]'}`}>
-          <Library className="w-4 h-4" /> Biblioteca
+          <Library className="w-4 h-4" /> {t('library')}
         </NavLink>
-        <NavLink to="/playlists" className={({ isActive }) => `flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors ${isActive ? 'text-[#C8F04B] bg-[rgba(200,240,75,0.1)]' : 'text-[#999] hover:text-[#F5F5F0]'}`}>
-          <ListMusic className="w-4 h-4" /> Playlists
+        <NavLink to="/settings" className={({ isActive }) => `flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors ${isActive ? 'text-[#C8F04B] bg-[rgba(200,240,75,0.1)]' : 'text-[#999] hover:text-[#F5F5F0]'}`}>
+          <Settings className="w-4 h-4" /> {t('settings')}
         </NavLink>
         <div className="flex-1" />
-        <NavLink to="/settings" className={({ isActive }) => `flex items-center gap-1.5 text-sm font-medium p-2 rounded-lg transition-colors ${isActive ? 'text-[#C8F04B] bg-[rgba(200,240,75,0.1)]' : 'text-[#999] hover:text-[#F5F5F0]'}`}>
-          <Settings className="w-4 h-4" />
-        </NavLink>
       </nav>
 
       {/* Scrollable content area */}
@@ -82,11 +101,11 @@ export function AppLayout() {
       >
         <NavLink to="/" className={({ isActive }) => `flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors min-h-[44px] ${isActive ? 'text-[#C8F04B] bg-[rgba(200,240,75,0.06)]' : 'text-[#666]'}`}>
           <Search className="w-5 h-5" />
-          <span className="text-[10px] font-medium">Buscar</span>
+          <span className="text-[10px] font-medium">{t('search')}</span>
         </NavLink>
         <NavLink to="/downloads" className={({ isActive }) => `flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors relative min-h-[44px] ${isActive ? 'text-[#C8F04B] bg-[rgba(200,240,75,0.06)]' : 'text-[#666]'}`}>
           <Download className="w-5 h-5" />
-          <span className="text-[10px] font-medium">Descargas</span>
+          <span className="text-[10px] font-medium">{t('downloads')}</span>
           {downloadCount > 0 && (
             <span className="absolute top-1.5 right-[calc(50%-2px)] translate-x-3 w-4 h-4 rounded-full bg-[#C8F04B] text-[#080808] text-[9px] font-bold flex items-center justify-center">
               {downloadCount}
@@ -95,11 +114,11 @@ export function AppLayout() {
         </NavLink>
         <NavLink to="/library" className={({ isActive }) => `flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors min-h-[44px] ${isActive ? 'text-[#C8F04B] bg-[rgba(200,240,75,0.06)]' : 'text-[#666]'}`}>
           <Library className="w-5 h-5" />
-          <span className="text-[10px] font-medium">Biblioteca</span>
+          <span className="text-[10px] font-medium">{t('library')}</span>
         </NavLink>
         <NavLink to="/playlists" className={({ isActive }) => `flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors min-h-[44px] ${isActive ? 'text-[#C8F04B] bg-[rgba(200,240,75,0.06)]' : 'text-[#666]'}`}>
           <ListMusic className="w-5 h-5" />
-          <span className="text-[10px] font-medium">Playlists</span>
+          <span className="text-[10px] font-medium">{t('playlists')}</span>
         </NavLink>
       </nav>
     </div>

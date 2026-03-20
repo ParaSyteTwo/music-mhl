@@ -2,10 +2,9 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { Track, Download, LocalTrack } from '@/types/music';
 import { audioEngine } from '@/lib/audioEngine';
-import { searchDeezer, searchYouTube, getYouTubeStream } from '@/lib/api/musicApi';
+import { searchDeezer, downloadTrackAudio } from '@/lib/api/musicApi';
 import { writeID3Tags } from '@/lib/id3Writer';
-import { extractDominantColor } from '@/lib/colorExtractor';
-import { parseLocalFiles } from '@/lib/localMusicParser';
+import { parseLocalFiles } from '@/lib/metadataEnricher';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { toast } from 'sonner';
@@ -17,6 +16,8 @@ function getProgressLabel(progress: number): string {
   if (progress >= 30) return 'Obteniendo audio...';
   return 'Buscando en YouTube...';
 }
+
+export { getProgressLabel };
 
 interface MusicStore {
   // Player
@@ -47,7 +48,7 @@ interface MusicStore {
   startDownload: (track: Track) => void;
   removeDownload: (id: string) => void;
 
-  // Download folder (web only, not persisted)
+  // Download folder (web only, not persisted across sessions)
   downloadFolder: FileSystemDirectoryHandle | null;
   downloadFolderName: string;
   setDownloadFolder: (handle: FileSystemDirectoryHandle, name: string) => void;
@@ -56,6 +57,16 @@ interface MusicStore {
   // Dynamic color
   dominantColor: string | null;
   setDominantColor: (color: string | null) => void;
+
+  // ─── Settings ───
+  downloadFormat: 'mp3' | 'aac';
+  setDownloadFormat: (format: 'mp3' | 'aac') => void;
+  mp3Quality: 'alta' | 'media' | 'baja';
+  setMp3Quality: (q: 'alta' | 'media' | 'baja') => void;
+  downloadWifiOnly: boolean;
+  setDownloadWifiOnly: (v: boolean) => void;
+  appLanguage: 'es' | 'en';
+  setAppLanguage: (lang: 'es' | 'en') => void;
 
   // ─── Local Library ───
   localLibrary: LocalTrack[];
@@ -69,6 +80,20 @@ interface MusicStore {
   removeLocalTrack: (id: string) => void;
   clearLocalLibrary: () => void;
   incrementPlayCount: (id: string) => void;
+}
+
+// WiFi-only detection (web Network Information API)
+function isOnWifi(): boolean {
+  try {
+    const nav = navigator as any;
+    const conn = nav.connection || nav.mozConnection || nav.webkitConnection;
+    if (!conn) return true; // unknown → allow
+    const type = (conn.type || conn.effectiveType || '').toString().toLowerCase();
+    if (!type) return true;
+    return type.includes('wifi') || type.includes('ethernet');
+  } catch {
+    return true;
+  }
 }
 
 export const useMusicStore = create<MusicStore>()(
@@ -100,9 +125,7 @@ export const useMusicStore = create<MusicStore>()(
         duration: 0,
 
         playTrack: (track) => {
-          // Pause current track to avoid listener desync
           audioEngine.pause();
-
           set({
             currentTrack: track,
             isPlaying: false,
@@ -113,14 +136,7 @@ export const useMusicStore = create<MusicStore>()(
 
           document.title = `${track.title} · ${track.artist} — MHL Music`;
 
-          // Extract dominant color from cover
-          if (track.cover) {
-            extractDominantColor(track.cover).then((color) => {
-              set({ dominantColor: color });
-            });
-          } else {
-            set({ dominantColor: null });
-          }
+          set({ dominantColor: null });
 
           if (track.preview) {
             audioEngine.load(track.preview);
@@ -184,7 +200,6 @@ export const useMusicStore = create<MusicStore>()(
           try {
             const tracks = await searchDeezer(query, 0, 25);
             set({ searchResults: tracks, isSearching: false, hasMoreResults: tracks.length >= 25 });
-            // Save to recent searches
             try {
               const stored = JSON.parse(localStorage.getItem('mhl-recent-searches') || '[]') as string[];
               const updated = [query, ...stored.filter((s) => s.toLowerCase() !== query.toLowerCase())].slice(0, 5);
@@ -204,7 +219,6 @@ export const useMusicStore = create<MusicStore>()(
             const newOffset = searchOffset + 25;
             const tracks = await searchDeezer(searchQuery, newOffset, 25);
             if (tracks.length < 25) set({ hasMoreResults: false });
-            // Deduplicate by id
             const existingIds = new Set(searchResults.map((t) => t.id));
             const newTracks = tracks.filter((t) => !existingIds.has(t.id));
             set({ searchResults: [...searchResults, ...newTracks], searchOffset: newOffset, isLoadingMore: false });
@@ -218,6 +232,12 @@ export const useMusicStore = create<MusicStore>()(
         downloads: [],
 
         startDownload: async (track) => {
+          // Check WiFi-only setting
+          if (get().downloadWifiOnly && !isOnWifi()) {
+            toast.error('Descarga cancelada: solo WiFi activado', { duration: 4000 });
+            return;
+          }
+
           const id = `d${Date.now()}`;
           set((s) => ({
             downloads: [...s.downloads, { id, track, progress: 0, status: 'downloading' as const }],
@@ -228,58 +248,53 @@ export const useMusicStore = create<MusicStore>()(
               downloads: s.downloads.map((d) => (d.id === id ? { ...d, ...patch } : d)),
             }));
 
+          const { downloadFormat, mp3Quality } = get();
           const maxAttempts = 3;
 
           for (let attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
               const attemptLabel = maxAttempts > 1 ? ` (intento ${attempt}/${maxAttempts})` : '';
-
               updateDl({ progress: 10, error: attempt > 1 ? `Reintentando...${attemptLabel}` : undefined });
-              const results = await searchYouTube(`${track.title} ${track.artist}`);
-              if (!results.length) throw new Error('No se encontró en YouTube');
-              updateDl({ progress: 30 });
 
-              const streamData = await getYouTubeStream(results[0].videoId);
-              const mp3Url = streamData.stream?.url;
-              if (!mp3Url) throw new Error('No se pudo obtener el MP3');
-              updateDl({ progress: 60 });
-
-              const response = await fetch(mp3Url);
-              if (!response.ok) throw new Error('Error descargando el archivo');
-              const mp3Buffer = await response.arrayBuffer();
+              const audioBuffer = await downloadTrackAudio(track, (progress) => {
+                updateDl({ progress });
+              }, { format: downloadFormat, quality: mp3Quality });
               updateDl({ progress: 80 });
 
-              const taggedBlob = await writeID3Tags(mp3Buffer, {
-                title: track.title,
-                artist: track.artist,
-                album: track.album,
-                coverUrl: track.cover,
-              });
-              updateDl({ progress: 95 });
-
-              const fileName = `${track.title} - ${track.artist}.mp3`.replace(/[/\\?%*:|"<>]/g, '');
-
-              if (Capacitor.isNativePlatform()) {
-                const buffer = await taggedBlob.arrayBuffer();
-                const base64 = btoa(
-                  new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
-                );
-                await Filesystem.writeFile({
-                  path: `MHL Music/${fileName}`,
-                  data: base64,
-                  directory: Directory.Documents,
-                  recursive: true,
+              if (downloadFormat === 'mp3') {
+                const taggedBlob = await writeID3Tags(audioBuffer, {
+                  title: track.title,
+                  artist: track.artist,
+                  album: track.album,
+                  coverUrl: track.cover,
                 });
-              } else {
-                const { downloadFolder } = get();
-                if (downloadFolder) {
-                  try {
-                    const fileHandle = await downloadFolder.getFileHandle(fileName, { create: true });
-                    const writable = await fileHandle.createWritable();
-                    await writable.write(taggedBlob);
-                    await writable.close();
-                  } catch {
-                    // Fallback to anchor-tag download if folder access fails
+                updateDl({ progress: 95 });
+
+                const fileName = `${track.title} - ${track.artist}.mp3`.replace(/[/\\?%*:|"<>]/g, '');
+
+                if (Capacitor.isNativePlatform()) {
+                  const arr = await taggedBlob.arrayBuffer();
+                  const base64 = btoa(new Uint8Array(arr).reduce((data, byte) => data + String.fromCharCode(byte), ''));
+                  await Filesystem.writeFile({ path: `MHL Music/${fileName}`, data: base64, directory: Directory.Documents, recursive: true });
+                } else {
+                  const { downloadFolder } = get();
+                  if (downloadFolder) {
+                    try {
+                      const fileHandle = await downloadFolder.getFileHandle(fileName, { create: true });
+                      const writable = await fileHandle.createWritable();
+                      await writable.write(taggedBlob);
+                      await writable.close();
+                    } catch {
+                      const blobUrl = URL.createObjectURL(taggedBlob);
+                      const a = document.createElement('a');
+                      a.href = blobUrl;
+                      a.download = fileName;
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                      setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+                    }
+                  } else {
                     const blobUrl = URL.createObjectURL(taggedBlob);
                     const a = document.createElement('a');
                     a.href = blobUrl;
@@ -289,21 +304,50 @@ export const useMusicStore = create<MusicStore>()(
                     document.body.removeChild(a);
                     setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
                   }
+                }
+              } else {
+                // AAC — save raw buffer as .m4a
+                const fileName = `${track.title} - ${track.artist}.m4a`.replace(/[/\\?%*:|"<>]/g, '');
+                updateDl({ progress: 95 });
+
+                if (Capacitor.isNativePlatform()) {
+                  const base64 = btoa(new Uint8Array(audioBuffer).reduce((data, byte) => data + String.fromCharCode(byte), ''));
+                  await Filesystem.writeFile({ path: `MHL Music/${fileName}`, data: base64, directory: Directory.Documents, recursive: true });
                 } else {
-                  const blobUrl = URL.createObjectURL(taggedBlob);
-                  const a = document.createElement('a');
-                  a.href = blobUrl;
-                  a.download = fileName;
-                  document.body.appendChild(a);
-                  a.click();
-                  document.body.removeChild(a);
-                  setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+                  const { downloadFolder } = get();
+                  const blob = new Blob([audioBuffer]);
+                  if (downloadFolder) {
+                    try {
+                      const fileHandle = await downloadFolder.getFileHandle(fileName, { create: true });
+                      const writable = await fileHandle.createWritable();
+                      await writable.write(blob);
+                      await writable.close();
+                    } catch {
+                      const blobUrl = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = blobUrl;
+                      a.download = fileName;
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                      setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+                    }
+                  } else {
+                    const blobUrl = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = blobUrl;
+                    a.download = fileName;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+                  }
                 }
               }
 
               updateDl({ progress: 100, status: 'completed', error: undefined });
               toast.success(`✓ Descargado: ${track.title} - ${track.artist}`, { duration: 4000 });
-              return; // Success — exit retry loop
+              return;
             } catch (error) {
               const msg = error instanceof Error ? error.message : 'Download failed';
               console.error(`Download attempt ${attempt}/${maxAttempts} failed:`, msg);
@@ -335,6 +379,16 @@ export const useMusicStore = create<MusicStore>()(
         dominantColor: null,
         setDominantColor: (color) => set({ dominantColor: color }),
 
+        // ─── Settings ───
+        downloadFormat: 'mp3',
+        setDownloadFormat: (format) => set({ downloadFormat: format }),
+        mp3Quality: 'alta',
+        setMp3Quality: (q) => set({ mp3Quality: q }),
+        downloadWifiOnly: false,
+        setDownloadWifiOnly: (v) => set({ downloadWifiOnly: v }),
+        appLanguage: 'es',
+        setAppLanguage: (lang) => set({ appLanguage: lang }),
+
         // ─── Local Library ───
         localLibrary: [],
         localFileRefs: new Map(),
@@ -344,9 +398,7 @@ export const useMusicStore = create<MusicStore>()(
         importLocalFiles: async (files) => {
           set({ isImporting: true });
           try {
-            console.log(`Importing ${files.length} files...`);
             const parsed = await parseLocalFiles(files);
-            console.log(`Successfully parsed ${parsed.length} files`);
             const existingPaths = new Set(get().localLibrary.map((t) => t.localPath));
             const newTracks = parsed.filter((t) => !existingPaths.has(t.localPath));
 
@@ -356,7 +408,6 @@ export const useMusicStore = create<MusicStore>()(
               if (match) newRefs.set(match.id, file);
             });
 
-            // Save paths for Android rescan
             const newPaths = newTracks.map((t) => t.localPath);
 
             set((s) => ({
@@ -370,15 +421,15 @@ export const useMusicStore = create<MusicStore>()(
             if (newTracks.length > 0) {
               const plural = newTracks.length > 1 ? 's' : '';
               const dupMsg = skipped > 0 ? ` (${skipped} duplicadas)` : '';
-              toast.success(`${newTracks.length} pista${plural} importada${plural}${dupMsg}`);
+              toast.success(`${newTracks.length} pista${plural} importada${plural}${dupMsg}`, { duration: 4000 });
             } else {
-              toast('No se añadieron pistas nuevas');
+              toast('No se añadieron pistas nuevas', { duration: 3000 });
             }
           } catch (e) {
             const errorMsg = e instanceof Error ? e.message : String(e);
             console.error('Import failed:', e);
             set({ isImporting: false });
-            toast.error(`Error al importar: ${errorMsg}`);
+            toast.error(`Error al importar: ${errorMsg}`, { duration: 5000 });
           }
         },
 
@@ -386,7 +437,6 @@ export const useMusicStore = create<MusicStore>()(
           if (!Capacitor.isNativePlatform() || get().savedLocalPaths.length === 0) return;
 
           try {
-            console.log(`Rescanning ${get().savedLocalPaths.length} saved paths...`);
             const filesData = await Promise.all(
               get().savedLocalPaths.map(async (path) => {
                 try {
@@ -421,8 +471,6 @@ export const useMusicStore = create<MusicStore>()(
               localLibrary: parsed.length > 0 ? parsed : s.localLibrary,
               localFileRefs: newRefs,
             }));
-
-            console.log(`Rescanned ${validFiles.length} files successfully`);
           } catch (e) {
             console.error('Rescan failed:', e);
           }
@@ -440,7 +488,6 @@ export const useMusicStore = create<MusicStore>()(
 
           const objectUrl = URL.createObjectURL(fileRef);
 
-          // Revoke previous blob URL to prevent memory leaks
           if (get().currentTrack?.preview?.startsWith('blob:')) {
             URL.revokeObjectURL(get().currentTrack.preview);
           }
@@ -455,11 +502,7 @@ export const useMusicStore = create<MusicStore>()(
 
           document.title = `${track.title} · ${track.artist} — MHL Music`;
 
-          if (track.cover) {
-            extractDominantColor(track.cover).then((color) => set({ dominantColor: color }));
-          } else {
-            set({ dominantColor: null });
-          }
+          set({ dominantColor: null });
 
           audioEngine.load(objectUrl);
           audioEngine.setVolume(get().volume);
@@ -513,7 +556,11 @@ export const useMusicStore = create<MusicStore>()(
         volume: state.volume,
         downloadFolderName: state.downloadFolderName,
         localLibrary: state.localLibrary,
-        // localFileRefs intentionally excluded — File objects cannot be serialized
+        downloadFormat: state.downloadFormat,
+        mp3Quality: state.mp3Quality,
+        downloadWifiOnly: state.downloadWifiOnly,
+        appLanguage: state.appLanguage,
+        // localFileRefs excluded — File objects cannot be serialized
       }),
       merge: (persisted: any, current) => ({
         ...current,
@@ -521,7 +568,11 @@ export const useMusicStore = create<MusicStore>()(
         volume: persisted?.volume ?? 0.8,
         downloadFolderName: persisted?.downloadFolderName || '',
         localLibrary: persisted?.localLibrary || [],
-        localFileRefs: new Map(), // Always starts empty — files must be re-imported each session
+        downloadFormat: persisted?.downloadFormat ?? 'mp3',
+        mp3Quality: persisted?.mp3Quality ?? 'alta',
+        downloadWifiOnly: persisted?.downloadWifiOnly ?? false,
+        appLanguage: persisted?.appLanguage ?? 'es',
+        localFileRefs: new Map(),
       }),
     }
   )
