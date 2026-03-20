@@ -1,5 +1,6 @@
 import { Track } from '@/types/music';
 import { supabase } from '@/integrations/supabase/client';
+import { Capacitor } from '@capacitor/core';
 
 type YouTubeSearchResult = {
   videoId: string;
@@ -166,11 +167,38 @@ interface DownloadOptions {
 export async function downloadTrackAudio(
   track: Track,
   onProgress?: (progress: number) => void,
-  _options: DownloadOptions = {},
+  options: DownloadOptions = {},
 ): Promise<ArrayBuffer> {
   const query = `${track.title} ${track.artist}`;
 
-  // Web/native path: edge function search + stream + fetch
+  // Native path: yt-dlp local on Android
+  if (Capacitor.isNativePlatform()) {
+    const { searchYouTubeNative, downloadMp3Native } = await import('@/lib/ytdlpBridge');
+
+    onProgress?.(15);
+    const nativeResults = await searchYouTubeNative(`${query} official audio`);
+    if (!nativeResults.length) throw new Error('No se encontró en YouTube');
+
+    onProgress?.(25);
+    const candidates = nativeResults.slice(0, 4);
+    let lastError = '';
+
+    for (const candidate of candidates) {
+      try {
+        const buffer = await downloadMp3Native(candidate.videoId, {
+          format: options.format,
+          quality: options.quality,
+        });
+        return buffer;
+      } catch (e) {
+        lastError = e instanceof Error ? e.message : 'Failed';
+        continue;
+      }
+    }
+    throw new Error(lastError || 'No se pudo descargar');
+  }
+
+  // Web path: edge function search + stream + fetch
   onProgress?.(15);
   const results = await searchYouTube(query);
   if (!results.length) throw new Error('No se encontró en YouTube');

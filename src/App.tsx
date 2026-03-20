@@ -4,6 +4,7 @@ import { Capacitor } from "@capacitor/core";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { useMusicStore } from "@/store/musicStore";
+import { initYtDlp } from "@/lib/ytdlpBridge";
 import SearchPage from "./pages/SearchPage";
 import DownloadsPage from "./pages/DownloadsPage";
 import LibraryPage from "./pages/LibraryPage";
@@ -15,6 +16,11 @@ const App = () => {
   useEffect(() => {
     if (Capacitor.isNativePlatform()) {
       useMusicStore.getState().rescanLocalLibrary();
+
+      // Initialize yt-dlp in background so it's ready for downloads
+      initYtDlp().then((ok) => {
+        if (ok) console.log('[App] yt-dlp ready');
+      });
 
       // Also verify downloaded files still exist (cleanup if deleted externally)
       const { downloads } = useMusicStore.getState();
