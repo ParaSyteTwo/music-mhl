@@ -13,7 +13,16 @@
       "Bash(rm -f src/lib/ytdlpBridge.ts src/lib/localMusicParser.ts src/lib/colorExtractor.ts playwright-fixture.ts bun.lockb)",
       "Bash(rm -rf ytdlp-service/)",
       "Bash(npm run:*)",
-      "Bash(npm uninstall:*)"
+      "Bash(npm uninstall:*)",
+      "Bash(/c/Users/Paul/AppData/Local/Android/Sdk/platform-tools/adb.exe install:*)",
+      "Bash(cd:*)",
+      "Bash(gh search:*)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "Read(//d/Proyectos/creador-max-design/**)",
+      "Bash(claude plugin:*)",
+      "Bash(gh repo:*)",
+      "Bash(pip install:*)"
     ]
   }
 }

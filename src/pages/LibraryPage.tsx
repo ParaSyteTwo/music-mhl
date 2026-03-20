@@ -324,12 +324,17 @@ export default function LibraryPage() {
           animate={{ opacity: 1, y: 0 }}
           className="text-center py-20 space-y-4"
         >
-          <div className="w-20 h-20 rounded-2xl bg-[rgba(200,240,75,0.08)] flex items-center justify-center mx-auto">
-            <Library className="w-10 h-10 text-[#C8F04B]/40" />
-          </div>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: [1, 1.08, 1] }}
+            transition={{ duration: 1.2, repeat: Infinity, repeatType: 'reverse', ease: 'easeInOut' }}
+            className="w-24 h-24 rounded-2xl bg-[rgba(200,240,75,0.12)] flex items-center justify-center mx-auto"
+          >
+            <Library className="w-14 h-14 text-[#C8F04B]/60" />
+          </motion.div>
           <div>
             <p className="text-sm text-[#F5F5F0] font-medium">Tu biblioteca está vacía</p>
-            <p className="text-xs text-[#555] mt-1">Importa tus MP3 para empezar</p>
+            <p className="text-xs text-[#B0B0B0] mt-1">Importa tus MP3 para empezar</p>
           </div>
         </motion.div>
       ) : (

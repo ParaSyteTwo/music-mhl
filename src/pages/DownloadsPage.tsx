@@ -141,10 +141,15 @@ export default function DownloadsPage() {
       )}
 
       {downloads.length === 0 && (
-        <div className="text-center py-12 sm:py-16 space-y-3">
-          <Music className="w-16 h-16 text-[#333] mx-auto" />
-          <p className="text-sm text-[#666660]">No hay descargas aún</p>
-        </div>
+        <motion.div
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: [1, 1.08, 1] }}
+          transition={{ duration: 1.2, repeat: Infinity, repeatType: 'reverse', ease: 'easeInOut' }}
+          className="text-center py-12 sm:py-16 space-y-3"
+        >
+          <Music className="w-20 h-20 text-[#C8F04B]/60 mx-auto" />
+          <p className="text-sm text-[#B0B0B0]">No hay descargas aún</p>
+        </motion.div>
       )}
     </motion.div>
   );
