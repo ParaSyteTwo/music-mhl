@@ -282,19 +282,30 @@ export const useMusicStore = create<MusicStore>()(
                 const base64 = btoa(new Uint8Array(arr).reduce((data, byte) => data + String.fromCharCode(byte), ''));
                 await Filesystem.writeFile({ path: `MHL Music/${fileName}`, data: base64, directory: Directory.Documents, recursive: true });
               } else if (!Capacitor.isNativePlatform()) {
-                // Web: audio m4a desde RapidAPI — guardar directamente sin re-encodear
-                const fileName = `${track.title} - ${track.artist}.m4a`.replace(/[/\\?%*:|"<>]/g, '');
+                // Web: escribir ID3 tags y guardar como .mp3
+                const genre = track.deezerId
+                  ? await getDeezerTrackGenre(track.deezerId).catch(() => null)
+                  : null;
+
+                const taggedBlob = await writeID3Tags(audioBuffer, {
+                  title: track.title,
+                  artist: track.artist,
+                  album: track.album,
+                  coverUrl: track.cover,
+                  ...(genre ? { genre } : {}),
+                });
                 updateDl({ progress: 95 });
-                const blob = new Blob([audioBuffer], { type: 'audio/mp4' });
+
+                const fileName = `${track.title} - ${track.artist}.mp3`.replace(/[/\\?%*:|"<>]/g, '');
                 const { downloadFolder } = get();
                 if (downloadFolder) {
                   try {
                     const fileHandle = await downloadFolder.getFileHandle(fileName, { create: true });
                     const writable = await fileHandle.createWritable();
-                    await writable.write(blob);
+                    await writable.write(taggedBlob);
                     await writable.close();
                   } catch {
-                    const blobUrl = URL.createObjectURL(blob);
+                    const blobUrl = URL.createObjectURL(taggedBlob);
                     const a = document.createElement('a');
                     a.href = blobUrl;
                     a.download = fileName;
@@ -304,7 +315,7 @@ export const useMusicStore = create<MusicStore>()(
                     setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
                   }
                 } else {
-                  const blobUrl = URL.createObjectURL(blob);
+                  const blobUrl = URL.createObjectURL(taggedBlob);
                   const a = document.createElement('a');
                   a.href = blobUrl;
                   a.download = fileName;

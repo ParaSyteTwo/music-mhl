@@ -231,11 +231,46 @@ async function getAlbumData(albumId: number) {
   }
 }
 
+// ─── Score a YouTube result for official audio (higher = better) ───
+function scoreYouTubeResult(title: string, channelName: string, duration: number, targetTitle: string, targetArtist: string): number {
+  const t = title.toLowerCase();
+  const c = channelName.toLowerCase();
+  let score = 0;
+
+  // Boost: official audio indicators
+  if (t.includes('official audio')) score += 30;
+  if (t.includes('official music video')) score += 10;
+  if (t.includes('audio only')) score += 20;
+  if (t.includes('lyric') || t.includes('lyrics')) score += 10;
+  if (t.includes('radio edit')) score += 15;
+  if (c.includes(targetArtist.toLowerCase())) score += 25; // official artist channel
+
+  // Penalize: not the song itself
+  if (t.includes('live')) score -= 20;
+  if (t.includes('remix') && !t.includes('official')) score -= 15;
+  if (t.includes('cover')) score -= 20;
+  if (t.includes('karaoke')) score -= 30;
+  if (t.includes('slowed')) score -= 20;
+  if (t.includes('reverb')) score -= 10;
+  if (t.includes('reaction')) score -= 30;
+  if (t.includes('tutorial')) score -= 30;
+
+  // Duration check: prefer tracks between 1:30 and 7:00 (typical song length)
+  if (duration > 90 && duration < 420) score += 10;
+  if (duration > 600) score -= 15; // too long, likely a concert/mix
+
+  // Boost: title match
+  if (t.includes(targetTitle.toLowerCase())) score += 20;
+
+  return score;
+}
+
 // ─── YouTube Search (for web download) ───
-async function searchYouTubeWeb(query: string): Promise<string | null> {
+async function searchYouTubeWeb(title: string, artist: string): Promise<string | null> {
   const rapidApiKey = Deno.env.get('RAPIDAPI_KEY');
   if (!rapidApiKey) throw new Error('RAPIDAPI_KEY not set');
 
+  const query = `${title} ${artist} official audio`;
   const url = `https://youtube-search-and-download.p.rapidapi.com/search?query=${encodeURIComponent(query)}&hl=en&gl=US`;
   const res = await fetch(url, {
     headers: {
@@ -246,11 +281,19 @@ async function searchYouTubeWeb(query: string): Promise<string | null> {
   if (!res.ok) throw new Error(`YouTube search failed: ${res.status}`);
   const data = await res.json();
   const contents = data.contents || [];
+
+  const candidates: { videoId: string; score: number }[] = [];
   for (const item of contents) {
-    const videoId = item?.video?.videoId;
-    if (videoId) return videoId;
+    const v = item?.video;
+    if (!v?.videoId) continue;
+    const duration = parseInt(v.lengthText?.replace(':', '') || '0') || 0;
+    const score = scoreYouTubeResult(v.title || '', v.channelName || '', duration, title, artist);
+    candidates.push({ videoId: v.videoId, score });
   }
-  return null;
+
+  if (!candidates.length) return null;
+  candidates.sort((a, b) => b.score - a.score);
+  return candidates[0].videoId;
 }
 
 // ─── YouTube Download URL (for web download) ───
@@ -460,8 +503,7 @@ Deno.serve(async (req) => {
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-      const searchQuery = `${title} ${artist} official audio`;
-      const videoId = await searchYouTubeWeb(searchQuery);
+      const videoId = await searchYouTubeWeb(title, artist);
       if (!videoId) {
         return new Response(
           JSON.stringify({ error: 'No YouTube results found' }),
