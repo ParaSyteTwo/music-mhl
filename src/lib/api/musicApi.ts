@@ -45,6 +45,16 @@ export async function getDeezerAlbum(albumId: string) {
   return callDeezerProxy({ action: 'album', albumId });
 }
 
+// ─── Genre for a track (via its album) ───
+export async function getDeezerTrackGenre(albumId: string | number): Promise<string | null> {
+  try {
+    const data = await callDeezerProxy({ action: 'album', albumId: String(albumId) });
+    return data?.album?.genre || null;
+  } catch {
+    return null;
+  }
+}
+
 interface DownloadOptions {
   format?: 'mp3' | 'aac';
   quality?: 'alta' | 'media' | 'baja';

@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { Track, Download, LocalTrack } from '@/types/music';
 import { audioEngine } from '@/lib/audioEngine';
-import { searchDeezer, downloadTrackAudio } from '@/lib/api/musicApi';
+import { searchDeezer, downloadTrackAudio, getDeezerTrackGenre } from '@/lib/api/musicApi';
 import { writeID3Tags } from '@/lib/id3Writer';
 import { parseLocalFiles } from '@/lib/metadataEnricher';
 import { Capacitor } from '@capacitor/core';
@@ -263,11 +263,17 @@ export const useMusicStore = create<MusicStore>()(
               updateDl({ progress: 80 });
 
               if (downloadFormat === 'mp3') {
+                // Fetch genre from Deezer album if available
+                const genre = track.deezerId
+                  ? await getDeezerTrackGenre(track.deezerId).catch(() => null)
+                  : null;
+
                 const taggedBlob = await writeID3Tags(audioBuffer, {
                   title: track.title,
                   artist: track.artist,
                   album: track.album,
                   coverUrl: track.cover,
+                  ...(genre ? { genre } : {}),
                 });
                 updateDl({ progress: 95 });
 

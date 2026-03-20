@@ -46,6 +46,9 @@ interface DeezerAlbum {
     id: number;
     name: string;
   };
+  genres?: {
+    data: { id: number; name: string }[];
+  };
 }
 
 interface DeezerGenre {
@@ -101,6 +104,7 @@ function transformAlbum(item: DeezerAlbum) {
     coverSmall: item.cover_medium || item.cover_small || '',
     coverXL: item.cover_xl || item.cover_big || '',
     releaseDate: item.release_date,
+    genre: item.genres?.data?.[0]?.name || null,
   };
 }
 
@@ -215,6 +219,7 @@ async function getAlbumData(albumId: number) {
         releaseDate: albumData.release_date,
         trackCount: albumData.nb_tracks || 0,
         tracks: (albumData.tracks?.data || []).map(transformTrack),
+        genre: albumData.genres?.data?.[0]?.name || null,
       },
       moreByArtist: (artistAlbumsData.data || [])
         .filter((a: any) => a.id !== albumId)

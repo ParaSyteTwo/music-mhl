@@ -16,11 +16,15 @@ interface ID3Tags {
 async function fetchCoverArt(url: string): Promise<{ buffer: ArrayBuffer; mime: string } | null> {
   try {
     const res = await fetch(url);
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.warn('[id3Writer] Cover fetch failed:', res.status, url);
+      return null;
+    }
     const contentType = res.headers.get('content-type') || 'image/jpeg';
     const buffer = await res.arrayBuffer();
     return { buffer, mime: contentType.split(';')[0] };
-  } catch {
+  } catch (e) {
+    console.warn('[id3Writer] Cover fetch error:', e);
     return null;
   }
 }
