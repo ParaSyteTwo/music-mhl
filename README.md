@@ -1,23 +1,123 @@
-# MHL Music
+# 🎵 MHL Music
 
-MHL Music es una app web y Android para buscar, reproducir y descargar musica.
+## Tu musica. Tu ritmo. Tu espacio.
 
-## Arquitectura actual
+MHL Music es una app web y Android hecha para algo muy simple y muy bonito:  
+**abrir, buscar, escuchar, descargar y disfrutar.**
 
-- Frontend: React + TypeScript + Vite
-- Estado: Zustand
-- Backend web: Supabase Edge Functions
-- Servicio de descargas web: `services/ytdlp-service` desplegado en Railway
-- Android: Capacitor + plugin nativo `yt-dlp`
+Sin humo. Sin complicarte la vida. Sin meter una infraestructura absurda para hacer algo que deberia sentirse natural.
 
-### Flujo de descarga
+---
 
-- Web: navegador -> `yt-stream` -> ticket firmado -> `ytdlp-service`
-- Android: app -> plugin nativo `yt-dlp`
+## ✨ ¿Que vibe tiene MHL Music?
 
-`deezer-search` queda limitado a Deezer y metadatos. `yt-stream` actua como broker para descargas web.
+MHL Music no quiere ser una plataforma gigantesca que te entierre en menus, muros, upsells y pantallas llenas de ruido.  
+Quiere ser una app que se siente ligera, util y musical.
 
-## Estructura relevante
+La filosofia del proyecto es esta:
+
+- 🔎 **encuentra musica rapido**
+- ▶️ **escucha previews al momento**
+- ⬇️ **descarga desde la cancion elegida**
+- 🌐 **mantiene la web ligera**
+- 📱 **deja Android hacer lo suyo con potencia nativa**
+- 🔐 **no expone secretos al navegador**
+
+No es una copia de Spotify.  
+No quiere aparentar ser una megaplataforma.  
+Quiere que usarla sea un gusto.
+
+---
+
+## 🚀 Lo que ya hace
+
+### 🌐 En la web
+
+- 🔍 busqueda y metadata desde Deezer
+- 🎧 reproduccion de previews desde la propia app
+- 🎟️ sistema de descarga por ticket firmado
+- 🪶 frontend servido como static site
+- ⚡ flujo web limpio:
+
+```text
+navegador -> yt-stream -> ticket firmado -> ytdlp-service
+```
+
+### 📱 En Android
+
+- ⚙️ descarga nativa con `yt-dlp`
+- 🎵 flujo separado del backend web
+- 🧱 arquitectura pensada para que la web no rompa la app movil
+
+### 🧠 En backend
+
+- `deezer-search` queda limitado a Deezer y metadatos
+- `yt-stream` actua como broker para descargas web
+- `services/ytdlp-service` resuelve la descarga real en Railway
+
+---
+
+## 💿 Lo que quiere ser
+
+MHL Music va en esta direccion:
+
+- una app que se sienta viva
+- una UX mas musical y menos tosca
+- una experiencia rapida tanto en web como en Android
+- una infraestructura clara, mantenible y sin piezas haciendo trabajos que no les tocan
+
+### 🎯 Objetivos del producto
+
+- buscar musica sin friccion
+- escuchar previews sin esperas raras
+- bajar audio desde la cancion elegida
+- mantener secretos fuera del frontend
+- evitar pasar audio pesado por Supabase
+- tener una web simple de desplegar y una app Android fuerte por separado
+
+### 🔥 Direccion actual del proyecto
+
+- pulir la experiencia web
+- seguir reforzando Android como cliente nativo
+- mejorar feedback visual, sensacion y flow de la app
+- reducir dependencias fragiles
+- dejar el sistema en una combinacion clara:
+
+```text
+frontend static site + Supabase + Railway
+```
+
+---
+
+## 🎼 Como suena por dentro
+
+### 🌐 Flujo web
+
+1. El usuario busca una cancion.
+2. La app obtiene metadata desde Deezer.
+3. Al pulsar descargar, el frontend pide un ticket a `yt-stream`.
+4. `yt-stream` valida, limita, resuelve el video y firma un token.
+5. El navegador baja el archivo directamente desde `ytdlp-service`.
+
+### 📱 Flujo Android
+
+1. El usuario busca una cancion.
+2. La app usa el plugin nativo `yt-dlp`.
+3. La descarga se resuelve en el dispositivo.
+
+---
+
+## 🧭 Arquitectura actual
+
+- **Frontend:** React + TypeScript + Vite
+- **Estado:** Zustand
+- **Backend web:** Supabase Edge Functions
+- **Servicio de descargas web:** `services/ytdlp-service` desplegado en Railway
+- **Android:** Capacitor + plugin nativo `yt-dlp`
+
+---
+
+## 🗂️ Estructura relevante
 
 ```text
 src/
@@ -33,7 +133,9 @@ docs/
   context.md
 ```
 
-## Variables de entorno
+---
+
+## 🔧 Variables de entorno
 
 ### Frontend
 
@@ -67,7 +169,9 @@ PORT=8080
 
 `YTDLP_SIGNING_SECRET` y `DOWNLOAD_SIGNING_SECRET` deben tener el mismo valor.
 
-## Desarrollo local
+---
+
+## 🧪 Desarrollo local
 
 ### Web
 
@@ -98,16 +202,29 @@ Desplegar `services/ytdlp-service/` como servicio Docker.
 - Build context: `services/ytdlp-service`
 - Healthcheck: `GET /health`
 - No requiere volumen persistente para v1
-- Instala `ffmpeg` desde el `Dockerfile`
+- `ffmpeg` se instala desde el `Dockerfile`
 
-## Validacion esperada
+---
 
-- La web obtiene ticket desde `yt-stream`.
-- La descarga final viene del servicio Railway.
-- Tokens caducados fallan.
-- Android sigue descargando por el plugin nativo.
+## ✅ Validacion esperada
 
-## Contexto para agentes
+- la web obtiene ticket desde `yt-stream`
+- la descarga final viene del servicio Railway
+- los tokens caducados fallan
+- Android sigue descargando por el plugin nativo
 
-- Fuente principal: `docs/context.md`
-- Resumen corto para Claude: `claude.md`
+---
+
+## 🔒 Privacidad
+
+- sin registro obligatorio
+- sin secretos en el navegador
+- sin audio pesado pasando por Supabase
+- arquitectura abierta y auditable desde el repo
+
+---
+
+## 🤖 Contexto para agentes
+
+- fuente principal: `docs/context.md`
+- resumen corto para Claude: `claude.md`
