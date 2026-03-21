@@ -43,6 +43,13 @@ navegador -> yt-stream -> ticket firmado -> ytdlp-service
 - 🎵 flujo separado del backend web
 - 🧱 arquitectura pensada para que la web no rompa la app movil
 
+### 🍎 En iPhone y iPad
+
+- 📲 la web puede instalarse como app desde Safari
+- 🎧 los previews y la navegacion web funcionan como PWA
+- 📁 los archivos descargados dependen del flujo de Safari y la app Archivos
+- ⚠️ la experiencia de descarga no es tan nativa ni tan comoda como en Android
+
 ### 🧠 En backend
 
 - `deezer-search` queda limitado a Deezer y metadatos
@@ -98,6 +105,14 @@ frontend static site + Supabase + Railway
 1. El usuario busca una cancion.
 2. La app usa el plugin nativo `yt-dlp`.
 3. La descarga se resuelve en el dispositivo.
+
+### 🍎 Flujo en iPhone PWA
+
+1. El usuario abre la web en Safari.
+2. Puede añadirla a pantalla de inicio como app web.
+3. La app sigue funcionando sobre Safari/WebKit.
+4. Los audios descargados pueden abrirse o guardarse en Archivos.
+5. La experiencia de archivos y descargas es mas limitada que en Android.
 
 ---
 
@@ -197,6 +212,26 @@ Desplegar `services/ytdlp-service/` como servicio Docker.
 - Healthcheck: `GET /health`
 - No requiere volumen persistente para v1
 - `ffmpeg` se instala desde el `Dockerfile`
+
+---
+
+## 📲 Instalar la web como app en iPhone
+
+1. Abre MHL Music en `Safari`.
+2. Pulsa el boton de `Compartir`.
+3. Baja hasta `Añadir a pantalla de inicio`.
+4. Confirma el nombre de la app.
+5. Abrela desde el icono como si fuera una app normal.
+
+### Qué esperar en iPhone
+
+- ✅ la PWA puede abrirse como app
+- ✅ los previews y la interfaz web funcionan
+- ✅ iPhone puede reproducir `mp3`, `aac` y `m4a`
+- ✅ un archivo descargado puede abrirse o guardarse en `Archivos`
+- ⚠️ la gestion de descargas no es tan directa como en Android
+- ⚠️ algunas acciones dependen del comportamiento de Safari
+- ⚠️ no tiene el mismo nivel de integracion nativa que la app Android
 
 ---
 
