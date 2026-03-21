@@ -5,8 +5,6 @@
 MHL Music es una app web y Android hecha para algo muy simple y muy bonito:  
 **abrir, buscar, escuchar, descargar y disfrutar.**
 
-Sin humo. Sin complicarte la vida. Sin meter una infraestructura absurda para hacer algo que deberia sentirse natural.
-
 ---
 
 ## ✨ ¿Que vibe tiene MHL Music?
@@ -22,10 +20,6 @@ La filosofia del proyecto es esta:
 - 🌐 **mantiene la web ligera**
 - 📱 **deja Android hacer lo suyo con potencia nativa**
 - 🔐 **no expone secretos al navegador**
-
-No es una copia de Spotify.  
-No quiere aparentar ser una megaplataforma.  
-Quiere que usarla sea un gusto.
 
 ---
 
