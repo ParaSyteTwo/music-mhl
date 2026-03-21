@@ -1,217 +1,113 @@
-```markdown
-# 🎵 MHL Music
+# MHL Music
 
-> Tu música. Sin límites. Sin suscripciones.
+MHL Music es una app web y Android para buscar, reproducir y descargar musica.
 
-MHL Music es un reproductor de música web y Android que te permite 
-buscar, escuchar y descargar música en alta calidad de forma gratuita.
-Sin paywalls. Sin anuncios. Sin restricciones artificiales.
+## Arquitectura actual
 
-![MHL Music](https://music-mhl.vercel.app/og-image.png)
+- Frontend: React + TypeScript + Vite
+- Estado: Zustand
+- Backend web: Supabase Edge Functions
+- Servicio de descargas web: `services/ytdlp-service` desplegado en Railway
+- Android: Capacitor + plugin nativo `yt-dlp`
 
-## ✨ Características
+### Flujo de descarga
 
-### Reproducción
-- 🔍 Búsqueda instantánea via Deezer
-- ▶️ Reproducción de preview (30s) sin registro
-- 🎵 Cola de reproducción con shuffle y repeat
-- ⏭️ Skip prev/next con lógica inteligente
-- 🔊 Control de volumen y barra de progreso
+- Web: navegador -> `yt-stream` -> ticket firmado -> `ytdlp-service`
+- Android: app -> plugin nativo `yt-dlp`
 
-### Biblioteca personal
-- 📚 Biblioteca guardada localmente sin cuenta
-- 🎵 Playlists personalizadas ilimitadas
-- 📥 Descarga en MP3 con metadatos ID3 automáticos
-  (título, artista, álbum, carátula embebida)
+`deezer-search` queda limitado a Deezer y metadatos. `yt-stream` actua como broker para descargas web.
 
-### Letras
-- 🎤 Letras sincronizadas en tiempo real (modo karaoke)
-- 🌍 Traducción automática al idioma de tu sistema
-- 📝 Vista de letra completa sin sincronización
+## Estructura relevante
 
-### Identificación de canciones
-- 🎯 Sube un archivo y detecta qué canción es
-- 🏷️ Actualiza los metadatos automáticamente
-- 💾 Guarda el archivo actualizado en tu carpeta de música
+```text
+src/
+  lib/api/musicApi.ts
+  lib/ytdlpBridge.ts
+  store/musicStore.ts
+supabase/functions/
+  deezer-search/
+  yt-stream/
+services/
+  ytdlp-service/
+docs/
+  context.md
+```
 
-### Música local
-- 📂 Importa tu colección de música local
-- 🔄 Lee metadatos ID3 existentes
-- 🎵 Reproduce archivos locales junto a los de streaming
+## Variables de entorno
 
-## 📱 Descargas
+### Frontend
 
-| Plataforma | Enlace |
-|------------|--------|
-| 🌐 Web | [music-mhl.vercel.app](https://music-mhl.vercel.app) |
-| 🤖 Android APK | [Última versión](../../releases/latest) |
+```env
+VITE_SUPABASE_URL=https://your_project_id.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=your_publishable_key
+```
 
-> **Android:** Requiere Android 8.0 o superior.
-> Activa "Fuentes desconocidas" antes de instalar.
+### Secrets de Supabase
 
-## 🛠️ Stack técnico
+```env
+YTDLP_SERVICE_URL=https://your-railway-service.up.railway.app
+YTDLP_SERVICE_KEY=change-me
+YTDLP_SIGNING_SECRET=change-me
+YTDLP_TOKEN_TTL_SECONDS=120
+YTDLP_RATE_LIMIT_BURST=8
+YTDLP_RATE_LIMIT_WINDOW_SECONDS=60
+YTDLP_DAILY_LIMIT=250
+```
 
-- **Frontend:** React + TypeScript + Vite
-- **Estado:** Zustand con persistencia
-- **Estilos:** Tailwind CSS + shadcn/ui
-- **Backend:** Supabase Edge Functions (Deno)
-- **Android:** Capacitor
-- **Deploy web:** Vercel
+### Env de Railway
 
-## 🔌 APIs utilizadas
+```env
+SERVICE_API_KEY=change-me
+DOWNLOAD_SIGNING_SECRET=change-me
+TOKEN_TTL_SECONDS=120
+MAX_CONCURRENT_DOWNLOADS=3
+TEMP_DIR=/tmp/ytdlp-service
+PORT=8080
+```
 
-| API | Uso | Plan |
-|-----|-----|------|
-| Deezer | Búsqueda y metadatos | Gratuito |
-| YouTube (RapidAPI) | Stream de audio completo | Gratuito |
-| Shazam (RapidAPI) | Identificación de canciones | Gratuito |
-| LRCLIB | Letras sincronizadas | Gratuito |
-| LibreTranslate | Traducción de letras | Gratuito |
-| DeepL | Traducción premium (opcional) | Gratuito |
+`YTDLP_SIGNING_SECRET` y `DOWNLOAD_SIGNING_SECRET` deben tener el mismo valor.
 
-## 🚀 Desarrollo local
+## Desarrollo local
 
-### Requisitos
-- Node.js 18+
-- Bun o npm
-- Cuenta en Supabase (gratuita)
-- Cuenta en RapidAPI (gratuita)
-
-### Instalación
+### Web
 
 ```bash
-# Clonar el repositorio
-git clone https://github.com/ParaSyteTwo/music-mhl.git
-cd music-mhl
-
-# Instalar dependencias
 npm install
-
-# Configurar variables de entorno
-cp .env.example .env
-# Edita .env con tus keys (ver sección de configuración)
-
-# Iniciar servidor de desarrollo
 npm run dev
 ```
 
-### Configuración del .env
+### Supabase functions
 
-```env
-# Supabase
-VITE_SUPABASE_URL=https://tuproyecto.supabase.co
-VITE_SUPABASE_ANON_KEY=tu_anon_key
-
-# RapidAPI (una sola key para todas las APIs)
-VITE_RAPIDAPI_KEY=tu_rapidapi_key
-
-# Traducción (opcional - usa LibreTranslate si no se configura)
-VITE_DEEPL_API_KEY=tu_deepl_key
-```
-
-### APIs de RapidAPI necesarias
-Suscríbete en plan gratuito a estas APIs en rapidapi.com:
-- `YouTube-Music-API` by Alex
-- `YT-API` by ytjar  
-- `Shazam Core` by Tipsters CO
-- `MusicAPI` by FreeYourMusic
-
-### Edge Functions de Supabase
 ```bash
-# Instalar Supabase CLI
-npm install -g supabase
-
-# Login
 supabase login
-
-# Desplegar funciones
 supabase functions deploy deezer-search
 supabase functions deploy yt-stream
-
-# Añadir secrets
-supabase secrets set RAPIDAPI_KEY=tu_key
+supabase secrets set YTDLP_SERVICE_URL=https://your-railway-service.up.railway.app
+supabase secrets set YTDLP_SERVICE_KEY=change-me
+supabase secrets set YTDLP_SIGNING_SECRET=change-me
+supabase secrets set YTDLP_TOKEN_TTL_SECONDS=120
+supabase secrets set YTDLP_RATE_LIMIT_BURST=8
+supabase secrets set YTDLP_RATE_LIMIT_WINDOW_SECONDS=60
+supabase secrets set YTDLP_DAILY_LIMIT=250
 ```
 
-### Build para Android
-```bash
-# Build de la web
-npm run build
+### Railway
 
-# Sincronizar con Capacitor
-npx cap sync android
+Desplegar `services/ytdlp-service/` como servicio Docker.
 
-# Abrir en Android Studio
-npx cap open android
+- Build context: `services/ytdlp-service`
+- Healthcheck: `GET /health`
+- No requiere volumen persistente para v1
+- Instala `ffmpeg` desde el `Dockerfile`
 
-# Desde Android Studio: Build → Generate Signed APK
-```
+## Validacion esperada
 
-## 📁 Estructura del proyecto
+- La web obtiene ticket desde `yt-stream`.
+- La descarga final viene del servicio Railway.
+- Tokens caducados fallan.
+- Android sigue descargando por el plugin nativo.
 
-```
-music-mhl/
-├── src/
-│   ├── components/
-│   │   ├── layout/          # AppLayout, Sidebar, BottomPlayer
-│   │   ├── music/           # TrackCard, TrackRow, LyricsPanel
-│   │   └── ui/              # Componentes shadcn/ui
-│   ├── pages/               # HomePage, SearchPage, LibraryPage...
-│   ├── store/               # musicStore.ts (Zustand)
-│   ├── lib/
-│   │   ├── api/             # musicApi.ts (Deezer, YouTube, Letras)
-│   │   ├── audioEngine.ts   # Motor de audio con Media Session API
-│   │   └── id3Writer.ts     # Escritura de metadatos MP3
-│   └── types/               # Tipos TypeScript
-├── supabase/
-│   └── functions/
-│       ├── deezer-search/   # Proxy para API de Deezer
-│       └── yt-stream/       # Stream de audio YouTube
-├── android/                 # Proyecto Android (Capacitor)
-└── public/                  # Assets estáticos
-```
+## Contexto para agentes
 
-## 🗺️ Roadmap
-
-### v0.2.0 (próximamente)
-- [ ] Reproducción completa via YouTube
-- [ ] Audio en background al bloquear pantalla Android
-- [ ] Notificaciones nativas de descarga
-- [ ] Páginas de artista y álbum
-- [ ] Charts por país en tiempo real
-
-### v0.3.0
-- [ ] Modo offline completo
-- [ ] Sincronización entre dispositivos
-- [ ] Ecualizador de audio
-- [ ] Crossfade entre canciones
-- [ ] Sleep timer
-
-### Futuro
-- [ ] iOS (via Capacitor)
-- [ ] Desktop (via Tauri)
-- [ ] Importar playlists de Spotify
-
-## 🤝 Contribuir
-
-Las contribuciones son bienvenidas.
-
-1. Fork el repositorio
-2. Crea una rama: `git checkout -b feature/nueva-feature`
-3. Commit: `git commit -m 'Add: nueva feature'`
-4. Push: `git push origin feature/nueva-feature`
-5. Abre un Pull Request
-
-## ⚠️ Aviso legal
-
-MHL Music es un proyecto personal de código abierto con fines 
-educativos. Utiliza APIs públicas de terceros respetando sus 
-términos de servicio. No almacena ni redistribuye contenido 
-protegido por derechos de autor.
-
-## 📄 Licencia
-
-MIT License — úsalo, modifícalo y distribúyelo libremente.
-
----
-Hecho con ♥ por [Paul](https://github.com/ParaSyteTwo/)
-```
+- Fuente principal: `docs/context.md`
+- Resumen corto para Claude: `claude.md`

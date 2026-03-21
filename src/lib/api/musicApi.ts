@@ -1,6 +1,25 @@
 import { Track } from '@/types/music';
-import { supabase } from '@/integrations/supabase/client';
+import { createClient } from '@supabase/supabase-js';
 import { Capacitor } from '@capacitor/core';
+
+let _supabaseClient: ReturnType<typeof createClient> | null = null;
+
+function getSupabaseClient() {
+  if (_supabaseClient) return _supabaseClient;
+
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+  const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+
+  _supabaseClient = createClient(supabaseUrl || '', supabaseKey || '', {
+    auth: {
+      storage: localStorage,
+      persistSession: true,
+      autoRefreshToken: true,
+    },
+  });
+
+  return _supabaseClient;
+}
 
 // ─── Map pre-transformed data from edge function ───
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -19,6 +38,7 @@ function mapProxiedTrack(t: any): Track {
 
 // ─── Helper: call Supabase edge function for Deezer ───
 async function callDeezerProxy(body: Record<string, unknown>) {
+  const supabase = getSupabaseClient();
   const { data, error } = await supabase.functions.invoke('deezer-search', { body });
   if (error) throw new Error(error.message || 'Edge function error');
   return data;
@@ -60,9 +80,17 @@ interface DownloadOptions {
   quality?: 'alta' | 'media' | 'baja';
 }
 
+interface WebDownloadTicketResponse {
+  success: boolean;
+  downloadUrl?: string;
+  fileName?: string;
+  expiresAt?: string;
+  error?: string;
+}
+
 // ─── Download track audio ───
 // Android: yt-dlp local (via YtDlpPlugin nativo)
-// Web: YouTube Search And Download API (via RapidAPI proxy en Edge Function)
+// Web: Supabase broker issues a short-lived ticket for the external yt-dlp service
 export async function downloadTrackAudio(
   track: Track,
   onProgress?: (progress: number) => void,
@@ -95,29 +123,44 @@ export async function downloadTrackAudio(
     throw new Error(lastError || 'No se pudo descargar');
   }
 
-  // Web: Edge Function descarga el audio server-side (evita CORS de googlevideo.com)
-  // Usamos fetch directo para recibir bytes en lugar de JSON
   onProgress?.(15);
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
   const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
 
-  const res = await fetch(`${supabaseUrl}/functions/v1/deezer-search`, {
+  const ticketRes = await fetch(`${supabaseUrl}/functions/v1/yt-stream`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'apikey': supabaseKey,
       'Authorization': `Bearer ${supabaseKey}`,
     },
-    body: JSON.stringify({ action: 'webDownload', title: track.title, artist: track.artist }),
+    body: JSON.stringify({
+      action: 'webDownloadTicket',
+      title: track.title,
+      artist: track.artist,
+      format: options.format ?? 'mp3',
+    }),
   });
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: 'Error desconocido' }));
+  if (!ticketRes.ok) {
+    const err = await ticketRes.json().catch(() => ({ error: 'Error desconocido' }));
     throw new Error(err.error || 'Error descargando audio');
   }
 
-  onProgress?.(80);
-  const buffer = await res.arrayBuffer();
+  const ticket = (await ticketRes.json()) as WebDownloadTicketResponse;
+  if (!ticket.success || !ticket.downloadUrl) {
+    throw new Error(ticket.error || 'No se pudo obtener el ticket de descarga');
+  }
+
+  onProgress?.(45);
+  const audioRes = await fetch(ticket.downloadUrl);
+  if (!audioRes.ok) {
+    const err = await audioRes.json().catch(() => ({ error: 'Error descargando audio' }));
+    throw new Error(err.error || 'Error descargando audio');
+  }
+
+  onProgress?.(85);
+  const buffer = await audioRes.arrayBuffer();
   return buffer;
 }
 

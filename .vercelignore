@@ -2,3 +2,14 @@ node_modules
 bun.lockb
 .env
 .env.local
+android
+services
+supabase
+docs
+.claude
+.tmp-ytdlp
+dev-dist
+dist
+*.apk
+*.mp3
+.tmp-*
