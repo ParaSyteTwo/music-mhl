@@ -138,6 +138,7 @@ export async function downloadTrackAudio(
       action: 'webDownloadTicket',
       title: track.title,
       artist: track.artist,
+      album: track.album ?? '',
       format: options.format ?? 'mp3',
     }),
   });

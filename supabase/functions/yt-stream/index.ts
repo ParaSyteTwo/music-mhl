@@ -151,6 +151,7 @@ Deno.serve(async (req: Request) => {
 
     const title = typeof body?.title === "string" ? body.title.trim() : "";
     const artist = typeof body?.artist === "string" ? body.artist.trim() : "";
+    const album = typeof body?.album === "string" ? body.album.trim() : "";
     const format = body?.format === "aac" ? "aac" : "mp3";
 
     if (!title || !artist) {
@@ -176,7 +177,7 @@ Deno.serve(async (req: Request) => {
     const resolveRes = await callService("/resolve", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title, artist, format }),
+      body: JSON.stringify({ title, artist, album, format }),
     });
 
     const resolvePayload = await resolveRes.json();
