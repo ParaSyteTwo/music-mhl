@@ -10,7 +10,7 @@ import tempfile
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from threading import BoundedSemaphore
+from threading import BoundedSemaphore, Lock
 from typing import Any
 
 from fastapi import FastAPI, Header, HTTPException, Query
@@ -28,6 +28,161 @@ TOKEN_TTL_SECONDS = int(os.getenv("TOKEN_TTL_SECONDS", "120"))
 MAX_CONCURRENT_DOWNLOADS = int(os.getenv("MAX_CONCURRENT_DOWNLOADS", "3"))
 TEMP_DIR = Path(os.getenv("TEMP_DIR", "/tmp/ytdlp-service"))
 RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY", "").strip()
+YTAPI_KEY = os.getenv("YTAPI_KEY", "").strip()  # yt-api.p.rapidapi.com — ÚLTIMO RECURSO (300 req/mes)
+
+# ── Umbrales para activar el último recurso ──────────────────────────────────
+# Se necesitan 100 canciones DISTINTAS fallando de forma CONSECUTIVA.
+# Cualquier descarga exitosa reinicia el contador a 0.
+YTAPI_MIN_YTDLP_FAILURES = int(os.getenv("YTAPI_MIN_YTDLP_FAILURES", "100"))
+YTAPI_MAX_DAILY           = int(os.getenv("YTAPI_MAX_DAILY", "10"))
+
+# Anti-abuso: si se detectan N canciones distintas fallando en menos de M segundos
+# se interpreta como intento de forzar el umbral artificialmente.
+ABUSE_WINDOW_SECONDS = int(os.getenv("ABUSE_WINDOW_SECONDS", "300"))   # 5 minutos
+ABUSE_THRESHOLD      = int(os.getenv("ABUSE_THRESHOLD", "20"))         # 20 únicas en 5 min
+ABUSE_COOLDOWN_HOURS = int(os.getenv("ABUSE_COOLDOWN_HOURS", "6"))     # cooldown 6 horas
+
+# ── Estado persistente en disco ──────────────────────────────────────────────
+_STATS_FILE = Path(os.getenv("TEMP_DIR", "/tmp/ytdlp-service")) / "ytapi_stats.json"
+_stats_lock = Lock()
+
+_EMPTY_STATS: dict = {
+    # Fallos consecutivos de canciones únicas (se reinicia en éxito)
+    "consecutive_unique_ids": [],    # lista de video_ids fallados en la racha actual
+    # Ventana deslizante anti-abuso: lista de timestamps (float unix)
+    "abuse_window_ts": [],
+    # Cooldown activo: timestamp unix hasta el que está bloqueado (0 = sin cooldown)
+    "abuse_cooldown_until": 0.0,
+    # Uso diario de yt-api
+    "ytapi_date": "",
+    "ytapi_used_today": 0,
+}
+
+
+def _load_stats() -> dict:
+    try:
+        if _STATS_FILE.exists():
+            data = json.loads(_STATS_FILE.read_text())
+            # Rellenar claves nuevas si el archivo es de versión anterior
+            for k, v in _EMPTY_STATS.items():
+                data.setdefault(k, v)
+            return data
+    except Exception:
+        pass
+    return dict(_EMPTY_STATS)
+
+
+def _save_stats(stats: dict) -> None:
+    try:
+        _STATS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _STATS_FILE.write_text(json.dumps(stats))
+    except Exception:
+        pass
+
+
+def record_ytdlp_failure(video_id: str) -> None:
+    """
+    Registra que video_id falló en yt-dlp.
+    - Solo cuenta si el video_id es nuevo en la racha actual.
+    - Actualiza la ventana anti-abuso.
+    - Si se detecta abuso, activa cooldown y reinicia el contador.
+    """
+    with _stats_lock:
+        stats = _load_stats()
+        now = datetime.now(timezone.utc).timestamp()
+
+        # ── Ventana anti-abuso (últimos ABUSE_WINDOW_SECONDS) ─────────────
+        window_start = now - ABUSE_WINDOW_SECONDS
+        recent = [t for t in stats["abuse_window_ts"] if t >= window_start]
+
+        # Contar IDs únicos recientes en la ventana
+        # (Para esto necesitaríamos guardar (ts, id) pero simplificamos:
+        #  si hay demasiados fallos en poco tiempo es abuso independientemente del ID)
+        recent.append(now)
+        stats["abuse_window_ts"] = recent
+
+        if len(recent) >= ABUSE_THRESHOLD:
+            # Abuso detectado: activar cooldown y REINICIAR contador
+            cooldown_until = now + ABUSE_COOLDOWN_HOURS * 3600
+            stats["abuse_cooldown_until"] = cooldown_until
+            stats["consecutive_unique_ids"] = []
+            stats["abuse_window_ts"] = []
+            _save_stats(stats)
+            return  # No contar este fallo
+
+        # ── Contador de fallos consecutivos únicos ─────────────────────────
+        unique_ids: list = stats["consecutive_unique_ids"]
+        if video_id not in unique_ids:
+            unique_ids.append(video_id)
+            stats["consecutive_unique_ids"] = unique_ids
+
+        _save_stats(stats)
+
+
+def record_ytdlp_success() -> None:
+    """Cualquier descarga exitosa reinicia el contador de fallos consecutivos."""
+    with _stats_lock:
+        stats = _load_stats()
+        stats["consecutive_unique_ids"] = []
+        _save_stats(stats)
+
+
+def can_use_ytapi() -> tuple[bool, str]:
+    """
+    Devuelve (permitido, motivo).
+    Condiciones:
+      1. YTAPI_KEY configurada
+      2. Sin cooldown de abuso activo
+      3. >= 100 canciones DISTINTAS fallando de forma CONSECUTIVA (sin éxito entre medias)
+      4. Usos de yt-api hoy < YTAPI_MAX_DAILY
+    """
+    if not YTAPI_KEY:
+        return False, "YTAPI_KEY no configurada"
+
+    with _stats_lock:
+        stats = _load_stats()
+        now = datetime.now(timezone.utc).timestamp()
+
+        # Comprobar cooldown de abuso
+        cooldown_until = stats.get("abuse_cooldown_until", 0.0)
+        if cooldown_until > now:
+            remaining_h = (cooldown_until - now) / 3600
+            return False, f"Cooldown por abuso activo — se libera en {remaining_h:.1f}h"
+
+        unique_failures = len(stats.get("consecutive_unique_ids", []))
+        if unique_failures < YTAPI_MIN_YTDLP_FAILURES:
+            remaining = YTAPI_MIN_YTDLP_FAILURES - unique_failures
+            return False, (
+                f"yt-dlp lleva {unique_failures} canciones únicas fallando consecutivamente "
+                f"— faltan {remaining} para activar yt-api"
+            )
+
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        if stats.get("ytapi_date") != today:
+            stats["ytapi_date"] = today
+            stats["ytapi_used_today"] = 0
+            _save_stats(stats)
+
+        used_today = stats.get("ytapi_used_today", 0)
+        if used_today >= YTAPI_MAX_DAILY:
+            return False, f"Límite diario de yt-api alcanzado ({used_today}/{YTAPI_MAX_DAILY})"
+
+        return True, (
+            f"yt-api disponible ({used_today}/{YTAPI_MAX_DAILY} hoy, "
+            f"{unique_failures} únicas fallando consecutivamente)"
+        )
+
+
+def record_ytapi_use() -> None:
+    """Registra un uso exitoso de yt-api."""
+    with _stats_lock:
+        stats = _load_stats()
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        if stats.get("ytapi_date") != today:
+            stats["ytapi_date"] = today
+            stats["ytapi_used_today"] = 0
+        stats["ytapi_used_today"] = stats.get("ytapi_used_today", 0) + 1
+        _save_stats(stats)
 YOUTUBE_COOKIES = os.getenv("YOUTUBE_COOKIES", "")
 YOUTUBE_COOKIES_B64 = os.getenv("YOUTUBE_COOKIES_B64", "").strip()
 ALLOWED_ORIGINS = [
@@ -325,6 +480,55 @@ def download_via_rapidapi(video_id: str, format_name: str, workdir: Path) -> Pat
     return target_path
 
 
+def download_via_ytapi(video_id: str, format_name: str, workdir: Path) -> Path:
+    """
+    ÚLTIMO RECURSO — yt-api.p.rapidapi.com
+    Solo llamar cuando yt-dlp Y RapidAPI han fallado completamente.
+    Límite: 300 req/mes. No usar para errores leves.
+    """
+    if not YTAPI_KEY:
+        raise RuntimeError("YTAPI_KEY no configurada — último recurso no disponible")
+
+    response = httpx.get(
+        f"https://yt-api.p.rapidapi.com/dl?id={video_id}&cgeo=DE",
+        headers={
+            "x-rapidapi-key": YTAPI_KEY,
+            "x-rapidapi-host": "yt-api.p.rapidapi.com",
+        },
+        timeout=30,
+    )
+    response.raise_for_status()
+    payload = response.json()
+
+    audio_url: str | None = None
+
+    # Formato principal: {"link": "https://..."}
+    if isinstance(payload.get("link"), str) and payload["link"].startswith("http"):
+        audio_url = payload["link"]
+
+    # Formato alternativo: {"formats": [{"url": "...", "mimeType": "audio/..."}]}
+    if not audio_url:
+        formats = payload.get("formats") or []
+        audio_formats = [f for f in formats if "audio" in str(f.get("mimeType", "")) and f.get("url")]
+        if audio_formats:
+            audio_url = audio_formats[0]["url"]
+
+    if not audio_url:
+        raise RuntimeError(f"yt-api no devolvió URL de audio. Respuesta: {list(payload.keys())}")
+
+    source_path = workdir / "ytapi-source"
+    with httpx.stream("GET", audio_url, follow_redirects=True, timeout=60) as r:
+        r.raise_for_status()
+        with source_path.open("wb") as handle:
+            for chunk in r.iter_bytes():
+                handle.write(chunk)
+
+    target_ext = "m4a" if format_name == "aac" else "mp3"
+    target_path = workdir / f"audio.{target_ext}"
+    convert_audio(source_path, target_path, format_name)
+    return target_path
+
+
 def cleanup_job(workdir: Path) -> None:
     shutil.rmtree(workdir, ignore_errors=True)
     download_slots.release()
@@ -350,6 +554,31 @@ app.add_middleware(
 @app.get("/health")
 async def health() -> dict[str, Any]:
     return {"ok": True, "service": "ytdlp-service"}
+
+
+@app.get("/ytapi-stats")
+async def ytapi_stats(x_api_key: str = Header(default="")) -> dict[str, Any]:
+    if SERVICE_API_KEY and x_api_key != SERVICE_API_KEY:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    stats = _load_stats()
+    allowed, reason = can_use_ytapi()
+    now = datetime.now(timezone.utc)
+    today = now.strftime("%Y-%m-%d")
+    if stats.get("ytapi_date") != today:
+        stats["ytapi_used_today"] = 0
+    unique_failures = len(stats.get("consecutive_unique_ids", []))
+    cooldown_until = stats.get("abuse_cooldown_until", 0.0)
+    return {
+        "consecutive_unique_failures": unique_failures,
+        "failures_needed_to_unlock": YTAPI_MIN_YTDLP_FAILURES,
+        "ytapi_unlocked": unique_failures >= YTAPI_MIN_YTDLP_FAILURES,
+        "ytapi_used_today": stats.get("ytapi_used_today", 0),
+        "ytapi_max_daily": YTAPI_MAX_DAILY,
+        "ytapi_available": allowed,
+        "abuse_cooldown_active": cooldown_until > now.timestamp(),
+        "abuse_cooldown_until": datetime.fromtimestamp(cooldown_until, tz=timezone.utc).isoformat() if cooldown_until > 0 else None,
+        "status": reason,
+    }
 
 
 @app.get("/search")
@@ -424,8 +653,32 @@ async def download(token: str = Query(...)) -> FileResponse:
                 ydl.download([f"https://www.youtube.com/watch?v={video_id}"])
             expected_ext = "m4a" if format_name == "aac" else "mp3"
             output = next(workdir.glob(f"audio*.{expected_ext}"), None)
-        except Exception:
-            output = download_via_rapidapi(video_id, format_name, workdir)
+        except Exception as ytdlp_err:
+            # yt-dlp murió completamente — registrar fallo único consecutivo
+            record_ytdlp_failure(video_id)
+
+            try:
+                output = download_via_rapidapi(video_id, format_name, workdir)
+            except Exception as rapid_err:
+                # RapidAPI también falló — comprobar si yt-api está desbloqueada
+                allowed, reason = can_use_ytapi()
+                if not allowed:
+                    raise RuntimeError(
+                        f"yt-dlp falló y yt-api no disponible ({reason}). "
+                        f"yt-dlp: {ytdlp_err} | rapidapi: {rapid_err}"
+                    ) from rapid_err
+
+                try:
+                    output = download_via_ytapi(video_id, format_name, workdir)
+                    record_ytapi_use()
+                except Exception as ytapi_err:
+                    raise RuntimeError(
+                        f"Todos los métodos fallaron. "
+                        f"yt-dlp: {ytdlp_err} | rapidapi: {rapid_err} | ytapi: {ytapi_err}"
+                    ) from ytapi_err
+        else:
+            # yt-dlp tuvo éxito — reiniciar contador de fallos consecutivos
+            record_ytdlp_success()
 
         if output is None:
             output = next(iter(workdir.glob("*")), None)

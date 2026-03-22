@@ -267,6 +267,7 @@ export const useMusicStore = create<MusicStore>()(
           const { downloadFormat, mp3Quality } = get();
           const maxAttempts = 3;
 
+          try {
           for (let attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
               const attemptLabel = maxAttempts > 1 ? ` (intento ${attempt}/${maxAttempts})` : '';
@@ -398,9 +399,10 @@ export const useMusicStore = create<MusicStore>()(
               }
             }
           }
-
-          set((s) => ({ activeDownloads: Math.max(0, s.activeDownloads - 1) }));
-          get().processDownloadQueue();
+          } finally {
+            set((s) => ({ activeDownloads: Math.max(0, s.activeDownloads - 1) }));
+            get().processDownloadQueue();
+          }
         },
 
         startDownload: async (track) => {
