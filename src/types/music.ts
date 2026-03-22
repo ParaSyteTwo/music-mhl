@@ -53,6 +53,6 @@ export interface Download {
   id: string;
   track: Track;
   progress: number;
-  status: 'downloading' | 'completed' | 'error';
+  status: 'queued' | 'downloading' | 'completed' | 'error';
   error?: string;
 }

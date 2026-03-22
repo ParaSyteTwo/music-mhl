@@ -1,5 +1,5 @@
 import { useMusicStore } from '@/store/musicStore';
-import { CheckCircle, Loader2, XCircle, Music, Trash2 } from 'lucide-react';
+import { CheckCircle, Loader2, XCircle, Music, Trash2, Clock } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 function formatDuration(seconds: number) {
@@ -21,6 +21,7 @@ export default function DownloadsPage() {
 
   const completed = downloads.filter((d) => d.status === 'completed');
   const active = downloads.filter((d) => d.status === 'downloading');
+  const queued = downloads.filter((d) => d.status === 'queued');
   const failed = downloads.filter((d) => d.status === 'error');
 
   return (
@@ -32,7 +33,7 @@ export default function DownloadsPage() {
     >
       <h1 className="text-lg sm:text-2xl font-semibold tracking-tighter mb-1 sm:mb-2">Descargas</h1>
       <p className="text-xs sm:text-sm text-[#666660] mb-6 sm:mb-8">
-        <span className="tabular-nums">{downloads.length}</span> total · <span className="tabular-nums">{active.length}</span> activas
+        <span className="tabular-nums">{downloads.length}</span> total · <span className="tabular-nums">{active.length}</span> activas · <span className="tabular-nums">{queued.length}</span> en cola
       </p>
 
       {/* Active */}
@@ -64,6 +65,31 @@ export default function DownloadsPage() {
                   </div>
                 </div>
                 <span className="text-xs tabular-nums text-[#666660]">{dl.progress}%</span>
+              </motion.div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Queued */}
+      {queued.length > 0 && (
+        <section className="mb-8">
+          <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">En cola</h2>
+          <div className="space-y-1">
+            {queued.map((dl, i) => (
+              <motion.div
+                key={dl.id}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.05 }}
+                className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.04)]"
+              >
+                <Clock className="w-4 h-4 text-zinc-500 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate text-[#F5F5F0]">{dl.track.title}</p>
+                  <p className="text-xs text-[#666660]">{dl.track.artist}</p>
+                </div>
+                <span className="text-xs text-zinc-500">En cola...</span>
               </motion.div>
             ))}
           </div>

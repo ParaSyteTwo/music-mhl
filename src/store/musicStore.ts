@@ -45,8 +45,12 @@ interface MusicStore {
 
   // Downloads
   downloads: Download[];
+  downloadQueue: string[];
+  activeDownloads: number;
   startDownload: (track: Track) => void;
   removeDownload: (id: string) => void;
+  processDownloadQueue: () => Promise<void>;
+  _executeDownload: (track: Track, id: string) => Promise<void>;
 
   // Download folder (web only, not persisted across sessions)
   downloadFolder: FileSystemDirectoryHandle | null;
@@ -231,23 +235,34 @@ export const useMusicStore = create<MusicStore>()(
 
         // ─── Downloads ───
         downloads: [],
+        downloadQueue: [],
+        activeDownloads: 0,
 
-        startDownload: async (track) => {
-          // Check WiFi-only setting
-          if (get().downloadWifiOnly && !isOnWifi()) {
-            toast.error('Descarga cancelada: solo WiFi activado', { duration: 4000 });
-            return;
+        processDownloadQueue: async () => {
+          const { downloadQueue, activeDownloads, downloads } = get();
+          if (downloadQueue.length === 0 || activeDownloads >= 2) return;
+
+          // Delay de 3s entre descargas para no golpear rate limit
+          await new Promise((r) => setTimeout(r, 3000));
+
+          const [nextId, ...rest] = downloadQueue;
+          set({ downloadQueue: rest });
+
+          const dl = get().downloads.find((d) => d.id === nextId);
+          if (dl && dl.status === 'queued') {
+            await get()._executeDownload(dl.track, nextId);
           }
+        },
 
-          const id = `d${Date.now()}`;
-          set((s) => ({
-            downloads: [...s.downloads, { id, track, progress: 0, status: 'downloading' as const }],
-          }));
+        _executeDownload: async (track: Track, id: string) => {
+          set((s) => ({ activeDownloads: s.activeDownloads + 1 }));
 
           const updateDl = (patch: Partial<Download>) =>
             set((s) => ({
               downloads: s.downloads.map((d) => (d.id === id ? { ...d, ...patch } : d)),
             }));
+
+          updateDl({ status: 'downloading', progress: 5 });
 
           const { downloadFormat, mp3Quality } = get();
           const maxAttempts = 3;
@@ -382,6 +397,32 @@ export const useMusicStore = create<MusicStore>()(
                 await new Promise((resolve) => setTimeout(resolve, 2000));
               }
             }
+          }
+
+          set((s) => ({ activeDownloads: Math.max(0, s.activeDownloads - 1) }));
+          get().processDownloadQueue();
+        },
+
+        startDownload: async (track) => {
+          // Check WiFi-only setting
+          if (get().downloadWifiOnly && !isOnWifi()) {
+            toast.error('Descarga cancelada: solo WiFi activado', { duration: 4000 });
+            return;
+          }
+
+          // Si ya está en cola o descargando, ignorar
+          const existing = get().downloads.find((d) => d.track.id === track.id);
+          if (existing && (existing.status === 'downloading' || existing.status === 'queued')) return;
+
+          const id = `d${Date.now()}`;
+          set((s) => ({
+            downloads: [...s.downloads, { id, track, progress: 0, status: 'queued' as const }],
+          }));
+
+          if (get().activeDownloads < 2) {
+            await get()._executeDownload(track, id);
+          } else {
+            set((s) => ({ downloadQueue: [...s.downloadQueue, id] }));
           }
         },
 
