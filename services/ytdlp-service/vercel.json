@@ -1,9 +1,0 @@
-{
-  "version": 2,
-  "rewrites": [
-    { "source": "/health", "destination": "/api/index.py" },
-    { "source": "/search", "destination": "/api/index.py" },
-    { "source": "/resolve", "destination": "/api/index.py" },
-    { "source": "/download", "destination": "/api/index.py" }
-  ]
-}
