@@ -130,32 +130,74 @@ def search_candidates(query: str, limit: int = 5) -> list[dict[str, Any]]:
     return results
 
 
-def score_candidate(candidate: dict[str, Any], target_title: str, target_artist: str) -> int:
+def score_candidate(
+    candidate: dict[str, Any],
+    target_title: str,
+    target_artist: str,
+    target_album: str = "",
+) -> int:
     title = candidate.get("title", "").lower()
     channel = candidate.get("channel", "").lower()
     wanted_title = target_title.lower()
     wanted_artist = target_artist.lower()
+    wanted_album = target_album.lower()
 
     score = 0
+
+    # --- Coincidencias básicas ---
     if wanted_title and wanted_title in title:
         score += 30
     if wanted_artist and wanted_artist in title:
         score += 20
     if wanted_artist and wanted_artist in channel:
         score += 18
+    if wanted_album and wanted_album in title:
+        score += 8  # Álbum correcto ayuda a desambiguar
+
+    # --- Bonus: versiones de audio limpio ---
     if "official audio" in title:
+        score += 25
+    if "audio only" in title:
         score += 20
+    if "radio edit" in title or "radio version" in title:
+        score += 18
     if "topic" in channel:
-        score += 8
+        score += 12  # Canal oficial de YouTube Music
     if "lyrics" in title:
         score += 5
+
+    # --- PENALIZACIONES: music videos y clips ---
+    MV_KEYWORDS = [
+        "music video", "official video", "official music video",
+        "mv", "videoclip", "video clip", "official clip",
+        "video oficial",
+    ]
+    for kw in MV_KEYWORDS:
+        if kw in title:
+            score -= 25
+            break  # Una penalización por candidato
+
+    # --- PENALIZACIONES: contenido no deseado ---
     if "karaoke" in title:
         score -= 30
-    if "reaction" in title or "live" in title:
+    if "reaction" in title:
+        score -= 15
+    if "cover" in title and wanted_artist not in channel:
+        score -= 12  # Cover de otro artista
+    if "live" in title or "en vivo" in title or "concert" in title:
         score -= 10
+    if "remix" in title and "official" not in title:
+        score -= 8
+    if "instrumental" in title:
+        score -= 8
+    if "extended" in title or "extended mix" in title:
+        score -= 5
+
+    # --- Duración: 90-600 segundos (1:30-10 min) ---
     duration = int(candidate.get("duration") or 0)
     if 90 <= duration <= 600:
         score += 10
+
     return score
 
 
@@ -332,6 +374,7 @@ async def resolve(
 
     title = str(payload.get("title") or "").strip()
     artist = str(payload.get("artist") or "").strip()
+    album = str(payload.get("album") or "").strip()
     format_name = str(payload.get("format") or "mp3").strip().lower()
 
     if not title or not artist:
@@ -340,14 +383,14 @@ async def resolve(
         raise HTTPException(status_code=400, detail="format must be mp3 or aac")
 
     try:
-        candidates = search_candidates(f"{title} {artist} official audio", limit=5)
+        candidates = search_candidates(f"{title} {artist} official audio", limit=8)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Resolve failed: {exc}") from exc
 
     if not candidates:
         raise HTTPException(status_code=404, detail="No YouTube candidates found")
 
-    chosen = max(candidates, key=lambda item: score_candidate(item, title, artist))
+    chosen = max(candidates, key=lambda item: score_candidate(item, title, artist, album))
     safe_name = sanitize_filename(f"{title} - {artist}.{format_name}")
     token_info = build_token(chosen["videoId"], safe_name, format_name)
     return {
