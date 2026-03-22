@@ -36,3 +36,14 @@ android/.gradle/
 
 # Claude Code - datos de sesión (privado)
 memory.md
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Temp files
+.tmp-*
+
+# Claude worktrees (embedded git repos)
+.claude/worktrees/
