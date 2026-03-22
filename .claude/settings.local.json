@@ -22,7 +22,9 @@
       "Read(//d/Proyectos/creador-max-design/**)",
       "Bash(claude plugin:*)",
       "Bash(gh repo:*)",
-      "Bash(pip install:*)"
+      "Bash(pip install:*)",
+      "Bash(curl -s https://raw.githubusercontent.com/anthropics/claude-plugins-official/main/README.md)",
+      "Bash(grep -E \"^\\\\s*[-*]\\\\s+\\\\`[a-z]\")"
     ]
   }
 }
