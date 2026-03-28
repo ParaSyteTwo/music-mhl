@@ -177,6 +177,15 @@ export default function SettingsPage() {
             <div>
               <p className="text-sm text-[#F5F5F0] font-medium">MHL Music</p>
               <p className="text-xs text-[#666660] mt-0.5">Tu música. Sin límites.</p>
+              <a
+                href="https://pauldev.es"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs mt-2 block"
+                style={{ color: "rgba(102,102,96,0.6)" }}
+              >
+                Desarrollado por Paul · pauldev.es
+              </a>
             </div>
           </div>
         </div>
