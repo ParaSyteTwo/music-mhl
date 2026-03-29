@@ -105,7 +105,12 @@ export async function downloadTrackAudio(
     if (!nativeResults.length) throw new Error('No se encontró en YouTube');
 
     onProgress?.(25);
-    const candidates = nativeResults.slice(0, 4);
+    const scored = nativeResults
+      .slice(0, 6)
+      .map((r) => ({ ...r, dScore: track.duration ? Math.abs(r.duration - track.duration) : 999 }))
+      .sort((a, b) => a.dScore - b.dScore)
+      .slice(0, 3);
+    const candidates = scored;
     let lastError = '';
 
     for (const candidate of candidates) {
@@ -140,6 +145,7 @@ export async function downloadTrackAudio(
       artist: track.artist,
       album: track.album ?? '',
       format: options.format ?? 'mp3',
+      duration: track.duration ?? 0,
     }),
   });
 

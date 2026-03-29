@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useMusicStore } from '@/store/musicStore';
 import {
@@ -14,6 +14,7 @@ import {
   Disc,
   Play,
   Trash2,
+  X,
 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
@@ -23,10 +24,20 @@ import type { LocalTrack } from '@/types/music';
 
 type Tab = 'albums' | 'artists' | 'genres' | 'topPlayed' | 'tracks';
 
+interface CollectionEntry {
+  type: 'album' | 'artist';
+  name: string;
+  subtitle: string;
+  cover: string | null;
+  colorGradient?: string;
+  tracks: ReturnType<typeof deriveAlbums>[number]['tracks'];
+}
+
 export default function LibraryPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = useState<Tab>('albums');
   const [showImportOptions, setShowImportOptions] = useState(false);
+  const [selectedCollection, setSelectedCollection] = useState<CollectionEntry | null>(null);
 
   const {
     localLibrary,
@@ -382,7 +393,7 @@ export default function LibraryPage() {
                 exit={{ opacity: 0, y: -8 }}
                 transition={{ duration: 0.2 }}
               >
-                <AlbumsGrid albums={albums} onPlay={playLocalTrack} onRemove={removeLocalTrack} />
+                <AlbumsGrid albums={albums} onPlay={playLocalTrack} onRemove={removeLocalTrack} onOpenCollection={setSelectedCollection} />
               </motion.div>
             )}
 
@@ -394,7 +405,7 @@ export default function LibraryPage() {
                 exit={{ opacity: 0, y: -8 }}
                 transition={{ duration: 0.2 }}
               >
-                <ArtistsGrid artists={artists} onPlay={playLocalTrack} onRemove={removeLocalTrack} />
+                <ArtistsGrid artists={artists} onPlay={playLocalTrack} onRemove={removeLocalTrack} onOpenCollection={setSelectedCollection} />
               </motion.div>
             )}
 
@@ -444,6 +455,123 @@ export default function LibraryPage() {
           </AnimatePresence>
         </>
       )}
+      {/* Collection overlay */}
+      <AnimatePresence>
+        {selectedCollection && (
+          <CollectionOverlay
+            collection={selectedCollection}
+            onClose={() => setSelectedCollection(null)}
+            onPlay={(id) => { playLocalTrack(id); setSelectedCollection(null); }}
+            onRemove={removeLocalTrack}
+          />
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+// ─── Collection Overlay ───
+function CollectionOverlay({
+  collection,
+  onClose,
+  onPlay,
+  onRemove,
+}: {
+  collection: CollectionEntry;
+  onClose: () => void;
+  onPlay: (id: string) => void;
+  onRemove: (id: string) => void;
+}) {
+  // Cerrar con Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [onClose]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+      onClick={onClose}
+    >
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+
+      {/* Panel */}
+      <motion.div
+        initial={{ opacity: 0, y: 60 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 60 }}
+        transition={{ type: 'spring', damping: 28, stiffness: 320 }}
+        onClick={(e) => e.stopPropagation()}
+        className="relative z-10 w-full sm:max-w-lg max-h-[85vh] sm:max-h-[80vh] flex flex-col rounded-t-2xl sm:rounded-2xl bg-[#111] border border-[rgba(255,255,255,0.08)] overflow-hidden shadow-2xl"
+      >
+        {/* Header */}
+        <div className="flex items-center gap-4 p-5 border-b border-[rgba(255,255,255,0.06)] flex-shrink-0">
+          <div className="w-14 h-14 rounded-xl overflow-hidden flex-shrink-0 bg-[rgba(255,255,255,0.04)]">
+            {collection.cover ? (
+              <img src={collection.cover} alt={collection.name} className="w-full h-full object-cover" />
+            ) : (
+              <div className={`w-full h-full flex items-center justify-center ${collection.colorGradient ? `bg-gradient-to-br ${collection.colorGradient}` : 'bg-[rgba(200,240,75,0.08)]'}`}>
+                {collection.type === 'album' ? (
+                  <Disc className="w-7 h-7 text-[#555]" />
+                ) : (
+                  <Music className="w-7 h-7 text-[#555]" />
+                )}
+              </div>
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-base font-semibold text-[#F5F5F0] truncate">{collection.name}</p>
+            <p className="text-xs text-[#666660] truncate">{collection.subtitle}</p>
+            <p className="text-[10px] text-[#444] mt-0.5">
+              {collection.tracks.length} pista{collection.tracks.length !== 1 ? 's' : ''}
+            </p>
+          </div>
+          <motion.button
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            onClick={onClose}
+            className="w-8 h-8 rounded-full bg-[rgba(255,255,255,0.08)] hover:bg-[rgba(255,255,255,0.14)] flex items-center justify-center flex-shrink-0 transition-colors"
+          >
+            <X className="w-4 h-4 text-[#888]" />
+          </motion.button>
+        </div>
+
+        {/* Track list */}
+        <div className="overflow-y-auto flex-1 p-3">
+          <div className="space-y-1">
+            {collection.tracks.map((track, i) => (
+              <motion.button
+                key={track.id}
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.03 }}
+                onClick={() => onPlay(track.id)}
+                className="w-full px-3 py-2.5 rounded-xl bg-[rgba(255,255,255,0.03)] hover:bg-[rgba(200,240,75,0.08)] active:bg-[rgba(200,240,75,0.14)] transition-colors text-left flex items-center gap-3 group"
+              >
+                <Play className="w-3.5 h-3.5 text-[#C8F04B] flex-shrink-0 opacity-60 group-hover:opacity-100 transition-opacity" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-[#F5F5F0] truncate">{track.title}</p>
+                  <p className="text-xs text-[#555] truncate">{track.artist}</p>
+                </div>
+                <motion.button
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                  onClick={(e) => { e.stopPropagation(); onRemove(track.id); }}
+                  className="p-1.5 rounded opacity-0 group-hover:opacity-100 hover:bg-red-500/20 transition-all flex-shrink-0"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                </motion.button>
+              </motion.button>
+            ))}
+          </div>
+        </div>
+      </motion.div>
     </motion.div>
   );
 }
@@ -452,13 +580,13 @@ function AlbumsGrid({
   albums,
   onPlay,
   onRemove,
+  onOpenCollection,
 }: {
   albums: ReturnType<typeof deriveAlbums>;
   onPlay: (id: string) => void;
   onRemove: (id: string) => void;
+  onOpenCollection: (c: CollectionEntry) => void;
 }) {
-  const [expandedAlbum, setExpandedAlbum] = useState<string | null>(null);
-
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
@@ -473,7 +601,14 @@ function AlbumsGrid({
             <motion.div
               whileHover={{ scale: 1.02 }}
               className="w-full cursor-pointer"
-              onClick={() => setExpandedAlbum(expandedAlbum === album.id ? null : album.id)}
+              onClick={() => onOpenCollection({
+                type: 'album',
+                name: album.name,
+                subtitle: album.artist,
+                cover: album.cover ?? null,
+                colorGradient: album.colorGradient,
+                tracks: album.tracks,
+              })}
             >
               <div className="aspect-square rounded-xl overflow-hidden bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.06)] group-hover:border-[rgba(255,255,255,0.12)] transition-all relative">
                 {album.cover ? (
@@ -509,45 +644,6 @@ function AlbumsGrid({
         ))}
       </div>
 
-      {/* Expanded album view */}
-      <AnimatePresence>
-        {expandedAlbum && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            className="mt-6 p-4 rounded-xl bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.06)]"
-          >
-            {(() => {
-              const album = albums.find((a) => a.id === expandedAlbum);
-              return album ? (
-                <div className="space-y-2">
-                  <h3 className="text-sm font-semibold text-[#C8F04B] mb-3">{album.name}</h3>
-                  {album.tracks.map((track, i) => (
-                    <motion.button
-                      key={track.id}
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: i * 0.05 }}
-                      onClick={() => {
-                        onPlay(track.id);
-                        toast.success(`Reproduciendo: ${track.title}`);
-                      }}
-                      className="w-full p-3 rounded-lg bg-[rgba(255,255,255,0.06)] hover:bg-[rgba(200,240,75,0.1)] transition-colors text-left flex items-center gap-3 group"
-                    >
-                      <Play className="w-4 h-4 text-[#C8F04B] group-hover:scale-110 transition-transform" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-[#F5F5F0] truncate">{track.title}</p>
-                        <p className="text-xs text-[#666660] truncate">{track.artist}</p>
-                      </div>
-                    </motion.button>
-                  ))}
-                </div>
-              ) : null;
-            })()}
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }
@@ -557,10 +653,12 @@ function ArtistsGrid({
   artists,
   onPlay,
   onRemove,
+  onOpenCollection,
 }: {
   artists: ReturnType<typeof deriveArtists>;
   onPlay: (id: string) => void;
   onRemove: (id: string) => void;
+  onOpenCollection: (c: CollectionEntry) => void;
 }) {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
@@ -574,7 +672,13 @@ function ArtistsGrid({
         >
           <div
             className="aspect-square rounded-xl overflow-hidden bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.06)] group-hover:border-[rgba(255,255,255,0.12)] transition-all relative cursor-pointer"
-            onClick={() => onPlay(artist.tracks[0].id)}
+            onClick={() => onOpenCollection({
+              type: 'artist',
+              name: artist.name,
+              subtitle: `${artist.trackCount} pista${artist.trackCount !== 1 ? 's' : ''} · ${artist.albumCount} álbum${artist.albumCount !== 1 ? 'es' : ''}`,
+              cover: artist.cover ?? null,
+              tracks: artist.tracks,
+            })}
           >
             {artist.cover ? (
               <img src={artist.cover} alt={artist.name} className="w-full h-full object-cover" />

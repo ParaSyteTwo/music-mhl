@@ -153,6 +153,7 @@ Deno.serve(async (req: Request) => {
     const artist = typeof body?.artist === "string" ? body.artist.trim() : "";
     const album = typeof body?.album === "string" ? body.album.trim() : "";
     const format = body?.format === "aac" ? "aac" : "mp3";
+    const duration = typeof body?.duration === "number" && body.duration > 0 ? body.duration : 0;
 
     if (!title || !artist) {
       return jsonResponse({ success: false, error: "title and artist are required" }, 400);
@@ -177,7 +178,7 @@ Deno.serve(async (req: Request) => {
     const resolveRes = await callService("/resolve", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title, artist, album, format }),
+      body: JSON.stringify({ title, artist, album, format, duration }),
     });
 
     const resolvePayload = await resolveRes.json();

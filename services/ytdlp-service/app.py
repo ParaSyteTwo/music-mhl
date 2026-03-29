@@ -290,6 +290,7 @@ def score_candidate(
     target_title: str,
     target_artist: str,
     target_album: str = "",
+    target_duration: int = 0,
 ) -> int:
     title = candidate.get("title", "").lower()
     channel = candidate.get("channel", "").lower()
@@ -308,6 +309,18 @@ def score_candidate(
         score += 18
     if wanted_album and wanted_album in title:
         score += 8  # Álbum correcto ayuda a desambiguar
+
+    # --- Duración: comparar con la duración conocida de Deezer ---
+    if target_duration and target_duration > 0:
+        yt_dur = int(candidate.get("duration") or 0)
+        if yt_dur > 0:
+            diff_pct = abs(yt_dur - target_duration) / target_duration
+            if diff_pct <= 0.10:
+                score += 25   # diferencia ≤10% → fuerte coincidencia
+            elif diff_pct <= 0.20:
+                score += 10   # diferencia ≤20% → coincidencia razonable
+            elif diff_pct >= 0.40:
+                score -= 30   # diferencia ≥40% → probable canción equivocada
 
     # --- Bonus: versiones de audio limpio ---
     if "official audio" in title:
@@ -605,6 +618,7 @@ async def resolve(
     artist = str(payload.get("artist") or "").strip()
     album = str(payload.get("album") or "").strip()
     format_name = str(payload.get("format") or "mp3").strip().lower()
+    duration = int(payload.get("duration") or 0)
 
     if not title or not artist:
         raise HTTPException(status_code=400, detail="title and artist are required")
@@ -619,7 +633,7 @@ async def resolve(
     if not candidates:
         raise HTTPException(status_code=404, detail="No YouTube candidates found")
 
-    chosen = max(candidates, key=lambda item: score_candidate(item, title, artist, album))
+    chosen = max(candidates, key=lambda item: score_candidate(item, title, artist, album, duration))
     safe_name = sanitize_filename(f"{title} - {artist}.{format_name}")
     token_info = build_token(chosen["videoId"], safe_name, format_name)
     return {
