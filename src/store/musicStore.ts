@@ -86,6 +86,7 @@ interface MusicStore {
   savedLocalPaths: string[];
 
   importLocalFiles: (files: FileList | File[], options?: { silent?: boolean }) => Promise<void>;
+  importScannedTracks: (tracks: LocalTrack[], options?: { silent?: boolean }) => void;
   rescanLocalLibrary: () => Promise<void>;
   playLocalTrack: (id: string) => Promise<void>;
   removeLocalTrack: (id: string) => void;
@@ -540,6 +541,48 @@ export const useMusicStore = create<MusicStore>()(
             if (!options?.silent) {
               toast.error(`Error al importar: ${errorMsg}`, { duration: 5000 });
             }
+          }
+        },
+
+        importScannedTracks: (tracks, options) => {
+          const existingByPath = new Map(get().localLibrary.map((track) => [track.localPath, track]));
+          const nextTracks = tracks.map((track) => {
+            const existing = existingByPath.get(track.localPath);
+            return existing
+              ? {
+                  ...track,
+                  id: existing.id,
+                  playCount: existing.playCount ?? track.playCount ?? 0,
+                  importedAt: existing.importedAt ?? track.importedAt,
+                }
+              : track;
+          });
+
+          const scannedPaths = new Set(nextTracks.map((track) => track.localPath));
+          const nonDocumentTracks = get().localLibrary.filter((track) => track.localSource !== 'documents');
+          const mergedLibrary = [
+            ...nonDocumentTracks,
+            ...nextTracks,
+          ];
+
+          set((s) => ({
+            localLibrary: mergedLibrary,
+            localFileRefs: new Map(
+              Array.from(s.localFileRefs.entries()).filter(([id]) =>
+                mergedLibrary.some((track) => track.id === id && track.localSource !== 'documents')
+              )
+            ),
+            savedLocalPaths: [
+              ...new Set([
+                ...s.savedLocalPaths.filter((path) => !path.startsWith('MHL Music/')),
+                ...Array.from(scannedPaths),
+              ]),
+            ],
+          }));
+
+          if (!options?.silent) {
+            const plural = nextTracks.length === 1 ? '' : 's';
+            toast.success(`${nextTracks.length} pista${plural} sincronizada${plural}`, { duration: 3500 });
           }
         },
 

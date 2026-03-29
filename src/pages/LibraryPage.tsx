@@ -19,6 +19,8 @@ import {
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { FilePicker } from '@capawesome/capacitor-file-picker';
+import { scanNativeDocumentsLibrary } from '@/lib/nativeLibraryBridge';
+import { createPortal } from 'react-dom';
 import { toImportedAudioFile } from '@/lib/localTrackRuntime';
 import { toast } from 'sonner';
 import type { LocalTrack } from '@/types/music';
@@ -44,6 +46,7 @@ export default function LibraryPage() {
     localLibrary,
     isImporting,
     importLocalFiles,
+    importScannedTracks,
     playLocalTrack,
     removeLocalTrack,
   } = useMusicStore();
@@ -96,6 +99,17 @@ export default function LibraryPage() {
           toast.info('No hay archivos en Documents/MHL Music/. Usa "Seleccionar carpeta" para otra ubicacion.');
         }
         return;
+      }
+
+      try {
+        const nativeTracks = await scanNativeDocumentsLibrary();
+        if (nativeTracks.length > 0) {
+          importScannedTracks(nativeTracks, { silent });
+          setShowImportOptions(false);
+          return;
+        }
+      } catch (nativeError) {
+        console.warn('Native library scan failed, falling back to JS import:', nativeError);
       }
 
       const scanToastId = silent ? '' : toast.loading(`Escaneando ${audioFiles.length} archivo${audioFiles.length > 1 ? 's' : ''}...`);
@@ -502,13 +516,14 @@ function CollectionOverlay({
     return () => document.removeEventListener('keydown', handler);
   }, [onClose]);
 
-  return (
+  const isNativeMobile = Capacitor.isNativePlatform();
+  const overlay = (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.2 }}
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+      className={`fixed inset-0 z-[80] flex justify-center ${isNativeMobile ? 'items-start p-0' : 'items-end sm:items-center p-0 sm:p-4'}`}
       onClick={onClose}
     >
       {/* Backdrop */}
@@ -521,7 +536,11 @@ function CollectionOverlay({
         exit={{ opacity: 0, y: 60 }}
         transition={{ type: 'spring', damping: 28, stiffness: 320 }}
         onClick={(e) => e.stopPropagation()}
-        className="relative z-10 w-full sm:max-w-lg max-h-[85vh] sm:max-h-[80vh] flex flex-col rounded-t-2xl sm:rounded-2xl bg-[#111] border border-[rgba(255,255,255,0.08)] overflow-hidden shadow-2xl"
+        className={`relative z-10 w-full flex flex-col bg-[#111] border border-[rgba(255,255,255,0.08)] overflow-hidden shadow-2xl ${
+          isNativeMobile
+            ? 'h-[calc(100dvh-8px)] max-h-[calc(100dvh-8px)] rounded-none border-x-0 border-t-0'
+            : 'sm:max-w-lg max-h-[85vh] sm:max-h-[80vh] rounded-t-2xl sm:rounded-2xl'
+        }`}
       >
         {/* Header */}
         <div className="flex items-center gap-4 p-5 border-b border-[rgba(255,255,255,0.06)] flex-shrink-0">
@@ -556,7 +575,7 @@ function CollectionOverlay({
         </div>
 
         {/* Track list */}
-        <div className="overflow-y-auto flex-1 p-3">
+        <div className="overflow-y-auto overscroll-contain flex-1 p-3 pb-5">
           <div className="space-y-1">
             {collection.tracks.map((track, i) => (
               <motion.button
@@ -587,6 +606,12 @@ function CollectionOverlay({
       </motion.div>
     </motion.div>
   );
+
+  if (typeof document === 'undefined') {
+    return overlay;
+  }
+
+  return createPortal(overlay, document.body);
 }
 
 function AlbumsGrid({
