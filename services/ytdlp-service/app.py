@@ -285,20 +285,57 @@ def search_candidates(query: str, limit: int = 5) -> list[dict[str, Any]]:
     return results
 
 
+def normalize_search_term(value: str) -> str:
+    cleaned = value.lower()
+    cleaned = re.sub(r"\([^)]*\)", " ", cleaned)
+    cleaned = re.sub(r"\[[^\]]*\]", " ", cleaned)
+    cleaned = re.sub(r"\b(feat|ft|featuring)\.?\s+[^,;\-]+", " ", cleaned)
+    cleaned = re.sub(r"\b(remaster(?:ed)?|radio edit|radio version|version|ost|soundtrack)\b", " ", cleaned)
+    cleaned = re.sub(r"[^\w\s]", " ", cleaned, flags=re.UNICODE)
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    return cleaned.strip()
+
+
+def looks_anime_like(title: str, artist: str, album: str = "") -> bool:
+    source = f"{title} {artist} {album}".lower()
+    return bool(re.search(r"(anime|opening|ending|\bop\b|\bed\b|theme|ost|project|isekai)", source))
+
+
+def build_candidate_queries(title: str, artist: str, album: str = "") -> list[str]:
+    clean_title = normalize_search_term(title)
+    clean_artist = normalize_search_term(artist)
+    clean_album = normalize_search_term(album)
+    queries = [
+        f"{clean_title} {clean_artist} official audio",
+        f"{clean_title} {clean_artist}",
+        f"{clean_title} audio",
+    ]
+    if clean_album:
+        queries.append(f"{clean_title} {clean_album} {clean_artist}")
+    if looks_anime_like(title, artist, album):
+        queries.extend([
+            f"{clean_title} {clean_artist} opening",
+            f"{clean_title} {clean_artist} ending",
+            f"{clean_title} {clean_artist} full version",
+        ])
+    return list(dict.fromkeys(q.strip() for q in queries if q.strip()))
+
+
 def score_candidate(
     candidate: dict[str, Any],
     target_title: str,
     target_artist: str,
     target_album: str = "",
     target_duration: int = 0,
+    query_index: int = 0,
 ) -> int:
     title = candidate.get("title", "").lower()
     channel = candidate.get("channel", "").lower()
-    wanted_title = target_title.lower()
-    wanted_artist = target_artist.lower()
-    wanted_album = target_album.lower()
+    wanted_title = normalize_search_term(target_title)
+    wanted_artist = normalize_search_term(target_artist)
+    wanted_album = normalize_search_term(target_album)
 
-    score = 0
+    score = 100 - query_index * 8
 
     # --- Coincidencias básicas ---
     if wanted_title and wanted_title in title:
@@ -333,6 +370,10 @@ def score_candidate(
         score += 12  # Canal oficial de YouTube Music
     if "lyrics" in title:
         score += 5
+    if looks_anime_like(target_title, target_artist, target_album) and (
+        "opening" in title or "ending" in title or re.search(r"\bop\b|\bed\b", title) or "full version" in title
+    ):
+        score += 15
 
     # --- PENALIZACIONES: music videos y clips ---
     MV_KEYWORDS = [
@@ -350,6 +391,8 @@ def score_candidate(
         score -= 30
     if "reaction" in title:
         score -= 15
+    if "nightcore" in title or "sped up" in title or "slowed" in title or "8d" in title:
+        score -= 20
     if "cover" in title and wanted_artist not in channel:
         score -= 12  # Cover de otro artista
     if "live" in title or "en vivo" in title or "concert" in title:
@@ -367,6 +410,25 @@ def score_candidate(
         score += 10
 
     return score
+
+
+def classify_candidate(candidate: dict[str, Any]) -> str:
+    haystack = f"{candidate.get('title', '')} {candidate.get('channel', '')}".lower()
+    if re.search(r"(opening|ending|\bop\b|\bed\b)", haystack):
+        return "anime op/ed"
+    if re.search(r"(cover|fan cover|spanish cover)", haystack):
+        return "cover"
+    if re.search(r"(live|concert|en vivo)", haystack):
+        return "live"
+    return "original probable"
+
+
+def confidence_from_score(score: int) -> str:
+    if score >= 120:
+        return "alta"
+    if score >= 90:
+        return "media"
+    return "baja"
 
 
 def build_token(video_id: str, file_name: str, format_name: str) -> dict[str, Any]:
@@ -618,37 +680,36 @@ async def candidates(
     artist = str(payload.get("artist") or "").strip()
     album = str(payload.get("album") or "").strip()
     duration = int(payload.get("duration") or 0)
-    mode = str(payload.get("mode") or "original").strip().lower()
 
     if not title or not artist:
         raise HTTPException(status_code=400, detail="title and artist are required")
 
-    if mode == "cover":
-        query = f"{title} cover"
-    elif mode == "live":
-        query = f"{title} {artist} live"
-    else:
-        query = f"{title} {artist} official audio"
+    merged: dict[str, dict[str, Any]] = {}
+    queries = build_candidate_queries(title, artist, album)
 
     try:
-        results = search_candidates(query, limit=8)
+        for query_index, query in enumerate(queries):
+            for candidate in search_candidates(query, limit=6):
+                video_id = str(candidate.get("videoId") or "").strip()
+                if not video_id:
+                    continue
+                score = score_candidate(candidate, title, artist, album, duration, query_index)
+                normalized = {
+                    "videoId": video_id,
+                    "title": candidate["title"],
+                    "channel": candidate["channel"],
+                    "duration": int(candidate.get("duration") or 0),
+                    "score": score,
+                    "label": classify_candidate(candidate),
+                    "confidence": confidence_from_score(score),
+                }
+                existing = merged.get(video_id)
+                if not existing or score > int(existing["score"]):
+                    merged[video_id] = normalized
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Search failed: {exc}") from exc
 
-    scored = sorted(
-        [
-            {
-                "videoId": c["videoId"],
-                "title": c["title"],
-                "channel": c["channel"],
-                "duration": int(c.get("duration") or 0),
-                "score": score_candidate(c, title, artist, album, duration),
-            }
-            for c in results
-        ],
-        key=lambda x: x["score"],
-        reverse=True,
-    )
+    scored = sorted(merged.values(), key=lambda x: int(x["score"]), reverse=True)[:10]
 
     return {"success": True, "candidates": scored}
 

@@ -43,6 +43,126 @@ function sanitizeFileName(value: string): string {
     .slice(0, 140) || "download.mp3";
 }
 
+function normalizeSearchTerm(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/\[[^\]]*\]/g, " ")
+    .replace(/\b(feat|ft|featuring)\.?\s+[^-–—,]+/gi, " ")
+    .replace(/\b(remaster(?:ed)?|radio edit|radio version|version|ost|soundtrack)\b/gi, " ")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function looksAnimeLike(title: string, artist: string, album = ""): boolean {
+  const source = `${title} ${artist} ${album}`.toLowerCase();
+  return /(anime|opening|ending|\bop\b|\bed\b|theme|ost|project|isekai)/.test(source);
+}
+
+function buildCandidateQueries(title: string, artist: string, album = ""): string[] {
+  const cleanTitle = normalizeSearchTerm(title);
+  const cleanArtist = normalizeSearchTerm(artist);
+  const cleanAlbum = normalizeSearchTerm(album);
+  const queries = [
+    `${cleanTitle} ${cleanArtist} official audio`,
+    `${cleanTitle} ${cleanArtist}`,
+    `${cleanTitle} audio`,
+    cleanAlbum ? `${cleanTitle} ${cleanAlbum} ${cleanArtist}` : "",
+  ];
+
+  if (looksAnimeLike(title, artist, album)) {
+    queries.push(
+      `${cleanTitle} ${cleanArtist} opening`,
+      `${cleanTitle} ${cleanArtist} ending`,
+      `${cleanTitle} ${cleanArtist} full version`,
+    );
+  }
+
+  return [...new Set(queries.map((query) => query.trim()).filter(Boolean))];
+}
+
+function scoreCandidate(
+  candidate: Record<string, unknown>,
+  targetTitle: string,
+  targetArtist: string,
+  targetAlbum = "",
+  targetDuration = 0,
+  queryIndex = 0,
+): number {
+  const title = String(candidate.title || "").toLowerCase();
+  const channel = String(candidate.channel || "").toLowerCase();
+  const wantedTitle = normalizeSearchTerm(targetTitle);
+  const wantedArtist = normalizeSearchTerm(targetArtist);
+  const wantedAlbum = normalizeSearchTerm(targetAlbum);
+
+  let score = 100 - queryIndex * 8;
+
+  if (wantedTitle && title.includes(wantedTitle)) score += 30;
+  if (wantedArtist && title.includes(wantedArtist)) score += 20;
+  if (wantedArtist && channel.includes(wantedArtist)) score += 18;
+  if (wantedAlbum && title.includes(wantedAlbum)) score += 8;
+
+  if (targetDuration > 0) {
+    const duration = Number(candidate.duration || 0);
+    if (duration > 0) {
+      const diffPct = Math.abs(duration - targetDuration) / targetDuration;
+      if (diffPct <= 0.10) score += 25;
+      else if (diffPct <= 0.20) score += 10;
+      else if (diffPct >= 0.40) score -= 30;
+    }
+  }
+
+  if (title.includes("official audio")) score += 25;
+  if (title.includes("audio only")) score += 20;
+  if (title.includes("radio edit") || title.includes("radio version")) score += 18;
+  if (channel.includes("topic")) score += 12;
+  if (title.includes("lyrics")) score += 5;
+  if (looksAnimeLike(targetTitle, targetArtist, targetAlbum) && /(opening|ending|\bop\b|\bed\b|full version)/.test(title)) {
+    score += 15;
+  }
+
+  const mvKeywords = [
+    "music video",
+    "official video",
+    "official music video",
+    "mv",
+    "videoclip",
+    "video clip",
+    "official clip",
+    "video oficial",
+  ];
+  if (mvKeywords.some((kw) => title.includes(kw))) score -= 25;
+
+  if (title.includes("karaoke")) score -= 30;
+  if (title.includes("reaction")) score -= 15;
+  if (title.includes("nightcore") || title.includes("sped up") || title.includes("slowed") || title.includes("8d")) score -= 20;
+  if (title.includes("cover") && !channel.includes(wantedArtist)) score -= 12;
+  if (title.includes("live") || title.includes("en vivo") || title.includes("concert")) score -= 10;
+  if (title.includes("remix") && !title.includes("official")) score -= 8;
+  if (title.includes("instrumental")) score -= 8;
+  if (title.includes("extended") || title.includes("extended mix")) score -= 5;
+
+  const duration = Number(candidate.duration || 0);
+  if (duration >= 90 && duration <= 600) score += 10;
+
+  return score;
+}
+
+function classifyCandidate(candidate: Record<string, unknown>): string {
+  const haystack = `${String(candidate.title || "")} ${String(candidate.channel || "")}`.toLowerCase();
+  if (/(opening|ending|\bop\b|\bed\b)/.test(haystack)) return "anime op/ed";
+  if (/(cover|fan cover|spanish cover)/.test(haystack)) return "cover";
+  if (/(live|concert|en vivo)/.test(haystack)) return "live";
+  return "original probable";
+}
+
+function confidenceFromScore(score: number): "alta" | "media" | "baja" {
+  if (score >= 120) return "alta";
+  if (score >= 90) return "media";
+  return "baja";
+}
+
 function getDayKey(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -150,7 +270,6 @@ Deno.serve(async (req: Request) => {
       const artist = typeof body?.artist === "string" ? body.artist.trim() : "";
       const album = typeof body?.album === "string" ? body.album.trim() : "";
       const duration = typeof body?.duration === "number" && body.duration > 0 ? body.duration : 0;
-      const mode = typeof body?.mode === "string" ? body.mode : "original";
       if (!title || !artist) {
         return jsonResponse({ success: false, error: "title and artist are required" }, 400);
       }
@@ -162,13 +281,59 @@ Deno.serve(async (req: Request) => {
           headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": String(rateResult.retryAfter) },
         });
       }
-      const res = await callService("/candidates", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, artist, album, duration, mode }),
-      });
-      const data = await res.json();
-      return jsonResponse(data, res.ok ? 200 : 502);
+      const queries = buildCandidateQueries(title, artist, album);
+
+      try {
+        const res = await callService("/candidates", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title, artist, album, duration }),
+        });
+        const data = await res.json();
+        const serviceCandidates = Array.isArray(data?.candidates) ? data.candidates : [];
+        const hasSmartFields = serviceCandidates.some((candidate) =>
+          typeof candidate?.label === "string" || typeof candidate?.confidence === "string"
+        );
+        if (res.ok && data?.success && hasSmartFields) {
+          return jsonResponse(data, 200);
+        }
+        console.warn("yt-stream getCandidates fallback to /search", data);
+      } catch (error) {
+        console.warn("yt-stream /candidates unavailable, falling back to /search", error);
+      }
+
+      const merged = new Map<string, Record<string, unknown>>();
+      for (const [queryIndex, query] of queries.entries()) {
+        const searchRes = await callService(`/search?q=${encodeURIComponent(query)}`);
+        const searchData = await searchRes.json();
+        if (!searchRes.ok || !searchData?.success) continue;
+        const rawResults = Array.isArray(searchData?.results) ? searchData.results : [];
+        for (const candidate of rawResults.slice(0, 6)) {
+          const videoId = String(candidate.videoId || "");
+          const titleValue = String(candidate.title || "");
+          if (!videoId || !titleValue) continue;
+          const score = scoreCandidate(candidate, title, artist, album, duration, queryIndex);
+          const normalized = {
+            videoId,
+            title: titleValue,
+            channel: String(candidate.channel || ""),
+            duration: Number(candidate.duration || 0),
+            score,
+            label: classifyCandidate(candidate),
+            confidence: confidenceFromScore(score),
+          };
+          const existing = merged.get(videoId);
+          if (!existing || Number(normalized.score) > Number(existing.score || 0)) {
+            merged.set(videoId, normalized);
+          }
+        }
+      }
+
+      const candidates = [...merged.values()]
+        .sort((a, b) => Number(b.score || 0) - Number(a.score || 0))
+        .slice(0, 10);
+
+      return jsonResponse({ success: true, candidates }, 200);
     }
 
     if (action !== "webDownloadTicket") {

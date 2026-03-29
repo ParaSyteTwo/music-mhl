@@ -75,14 +75,14 @@ export async function getDeezerTrackGenre(albumId: string | number): Promise<str
   }
 }
 
-export type DownloadMode = 'original' | 'cover' | 'live';
-
 export interface DownloadCandidate {
   videoId: string;
   title: string;
   channel: string;
   duration: number;
   score: number;
+  label?: string;
+  confidence?: 'alta' | 'media' | 'baja';
 }
 
 interface DownloadOptions {
@@ -90,26 +90,125 @@ interface DownloadOptions {
   quality?: 'alta' | 'media' | 'baja';
 }
 
+function normalizeSearchTerm(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/\[[^\]]*\]/g, ' ')
+    .replace(/\b(feat|ft|featuring)\.?\s+[^-–—,]+/gi, ' ')
+    .replace(/\b(remaster(?:ed)?|radio edit|radio version|version|ost|soundtrack)\b/gi, ' ')
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function looksAnimeLike(track: Track): boolean {
+  const source = `${track.title} ${track.artist} ${track.album ?? ''}`.toLowerCase();
+  return /(anime|opening|ending|\bop\b|\bed\b|theme|ost|project|isekai)/.test(source);
+}
+
+function buildCandidateQueries(track: Track): string[] {
+  const title = normalizeSearchTerm(track.title);
+  const artist = normalizeSearchTerm(track.artist);
+  const album = normalizeSearchTerm(track.album ?? '');
+  const queries = [
+    `${title} ${artist} official audio`,
+    `${title} ${artist}`,
+    album ? `${title} ${album} ${artist}` : '',
+    `${title} audio`,
+  ];
+
+  if (looksAnimeLike(track)) {
+    queries.push(
+      `${title} ${artist} opening`,
+      `${title} ${artist} ending`,
+      `${title} ${artist} full version`,
+    );
+  }
+
+  return [...new Set(queries.map((query) => query.trim()).filter(Boolean))];
+}
+
+function classifyCandidate(candidate: Pick<DownloadCandidate, 'title' | 'channel'>): string {
+  const haystack = `${candidate.title} ${candidate.channel}`.toLowerCase();
+  if (/(opening|ending|\bop\b|\bed\b)/.test(haystack)) return 'anime op/ed';
+  if (/(cover|fan cover|spanish cover)/.test(haystack)) return 'cover';
+  if (/(live|concert|en vivo)/.test(haystack)) return 'live';
+  return 'original probable';
+}
+
+function scoreNativeCandidate(
+  track: Track,
+  candidate: Pick<DownloadCandidate, 'title' | 'channel' | 'duration'>,
+  queryIndex: number,
+): number {
+  const title = candidate.title.toLowerCase();
+  const channel = candidate.channel.toLowerCase();
+  const wantedTitle = normalizeSearchTerm(track.title);
+  const wantedArtist = normalizeSearchTerm(track.artist);
+  const wantedAlbum = normalizeSearchTerm(track.album ?? '');
+  let score = 100 - queryIndex * 8;
+
+  if (wantedTitle && title.includes(wantedTitle)) score += 30;
+  if (wantedArtist && title.includes(wantedArtist)) score += 18;
+  if (wantedArtist && channel.includes(wantedArtist)) score += 14;
+  if (wantedAlbum && title.includes(wantedAlbum)) score += 8;
+
+  if (track.duration > 0 && candidate.duration > 0) {
+    const diffPct = Math.abs(candidate.duration - track.duration) / track.duration;
+    if (diffPct <= 0.10) score += 24;
+    else if (diffPct <= 0.20) score += 10;
+    else if (diffPct >= 0.40) score -= 28;
+  }
+
+  if (title.includes('official audio')) score += 18;
+  if (channel.includes('topic')) score += 10;
+  if (/(opening|ending|\bop\b|\bed\b|full version)/.test(title) && looksAnimeLike(track)) score += 15;
+  if (/(karaoke|reaction|nightcore|sped up|slowed|8d|instrumental)/.test(title)) score -= 22;
+  if (title.includes('cover') && !channel.includes(wantedArtist)) score -= 12;
+  if (title.includes('live')) score -= 8;
+
+  return score;
+}
+
+function confidenceFromScore(score: number): 'alta' | 'media' | 'baja' {
+  if (score >= 120) return 'alta';
+  if (score >= 90) return 'media';
+  return 'baja';
+}
+
 // ─── Get YouTube candidates for user selection ───
 export async function getDownloadCandidates(
   track: Track,
-  mode: DownloadMode = 'original',
 ): Promise<DownloadCandidate[]> {
   if (Capacitor.isNativePlatform()) {
     const { searchYouTubeNative } = await import('@/lib/ytdlpBridge');
-    const queries: Record<DownloadMode, string> = {
-      original: `${track.title} ${track.artist} official audio`,
-      cover: `${track.title} cover`,
-      live: `${track.title} ${track.artist} live`,
-    };
-    const results = await searchYouTubeNative(queries[mode]);
-    return results.slice(0, 8).map((r, i) => ({
-      videoId: r.videoId,
-      title: r.title,
-      channel: r.channel,
-      duration: r.duration,
-      score: 8 - i, // orden nativo = relevancia
-    }));
+    const queries = buildCandidateQueries(track);
+    const merged = new Map<string, DownloadCandidate>();
+
+    for (const [queryIndex, query] of queries.entries()) {
+      const results = await searchYouTubeNative(query);
+      for (const result of results.slice(0, 6)) {
+        const score = scoreNativeCandidate(track, result, queryIndex);
+        const current = merged.get(result.videoId);
+        const candidate: DownloadCandidate = {
+          videoId: result.videoId,
+          title: result.title,
+          channel: result.channel,
+          duration: result.duration,
+          score,
+          label: classifyCandidate(result),
+          confidence: confidenceFromScore(score),
+        };
+        if (!current || score > current.score) {
+          merged.set(result.videoId, candidate);
+        }
+      }
+    }
+
+    return [...merged.values()]
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 10);
   }
 
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
@@ -127,12 +226,14 @@ export async function getDownloadCandidates(
       artist: track.artist,
       album: track.album ?? '',
       duration: track.duration ?? 0,
-      mode,
     }),
   });
-  if (!res.ok) throw new Error('Error obteniendo candidatos');
+  if (!res.ok) {
+    const err = await res.json().catch(() => null) as { error?: string; detail?: string } | null;
+    throw new Error(err?.error || err?.detail || 'Error obteniendo candidatos');
+  }
   const data = await res.json();
-  if (!data.success) throw new Error(data.error || 'Sin candidatos');
+  if (!data.success) throw new Error(data.error || data.detail || 'Sin candidatos');
   return data.candidates as DownloadCandidate[];
 }
 
