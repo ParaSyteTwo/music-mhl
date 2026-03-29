@@ -11,6 +11,7 @@ export interface Track {
   // ─── Local library fields ───
   isLocal?: boolean;
   localPath?: string;
+  localSource?: 'documents' | 'picker';
   genre?: string;
   playCount?: number;
   importedAt?: number;
@@ -19,6 +20,7 @@ export interface Track {
 export interface LocalTrack extends Track {
   isLocal: true;
   localPath: string;
+  localSource?: 'documents' | 'picker';
   genre: string;
   playCount: number;
   importedAt: number;

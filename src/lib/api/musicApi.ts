@@ -112,18 +112,13 @@ function buildCandidateQueries(track: Track): string[] {
   const artist = normalizeSearchTerm(track.artist);
   const album = normalizeSearchTerm(track.album ?? '');
   const queries = [
-    `${title} ${artist} official audio`,
     `${title} ${artist}`,
+    `${title} ${artist} official audio`,
     album ? `${title} ${album} ${artist}` : '',
-    `${title} audio`,
   ];
 
   if (looksAnimeLike(track)) {
-    queries.push(
-      `${title} ${artist} opening`,
-      `${title} ${artist} ending`,
-      `${title} ${artist} full version`,
-    );
+    queries[2] = `${title} ${artist} full version`;
   }
 
   return [...new Set(queries.map((query) => query.trim()).filter(Boolean))];
@@ -204,11 +199,16 @@ export async function getDownloadCandidates(
           merged.set(result.videoId, candidate);
         }
       }
+
+      const ranked = [...merged.values()].sort((a, b) => b.score - a.score);
+      if (ranked[0]?.confidence === 'alta' && ranked.length >= 2) {
+        return ranked.slice(0, 3);
+      }
     }
 
     return [...merged.values()]
       .sort((a, b) => b.score - a.score)
-      .slice(0, 10);
+      .slice(0, 3);
   }
 
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;

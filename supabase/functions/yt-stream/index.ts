@@ -65,18 +65,13 @@ function buildCandidateQueries(title: string, artist: string, album = ""): strin
   const cleanArtist = normalizeSearchTerm(artist);
   const cleanAlbum = normalizeSearchTerm(album);
   const queries = [
-    `${cleanTitle} ${cleanArtist} official audio`,
     `${cleanTitle} ${cleanArtist}`,
-    `${cleanTitle} audio`,
+    `${cleanTitle} ${cleanArtist} official audio`,
     cleanAlbum ? `${cleanTitle} ${cleanAlbum} ${cleanArtist}` : "",
   ];
 
   if (looksAnimeLike(title, artist, album)) {
-    queries.push(
-      `${cleanTitle} ${cleanArtist} opening`,
-      `${cleanTitle} ${cleanArtist} ending`,
-      `${cleanTitle} ${cleanArtist} full version`,
-    );
+    queries[2] = `${cleanTitle} ${cleanArtist} full version`;
   }
 
   return [...new Set(queries.map((query) => query.trim()).filter(Boolean))];
@@ -327,11 +322,15 @@ Deno.serve(async (req: Request) => {
             merged.set(videoId, normalized);
           }
         }
+        const ranked = [...merged.values()].sort((a, b) => Number(b.score || 0) - Number(a.score || 0));
+        if (ranked[0]?.confidence === "alta" && ranked.length >= 2) {
+          return jsonResponse({ success: true, candidates: ranked.slice(0, 3) }, 200);
+        }
       }
 
       const candidates = [...merged.values()]
         .sort((a, b) => Number(b.score || 0) - Number(a.score || 0))
-        .slice(0, 10);
+        .slice(0, 3);
 
       return jsonResponse({ success: true, candidates }, 200);
     }

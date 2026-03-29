@@ -52,7 +52,13 @@ export default function LibraryPage() {
   const genres = useMemo(() => deriveGenres(localLibrary), [localLibrary]);
   const topPlayed = useMemo(() => deriveTopPlayed(localLibrary), [localLibrary]);
 
-  const handleImportAuto = async () => {
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform() || localLibrary.some((track) => track.localPath.startsWith('MHL Music/'))) return;
+    void handleImportAuto(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleImportAuto = async (silent = false) => {
     // Auto-scan Documents/MHL Music/
     if (!Capacitor.isNativePlatform()) {
       fileInputRef.current?.click();
@@ -109,12 +115,18 @@ export default function LibraryPage() {
             else if (ext === 'webm') mimeType = 'audio/webm';
             else if (ext === 'wav') mimeType = 'audio/wav';
 
-            return new File([bytes], f.name!, { type: mimeType });
+            const file = new File([bytes], f.name!, { type: mimeType }) as File & {
+              __mhlRelativePath?: string;
+              __mhlSource?: 'documents' | 'picker';
+            };
+            file.__mhlRelativePath = `MHL Music/${f.name}`;
+            file.__mhlSource = 'documents';
+            return file;
           })
         );
 
         toast.dismiss(scanToastId);
-        await importLocalFiles(fileObjects);
+        await importLocalFiles(fileObjects, { silent });
         setShowImportOptions(false);
       } catch (e) {
         toast.dismiss(scanToastId);

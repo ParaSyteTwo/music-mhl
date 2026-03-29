@@ -306,18 +306,13 @@ def build_candidate_queries(title: str, artist: str, album: str = "") -> list[st
     clean_artist = normalize_search_term(artist)
     clean_album = normalize_search_term(album)
     queries = [
-        f"{clean_title} {clean_artist} official audio",
         f"{clean_title} {clean_artist}",
-        f"{clean_title} audio",
+        f"{clean_title} {clean_artist} official audio",
     ]
     if clean_album:
         queries.append(f"{clean_title} {clean_album} {clean_artist}")
     if looks_anime_like(title, artist, album):
-        queries.extend([
-            f"{clean_title} {clean_artist} opening",
-            f"{clean_title} {clean_artist} ending",
-            f"{clean_title} {clean_artist} full version",
-        ])
+        queries[-1] = f"{clean_title} {clean_artist} full version"
     return list(dict.fromkeys(q.strip() for q in queries if q.strip()))
 
 
@@ -706,10 +701,13 @@ async def candidates(
                 existing = merged.get(video_id)
                 if not existing or score > int(existing["score"]):
                     merged[video_id] = normalized
+            ranked = sorted(merged.values(), key=lambda x: int(x["score"]), reverse=True)
+            if ranked and ranked[0].get("confidence") == "alta" and len(ranked) >= 2:
+                return {"success": True, "candidates": ranked[:3]}
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Search failed: {exc}") from exc
 
-    scored = sorted(merged.values(), key=lambda x: int(x["score"]), reverse=True)[:10]
+    scored = sorted(merged.values(), key=lambda x: int(x["score"]), reverse=True)[:3]
 
     return {"success": True, "candidates": scored}
 

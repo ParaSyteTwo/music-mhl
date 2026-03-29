@@ -5,6 +5,10 @@ class AudioEngine {
   private _onEnded: (() => void) | null = null;
   private _onLoadStart: (() => void) | null = null;
   private _onCanPlay: (() => void) | null = null;
+  private _onLoadedMetadata: (() => void) | null = null;
+  private _onCanPlayThrough: (() => void) | null = null;
+  private _onWaiting: (() => void) | null = null;
+  private _onStalled: (() => void) | null = null;
   private _onPlay: (() => void) | null = null;
   private _onError: ((error: string) => void) | null = null;
   private _onPlayControlPressed: (() => void) | null = null;
@@ -30,6 +34,22 @@ class AudioEngine {
 
     this.audio.addEventListener('canplay', () => {
       this._onCanPlay?.();
+    });
+
+    this.audio.addEventListener('loadedmetadata', () => {
+      this._onLoadedMetadata?.();
+    });
+
+    this.audio.addEventListener('canplaythrough', () => {
+      this._onCanPlayThrough?.();
+    });
+
+    this.audio.addEventListener('waiting', () => {
+      this._onWaiting?.();
+    });
+
+    this.audio.addEventListener('stalled', () => {
+      this._onStalled?.();
     });
 
     this.audio.addEventListener('play', () => {
@@ -119,6 +139,22 @@ class AudioEngine {
 
   set onCanPlay(fn: (() => void) | null) {
     this._onCanPlay = fn;
+  }
+
+  set onLoadedMetadata(fn: (() => void) | null) {
+    this._onLoadedMetadata = fn;
+  }
+
+  set onCanPlayThrough(fn: (() => void) | null) {
+    this._onCanPlayThrough = fn;
+  }
+
+  set onWaiting(fn: (() => void) | null) {
+    this._onWaiting = fn;
+  }
+
+  set onStalled(fn: (() => void) | null) {
+    this._onStalled = fn;
   }
 
   set onPlay(fn: (() => void) | null) {

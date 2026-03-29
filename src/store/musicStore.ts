@@ -9,6 +9,11 @@ import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { toast } from 'sonner';
 
+type ImportedAudioFile = File & {
+  __mhlRelativePath?: string;
+  __mhlSource?: 'documents' | 'picker';
+};
+
 function getProgressLabel(progress: number): string {
   if (progress >= 100) return '✓ Completado';
   if (progress >= 90) return 'Guardando archivo...';
@@ -79,7 +84,7 @@ interface MusicStore {
   isImporting: boolean;
   savedLocalPaths: string[];
 
-  importLocalFiles: (files: FileList | File[]) => Promise<void>;
+  importLocalFiles: (files: FileList | File[], options?: { silent?: boolean }) => Promise<void>;
   rescanLocalLibrary: () => Promise<void>;
   playLocalTrack: (id: string) => Promise<void>;
   removeLocalTrack: (id: string) => void;
@@ -112,6 +117,24 @@ export const useMusicStore = create<MusicStore>()(
           isLoading: false,
           duration: audioEngine.duration || get().currentTrack?.duration || 0,
         });
+      };
+
+      audioEngine.onLoadedMetadata = () => {
+        set({
+          duration: audioEngine.duration || get().currentTrack?.duration || 0,
+        });
+      };
+
+      audioEngine.onWaiting = () => {
+        if (get().currentTrack) set({ isLoading: true });
+      };
+
+      audioEngine.onStalled = () => {
+        if (get().currentTrack) set({ isLoading: true });
+      };
+
+      audioEngine.onPlay = () => {
+        set({ isPlaying: true, isLoading: false });
       };
 
       audioEngine.onEnded = () => set({ isPlaying: false, progress: 0 });
@@ -477,41 +500,55 @@ export const useMusicStore = create<MusicStore>()(
         isImporting: false,
         savedLocalPaths: [],
 
-        importLocalFiles: async (files) => {
+        importLocalFiles: async (files, options) => {
           set({ isImporting: true });
           try {
-            const parsed = await parseLocalFiles(files);
+            const fileArray = Array.from(files) as ImportedAudioFile[];
+            const parsed = await parseLocalFiles(fileArray);
+            const parsedWithSource = parsed.map((track) => {
+              const sourceFile = fileArray.find((file) => file.name === track.localPath || file.__mhlRelativePath === track.localPath);
+              if (!sourceFile) return track;
+              return {
+                ...track,
+                localPath: sourceFile.__mhlRelativePath || track.localPath,
+                localSource: sourceFile.__mhlSource || track.localSource || 'picker',
+              };
+            });
             const existingPaths = new Set(get().localLibrary.map((t) => t.localPath));
-            const newTracks = parsed.filter((t) => !existingPaths.has(t.localPath));
+            const newTracks = parsedWithSource.filter((t) => !existingPaths.has(t.localPath));
 
             const newRefs = new Map(get().localFileRefs);
-            Array.from(files).forEach((file) => {
-              const match = newTracks.find((t) => t.localPath === file.name);
-              if (match) newRefs.set(match.id, file);
+            fileArray.forEach((file) => {
+              const match = newTracks.find((t) => t.localPath === file.name || t.localPath === file.__mhlRelativePath);
+              if (match && match.localSource !== 'documents') newRefs.set(match.id, file);
             });
 
-            const newPaths = newTracks.map((t) => t.localPath);
+            const newPaths = newTracks
+              .filter((t) => t.localSource === 'documents' || t.localPath.startsWith('MHL Music/'))
+              .map((t) => t.localPath);
 
             set((s) => ({
               localLibrary: [...s.localLibrary, ...newTracks],
               localFileRefs: newRefs,
-              savedLocalPaths: [...s.savedLocalPaths, ...newPaths],
+              savedLocalPaths: [...new Set([...s.savedLocalPaths, ...newPaths])],
               isImporting: false,
             }));
 
             const skipped = parsed.length - newTracks.length;
-            if (newTracks.length > 0) {
+            if (newTracks.length > 0 && !options?.silent) {
               const plural = newTracks.length > 1 ? 's' : '';
               const dupMsg = skipped > 0 ? ` (${skipped} duplicadas)` : '';
               toast.success(`${newTracks.length} pista${plural} importada${plural}${dupMsg}`, { duration: 4000 });
-            } else {
+            } else if (!options?.silent) {
               toast('No se añadieron pistas nuevas', { duration: 3000 });
             }
           } catch (e) {
             const errorMsg = e instanceof Error ? e.message : String(e);
             console.error('Import failed:', e);
             set({ isImporting: false });
-            toast.error(`Error al importar: ${errorMsg}`, { duration: 5000 });
+            if (!options?.silent) {
+              toast.error(`Error al importar: ${errorMsg}`, { duration: 5000 });
+            }
           }
         },
 
@@ -522,8 +559,11 @@ export const useMusicStore = create<MusicStore>()(
             const filesData = await Promise.all(
               get().savedLocalPaths.map(async (path) => {
                 try {
+                  if (path.startsWith('MHL Music/')) {
+                    return null;
+                  }
                   const data = await Filesystem.readFile({
-                    path: `MHL Music/${path}`,
+                    path,
                     directory: Directory.Documents,
                   });
                   const binaryStr = atob(data.data as string);
@@ -550,7 +590,9 @@ export const useMusicStore = create<MusicStore>()(
             });
 
             set((s) => ({
-              localLibrary: parsed.length > 0 ? parsed : s.localLibrary,
+              localLibrary: parsed.length > 0
+                ? s.localLibrary.map((track) => parsed.find((p) => p.localPath === track.localPath) || track)
+                : s.localLibrary,
               localFileRefs: newRefs,
             }));
           } catch (e) {
@@ -561,6 +603,57 @@ export const useMusicStore = create<MusicStore>()(
         playLocalTrack: async (id) => {
           const track = get().localLibrary.find((t) => t.id === id);
           if (!track) return;
+
+          if (Capacitor.isNativePlatform() && track.localPath.startsWith('MHL Music/')) {
+            try {
+              const { uri } = await Filesystem.getUri({
+                path: track.localPath,
+                directory: Directory.Documents,
+              });
+              const playbackUrl = Capacitor.convertFileSrc(uri);
+
+              if (get().currentTrack?.preview?.startsWith('blob:')) {
+                URL.revokeObjectURL(get().currentTrack.preview);
+              }
+
+              set({
+                currentTrack: { ...track, preview: playbackUrl },
+                isPlaying: false,
+                isLoading: true,
+                progress: 0,
+                duration: track.duration,
+              });
+
+              document.title = `${track.title} · ${track.artist} - MHL Music`;
+              set({ dominantColor: null });
+
+              audioEngine.load(playbackUrl);
+              audioEngine.setVolume(get().volume);
+              audioEngine.updateMediaSession({
+                title: track.title,
+                artist: track.artist,
+                album: track.album,
+                artwork: track.cover || undefined,
+              });
+
+              let didStart = false;
+              const startTimeout = window.setTimeout(() => {
+                if (!didStart) {
+                  set({ isLoading: false, isPlaying: false });
+                  toast.error('La pista tardó demasiado en empezar. Intenta otra vez.');
+                }
+              }, 4500);
+
+              await audioEngine.play();
+              didStart = true;
+              window.clearTimeout(startTimeout);
+              set({ isPlaying: true, isLoading: false });
+              get().incrementPlayCount(id);
+              return;
+            } catch (error) {
+              console.error('Android local playback failed:', error);
+            }
+          }
 
           const fileRef = get().localFileRefs.get(id);
           if (!fileRef) {

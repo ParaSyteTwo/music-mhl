@@ -4,6 +4,7 @@ import { useMusicStore } from '@/store/musicStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getDownloadCandidates, type DownloadCandidate } from '@/lib/api/musicApi';
 import type { Track } from '@/types/music';
+import { Capacitor } from '@capacitor/core';
 
 function formatDuration(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -95,6 +96,25 @@ export default function SearchPage() {
     observer.observe(el);
     return () => observer.disconnect();
   }, [observerCallback]);
+
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      if (searchQuery) {
+        const timeout = window.setTimeout(() => {
+          performSearch('');
+        }, 150);
+        return () => window.clearTimeout(timeout);
+      }
+      return;
+    }
+    if (trimmed.length < 2 || trimmed === searchQuery) return;
+    const timeout = window.setTimeout(() => {
+      performSearch(trimmed);
+      refreshRecent();
+    }, 350);
+    return () => window.clearTimeout(timeout);
+  }, [query, searchQuery, performSearch, refreshRecent]);
 
   const showEmpty = !query.trim() && searchResults.length === 0 && !isSearching;
 
@@ -392,6 +412,7 @@ function CandidatePicker({
   const [candidates, setCandidates] = useState<DownloadCandidate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const isNativeMobile = Capacitor.isNativePlatform();
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -420,7 +441,7 @@ function CandidatePicker({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.2 }}
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+      className={`fixed inset-0 z-50 flex justify-center ${isNativeMobile ? 'items-start p-2 pt-3' : 'items-end sm:items-center p-0 sm:p-4'}`}
       onClick={onClose}
     >
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
@@ -431,7 +452,7 @@ function CandidatePicker({
         exit={{ opacity: 0, y: 60 }}
         transition={{ type: 'spring', damping: 28, stiffness: 320 }}
         onClick={(e) => e.stopPropagation()}
-        className="relative z-10 w-full sm:max-w-lg max-h-[88vh] sm:max-h-[80vh] flex flex-col rounded-t-2xl sm:rounded-2xl bg-[#111] border border-[rgba(255,255,255,0.08)] overflow-hidden shadow-2xl"
+        className={`relative z-10 w-full sm:max-w-lg flex flex-col bg-[#111] border border-[rgba(255,255,255,0.08)] overflow-hidden shadow-2xl ${isNativeMobile ? 'max-h-[92vh] min-h-[48vh] rounded-2xl' : 'max-h-[88vh] sm:max-h-[80vh] rounded-t-2xl sm:rounded-2xl'}`}
       >
         <div className="flex items-center gap-3 px-4 pt-4 pb-3 border-b border-[rgba(255,255,255,0.06)] flex-shrink-0">
           {track.cover && (
@@ -459,7 +480,7 @@ function CandidatePicker({
           <span className="text-[10px] text-[#444] text-right">Elige la cancion exacta a descargar</span>
         </div>
 
-        <div className="overflow-y-auto flex-1 px-3 pb-4">
+        <div className="overflow-y-auto flex-1 px-3 pb-4 overscroll-contain">
           {loading ? (
             <div className="space-y-2 mt-1">
               {[...Array(5)].map((_, i) => (
