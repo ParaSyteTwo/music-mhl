@@ -19,6 +19,7 @@ import {
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { FilePicker } from '@capawesome/capacitor-file-picker';
+import { toImportedAudioFile } from '@/lib/localTrackRuntime';
 import { toast } from 'sonner';
 import type { LocalTrack } from '@/types/music';
 
@@ -68,7 +69,9 @@ export default function LibraryPage() {
     try {
       const permResult = await Filesystem.requestPermissions();
       if (permResult.publicStorage !== 'granted') {
-        toast.error('Permiso denegado. Ve a Configuración > Permisos > Almacenamiento');
+        if (!silent) {
+          toast.error('Permiso denegado. Ve a Configuracion > Permisos > Almacenamiento');
+        }
         return;
       }
 
@@ -89,12 +92,13 @@ export default function LibraryPage() {
         .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
       if (audioFiles.length === 0) {
-        toast.info('No hay archivos en Documents/MHL Music/. Usa "Seleccionar carpeta" para otra ubicación.');
+        if (!silent) {
+          toast.info('No hay archivos en Documents/MHL Music/. Usa "Seleccionar carpeta" para otra ubicacion.');
+        }
         return;
       }
 
-      const scanToastId = toast.loading(`Escaneando ${audioFiles.length} archivo${audioFiles.length > 1 ? 's' : ''}...`);
-
+      const scanToastId = silent ? '' : toast.loading(`Escaneando ${audioFiles.length} archivo${audioFiles.length > 1 ? 's' : ''}...`);
       try {
         const fileObjects: File[] = await Promise.all(
           audioFiles.map(async (f) => {
@@ -115,29 +119,26 @@ export default function LibraryPage() {
             else if (ext === 'webm') mimeType = 'audio/webm';
             else if (ext === 'wav') mimeType = 'audio/wav';
 
-            const file = new File([bytes], f.name!, { type: mimeType }) as File & {
-              __mhlRelativePath?: string;
-              __mhlSource?: 'documents' | 'picker';
-            };
-            file.__mhlRelativePath = `MHL Music/${f.name}`;
-            file.__mhlSource = 'documents';
-            return file;
+            return toImportedAudioFile(
+              new File([bytes], f.name!, { type: mimeType }),
+              { relativePath: `MHL Music/${f.name}`, source: 'documents' }
+            );
           })
         );
 
-        toast.dismiss(scanToastId);
+        if (scanToastId) toast.dismiss(scanToastId);
         await importLocalFiles(fileObjects, { silent });
         setShowImportOptions(false);
       } catch (e) {
-        toast.dismiss(scanToastId);
+        if (scanToastId) toast.dismiss(scanToastId);
         const errorMsg = e instanceof Error ? e.message : String(e);
         console.error('Android import error:', errorMsg);
-        toast.error(`Error: ${errorMsg}. Intenta "Seleccionar carpeta" en su lugar.`);
+        if (!silent) toast.error(`Error: ${errorMsg}. Intenta "Seleccionar carpeta" en su lugar.`);
       }
     } catch (e) {
       const errorMsg = e instanceof Error ? e.message : String(e);
       console.error('Android import error:', errorMsg);
-      toast.error(`Error: ${errorMsg}. Intenta "Seleccionar carpeta" en su lugar.`);
+      if (!silent) toast.error(`Error: ${errorMsg}. Intenta "Seleccionar carpeta" en su lugar.`);
     }
   };
 
@@ -212,7 +213,7 @@ export default function LibraryPage() {
 
         if (fileObjects.length === 0) {
           toast.dismiss(importToastId);
-          toast.error('No se encontraron archivos de audio válidos. Asegúrate de que sean MP3, M4A, FLAC, etc.');
+          toast.error('No se encontraron archivos de audio validos. Asegurate de que sean MP3, M4A, FLAC, etc.');
           setShowImportOptions(false);
           return;
         }
@@ -897,3 +898,4 @@ function TracksList({
     </div>
   );
 }
+

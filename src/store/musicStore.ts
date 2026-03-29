@@ -4,15 +4,16 @@ import { Track, Download, LocalTrack } from '@/types/music';
 import { audioEngine } from '@/lib/audioEngine';
 import { searchDeezer, downloadTrackAudio, getDeezerTrackGenre } from '@/lib/api/musicApi';
 import { writeID3Tags } from '@/lib/id3Writer';
+import {
+  type ImportedAudioFile,
+  resolveImportedTrackMeta,
+  resolveLocalPlaybackUrl,
+  shouldPersistLocalPath,
+} from '@/lib/localTrackRuntime';
 import { parseLocalFiles } from '@/lib/metadataEnricher';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { toast } from 'sonner';
-
-type ImportedAudioFile = File & {
-  __mhlRelativePath?: string;
-  __mhlSource?: 'documents' | 'picker';
-};
 
 function getProgressLabel(progress: number): string {
   if (progress >= 100) return '✓ Completado';
@@ -505,15 +506,7 @@ export const useMusicStore = create<MusicStore>()(
           try {
             const fileArray = Array.from(files) as ImportedAudioFile[];
             const parsed = await parseLocalFiles(fileArray);
-            const parsedWithSource = parsed.map((track) => {
-              const sourceFile = fileArray.find((file) => file.name === track.localPath || file.__mhlRelativePath === track.localPath);
-              if (!sourceFile) return track;
-              return {
-                ...track,
-                localPath: sourceFile.__mhlRelativePath || track.localPath,
-                localSource: sourceFile.__mhlSource || track.localSource || 'picker',
-              };
-            });
+            const parsedWithSource = parsed.map((track) => resolveImportedTrackMeta(track, fileArray));
             const existingPaths = new Set(get().localLibrary.map((t) => t.localPath));
             const newTracks = parsedWithSource.filter((t) => !existingPaths.has(t.localPath));
 
@@ -523,9 +516,7 @@ export const useMusicStore = create<MusicStore>()(
               if (match && match.localSource !== 'documents') newRefs.set(match.id, file);
             });
 
-            const newPaths = newTracks
-              .filter((t) => t.localSource === 'documents' || t.localPath.startsWith('MHL Music/'))
-              .map((t) => t.localPath);
+            const newPaths = newTracks.filter(shouldPersistLocalPath).map((t) => t.localPath);
 
             set((s) => ({
               localLibrary: [...s.localLibrary, ...newTracks],
@@ -540,7 +531,7 @@ export const useMusicStore = create<MusicStore>()(
               const dupMsg = skipped > 0 ? ` (${skipped} duplicadas)` : '';
               toast.success(`${newTracks.length} pista${plural} importada${plural}${dupMsg}`, { duration: 4000 });
             } else if (!options?.silent) {
-              toast('No se añadieron pistas nuevas', { duration: 3000 });
+              toast('No se anadieron pistas nuevas', { duration: 3000 });
             }
           } catch (e) {
             const errorMsg = e instanceof Error ? e.message : String(e);
@@ -559,9 +550,6 @@ export const useMusicStore = create<MusicStore>()(
             const filesData = await Promise.all(
               get().savedLocalPaths.map(async (path) => {
                 try {
-                  if (path.startsWith('MHL Music/')) {
-                    return null;
-                  }
                   const data = await Filesystem.readFile({
                     path,
                     directory: Directory.Documents,
@@ -571,7 +559,10 @@ export const useMusicStore = create<MusicStore>()(
                   for (let i = 0; i < binaryStr.length; i++) {
                     bytes[i] = binaryStr.charCodeAt(i);
                   }
-                  return new File([bytes], path, { type: 'audio/mpeg' });
+                  return {
+                    file: new File([bytes], path.split('/').pop() || path, { type: 'audio/mpeg' }),
+                    path,
+                  };
                 } catch (e) {
                   console.warn(`Could not read ${path}:`, e);
                   return null;
@@ -579,14 +570,21 @@ export const useMusicStore = create<MusicStore>()(
               })
             );
 
-            const validFiles = filesData.filter((f) => f !== null) as File[];
+            const validFiles = filesData.filter((f) => f !== null) as Array<{ file: File; path: string }>;
             if (validFiles.length === 0) return;
 
-            const parsed = await parseLocalFiles(validFiles);
+            const restoredFiles = validFiles.map(({ file, path }) => ({
+              ...file,
+              __mhlRelativePath: path,
+              __mhlSource: 'documents',
+            } as ImportedAudioFile));
+            const parsed = (await parseLocalFiles(restoredFiles)).map((track) =>
+              resolveImportedTrackMeta(track, restoredFiles)
+            );
             const newRefs = new Map(get().localFileRefs);
-            validFiles.forEach((file) => {
-              const match = parsed.find((t) => t.localPath === file.name);
-              if (match) newRefs.set(match.id, file);
+            restoredFiles.forEach((file) => {
+              const match = parsed.find((t) => t.localPath === file.__mhlRelativePath);
+              if (match && match.localSource !== 'documents') newRefs.set(match.id, file);
             });
 
             set((s) => ({
@@ -604,20 +602,19 @@ export const useMusicStore = create<MusicStore>()(
           const track = get().localLibrary.find((t) => t.id === id);
           if (!track) return;
 
-          if (Capacitor.isNativePlatform() && track.localPath.startsWith('MHL Music/')) {
-            try {
-              const { uri } = await Filesystem.getUri({
-                path: track.localPath,
-                directory: Directory.Documents,
-              });
-              const playbackUrl = Capacitor.convertFileSrc(uri);
+          const localPlaybackUrl = await resolveLocalPlaybackUrl(track).catch((error) => {
+            console.error('Android local playback failed:', error);
+            return null;
+          });
 
+          if (localPlaybackUrl) {
+            try {
               if (get().currentTrack?.preview?.startsWith('blob:')) {
                 URL.revokeObjectURL(get().currentTrack.preview);
               }
 
               set({
-                currentTrack: { ...track, preview: playbackUrl },
+                currentTrack: { ...track, preview: localPlaybackUrl },
                 isPlaying: false,
                 isLoading: true,
                 progress: 0,
@@ -627,7 +624,7 @@ export const useMusicStore = create<MusicStore>()(
               document.title = `${track.title} · ${track.artist} - MHL Music`;
               set({ dominantColor: null });
 
-              audioEngine.load(playbackUrl);
+              audioEngine.load(localPlaybackUrl);
               audioEngine.setVolume(get().volume);
               audioEngine.updateMediaSession({
                 title: track.title,
@@ -640,7 +637,7 @@ export const useMusicStore = create<MusicStore>()(
               const startTimeout = window.setTimeout(() => {
                 if (!didStart) {
                   set({ isLoading: false, isPlaying: false });
-                  toast.error('La pista tardó demasiado en empezar. Intenta otra vez.');
+                  toast.error('La pista tardo demasiado en empezar. Intenta otra vez.');
                 }
               }, 4500);
 
@@ -651,13 +648,13 @@ export const useMusicStore = create<MusicStore>()(
               get().incrementPlayCount(id);
               return;
             } catch (error) {
-              console.error('Android local playback failed:', error);
+              console.error('Native local playback branch failed:', error);
             }
           }
 
           const fileRef = get().localFileRefs.get(id);
           if (!fileRef) {
-            toast.error('Archivo no disponible — vuelve a importarlo');
+            toast.error('Archivo no disponible. Vuelve a importarlo.');
             return;
           }
 
@@ -704,6 +701,7 @@ export const useMusicStore = create<MusicStore>()(
           set((s) => ({
             localLibrary: s.localLibrary.filter((t) => t.id !== id),
             localFileRefs: newRefs,
+            savedLocalPaths: track ? s.savedLocalPaths.filter((path) => path !== track.localPath) : s.savedLocalPaths,
           }));
         },
 
@@ -713,7 +711,7 @@ export const useMusicStore = create<MusicStore>()(
               URL.revokeObjectURL(track.cover);
             }
           });
-          set({ localLibrary: [], localFileRefs: new Map() });
+          set({ localLibrary: [], localFileRefs: new Map(), savedLocalPaths: [] });
         },
 
         incrementPlayCount: (id) =>
@@ -731,6 +729,7 @@ export const useMusicStore = create<MusicStore>()(
         volume: state.volume,
         downloadFolderName: state.downloadFolderName,
         localLibrary: state.localLibrary,
+        savedLocalPaths: state.savedLocalPaths,
         downloadFormat: state.downloadFormat,
         mp3Quality: state.mp3Quality,
         downloadWifiOnly: state.downloadWifiOnly,
@@ -744,6 +743,7 @@ export const useMusicStore = create<MusicStore>()(
         volume: persisted?.volume ?? 0.8,
         downloadFolderName: persisted?.downloadFolderName || '',
         localLibrary: persisted?.localLibrary || [],
+        savedLocalPaths: persisted?.savedLocalPaths || [],
         downloadFormat: persisted?.downloadFormat ?? 'mp3',
         mp3Quality: persisted?.mp3Quality ?? 'alta',
         downloadWifiOnly: persisted?.downloadWifiOnly ?? false,
@@ -753,3 +753,4 @@ export const useMusicStore = create<MusicStore>()(
     }
   )
 );
+

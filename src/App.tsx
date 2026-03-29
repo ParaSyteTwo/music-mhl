@@ -1,15 +1,23 @@
-import { useEffect } from "react";
+import { Suspense, lazy, useEffect } from "react";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Capacitor } from "@capacitor/core";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { useMusicStore } from "@/store/musicStore";
-import { initYtDlp } from "@/lib/ytdlpBridge";
-import SearchPage from "./pages/SearchPage";
-import DownloadsPage from "./pages/DownloadsPage";
-import LibraryPage from "./pages/LibraryPage";
-import PlaylistsPage from "./pages/PlaylistsPage";
-import SettingsPage from "./pages/SettingsPage";
+
+const SearchPage = lazy(() => import("./pages/SearchPage"));
+const DownloadsPage = lazy(() => import("./pages/DownloadsPage"));
+const LibraryPage = lazy(() => import("./pages/LibraryPage"));
+const PlaylistsPage = lazy(() => import("./pages/PlaylistsPage"));
+const SettingsPage = lazy(() => import("./pages/SettingsPage"));
+
+function RouteFallback() {
+  return (
+    <div className="min-h-[50vh] flex items-center justify-center text-sm text-[#666660]">
+      Cargando...
+    </div>
+  );
+}
 
 const App = () => {
   // Rescan local library on Android to restore localFileRefs after app restart
@@ -18,8 +26,10 @@ const App = () => {
       useMusicStore.getState().rescanLocalLibrary();
 
       // Initialize yt-dlp in background so it's ready for downloads
-      initYtDlp().then((ok) => {
-        if (ok) console.log('[App] yt-dlp ready');
+      import("@/lib/ytdlpBridge").then(({ initYtDlp }) => {
+        initYtDlp().then((ok) => {
+          if (ok) console.log('[App] yt-dlp ready');
+        });
       });
 
       // Also verify downloaded files still exist (cleanup if deleted externally)
@@ -37,15 +47,17 @@ const App = () => {
   return (
     <BrowserRouter>
       <Sonner />
-      <Routes>
-        <Route element={<AppLayout />}>
-          <Route path="/" element={<SearchPage />} />
-          <Route path="/downloads" element={<DownloadsPage />} />
-          <Route path="/library" element={<LibraryPage />} />
-          <Route path="/playlists" element={<PlaylistsPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-        </Route>
-      </Routes>
+      <Suspense fallback={<RouteFallback />}>
+        <Routes>
+          <Route element={<AppLayout />}>
+            <Route path="/" element={<SearchPage />} />
+            <Route path="/downloads" element={<DownloadsPage />} />
+            <Route path="/library" element={<LibraryPage />} />
+            <Route path="/playlists" element={<PlaylistsPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+          </Route>
+        </Routes>
+      </Suspense>
     </BrowserRouter>
   );
 };
