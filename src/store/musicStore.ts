@@ -292,6 +292,8 @@ export const useMusicStore = create<MusicStore>()(
 
           const { downloadFormat, mp3Quality } = get();
           const maxAttempts = 3;
+          const fileExtension = downloadFormat === 'aac' ? 'm4a' : 'mp3';
+          const resolvedFileName = `${track.title} - ${track.artist}.${fileExtension}`.replace(/[/\\?%*:|"<>]/g, '');
 
           try {
           for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -319,10 +321,9 @@ export const useMusicStore = create<MusicStore>()(
                 });
                 updateDl({ progress: 95 });
 
-                const fileName = `${track.title} - ${track.artist}.mp3`.replace(/[/\\?%*:|"<>]/g, '');
                 const arr = await taggedBlob.arrayBuffer();
                 const base64 = btoa(new Uint8Array(arr).reduce((data, byte) => data + String.fromCharCode(byte), ''));
-                await Filesystem.writeFile({ path: `MHL Music/${fileName}`, data: base64, directory: Directory.Documents, recursive: true });
+                await Filesystem.writeFile({ path: `MHL Music/${resolvedFileName}`, data: base64, directory: Directory.Documents, recursive: true });
               } else if (!Capacitor.isNativePlatform()) {
                 // Web: escribir ID3 tags y guardar como .mp3
                 const genre = track.deezerId
@@ -338,11 +339,10 @@ export const useMusicStore = create<MusicStore>()(
                 });
                 updateDl({ progress: 95 });
 
-                const fileName = `${track.title} - ${track.artist}.mp3`.replace(/[/\\?%*:|"<>]/g, '');
                 const { downloadFolder } = get();
                 if (downloadFolder) {
                   try {
-                    const fileHandle = await downloadFolder.getFileHandle(fileName, { create: true });
+                    const fileHandle = await downloadFolder.getFileHandle(resolvedFileName, { create: true });
                     const writable = await fileHandle.createWritable();
                     await writable.write(taggedBlob);
                     await writable.close();
@@ -350,7 +350,7 @@ export const useMusicStore = create<MusicStore>()(
                     const blobUrl = URL.createObjectURL(taggedBlob);
                     const a = document.createElement('a');
                     a.href = blobUrl;
-                    a.download = fileName;
+                    a.download = resolvedFileName;
                     document.body.appendChild(a);
                     a.click();
                     document.body.removeChild(a);
@@ -360,7 +360,7 @@ export const useMusicStore = create<MusicStore>()(
                   const blobUrl = URL.createObjectURL(taggedBlob);
                   const a = document.createElement('a');
                   a.href = blobUrl;
-                  a.download = fileName;
+                  a.download = resolvedFileName;
                   document.body.appendChild(a);
                   a.click();
                   document.body.removeChild(a);
@@ -368,18 +368,17 @@ export const useMusicStore = create<MusicStore>()(
                 }
               } else {
                 // AAC — save raw buffer as .m4a
-                const fileName = `${track.title} - ${track.artist}.m4a`.replace(/[/\\?%*:|"<>]/g, '');
                 updateDl({ progress: 95 });
 
                 if (Capacitor.isNativePlatform()) {
                   const base64 = btoa(new Uint8Array(audioBuffer).reduce((data, byte) => data + String.fromCharCode(byte), ''));
-                  await Filesystem.writeFile({ path: `MHL Music/${fileName}`, data: base64, directory: Directory.Documents, recursive: true });
+                  await Filesystem.writeFile({ path: `MHL Music/${resolvedFileName}`, data: base64, directory: Directory.Documents, recursive: true });
                 } else {
                   const { downloadFolder } = get();
                   const blob = new Blob([audioBuffer]);
                   if (downloadFolder) {
                     try {
-                      const fileHandle = await downloadFolder.getFileHandle(fileName, { create: true });
+                      const fileHandle = await downloadFolder.getFileHandle(resolvedFileName, { create: true });
                       const writable = await fileHandle.createWritable();
                       await writable.write(blob);
                       await writable.close();
@@ -387,7 +386,7 @@ export const useMusicStore = create<MusicStore>()(
                       const blobUrl = URL.createObjectURL(blob);
                       const a = document.createElement('a');
                       a.href = blobUrl;
-                      a.download = fileName;
+                      a.download = resolvedFileName;
                       document.body.appendChild(a);
                       a.click();
                       document.body.removeChild(a);
@@ -397,7 +396,7 @@ export const useMusicStore = create<MusicStore>()(
                     const blobUrl = URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = blobUrl;
-                    a.download = fileName;
+                    a.download = resolvedFileName;
                     document.body.appendChild(a);
                     a.click();
                     document.body.removeChild(a);
@@ -406,7 +405,7 @@ export const useMusicStore = create<MusicStore>()(
                 }
               }
 
-              updateDl({ progress: 100, status: 'completed', error: undefined });
+              updateDl({ progress: 100, status: 'completed', error: undefined, fileName: resolvedFileName });
               toast.success(`✓ Descargado: ${track.title} - ${track.artist}`, { duration: 4000 });
               return;
             } catch (error) {

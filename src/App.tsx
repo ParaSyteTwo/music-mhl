@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect } from "react";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Capacitor } from "@capacitor/core";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -7,8 +7,6 @@ import { useMusicStore } from "@/store/musicStore";
 
 const SearchPage = lazy(() => import("./pages/SearchPage"));
 const DownloadsPage = lazy(() => import("./pages/DownloadsPage"));
-const LibraryPage = lazy(() => import("./pages/LibraryPage"));
-const PlaylistsPage = lazy(() => import("./pages/PlaylistsPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 
 function RouteFallback() {
@@ -23,8 +21,6 @@ const App = () => {
   // Rescan local library on Android to restore localFileRefs after app restart
   useEffect(() => {
     if (Capacitor.isNativePlatform()) {
-      useMusicStore.getState().rescanLocalLibrary();
-
       // Initialize yt-dlp in background so it's ready for downloads
       import("@/lib/ytdlpBridge").then(({ initYtDlp }) => {
         initYtDlp().then((ok) => {
@@ -52,8 +48,8 @@ const App = () => {
           <Route element={<AppLayout />}>
             <Route path="/" element={<SearchPage />} />
             <Route path="/downloads" element={<DownloadsPage />} />
-            <Route path="/library" element={<LibraryPage />} />
-            <Route path="/playlists" element={<PlaylistsPage />} />
+            <Route path="/library" element={<Navigate to="/downloads" replace />} />
+            <Route path="/playlists" element={<Navigate to="/downloads" replace />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>
         </Routes>

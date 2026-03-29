@@ -8,6 +8,7 @@ public class MainActivity extends BridgeActivity {
     protected void onCreate(Bundle savedInstanceState) {
         registerPlugin(YtDlpPlugin.class);
         registerPlugin(NativeLibraryPlugin.class);
+        registerPlugin(OpenFilePlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

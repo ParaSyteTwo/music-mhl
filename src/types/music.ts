@@ -57,4 +57,5 @@ export interface Download {
   progress: number;
   status: 'queued' | 'downloading' | 'completed' | 'error';
   error?: string;
+  fileName?: string;
 }

@@ -1,7 +1,6 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { useEffect } from 'react';
 import { BottomPlayer } from './BottomPlayer';
-import { Search, Download, Library, ListMusic, Settings } from 'lucide-react';
+import { Search, Download, Settings } from 'lucide-react';
 import { t } from '@/lib/i18n';
 import { useMusicStore } from '@/store/musicStore';
 
@@ -9,13 +8,7 @@ export function AppLayout() {
   const downloadCount = useMusicStore((s) => s.downloads.filter((d) => d.status === 'downloading').length);
   const dominantColor = useMusicStore((s) => s.dominantColor);
   const currentTrack = useMusicStore((s) => s.currentTrack);
-  const rescanLocalLibrary = useMusicStore((s) => s.rescanLocalLibrary);
   const navigate = useNavigate();
-
-  // Rescan local library on mount (for Android persistence)
-  useEffect(() => {
-    rescanLocalLibrary();
-  }, [rescanLocalLibrary]);
 
   return (
     <div className="flex flex-col h-[100dvh] bg-background overflow-hidden">
@@ -66,9 +59,6 @@ export function AppLayout() {
         <NavLink to="/downloads" className={({ isActive }) => `flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors ${isActive ? 'text-[#C8F04B] bg-[rgba(200,240,75,0.1)]' : 'text-[#999] hover:text-[#F5F5F0]'}`}>
           <Download className="w-4 h-4" /> {t('downloads')}
         </NavLink>
-        <NavLink to="/library" className={({ isActive }) => `flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors ${isActive ? 'text-[#C8F04B] bg-[rgba(200,240,75,0.1)]' : 'text-[#999] hover:text-[#F5F5F0]'}`}>
-          <Library className="w-4 h-4" /> {t('library')}
-        </NavLink>
         <NavLink to="/settings" className={({ isActive }) => `flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors ${isActive ? 'text-[#C8F04B] bg-[rgba(200,240,75,0.1)]' : 'text-[#999] hover:text-[#F5F5F0]'}`}>
           <Settings className="w-4 h-4" /> {t('settings')}
         </NavLink>
@@ -112,13 +102,9 @@ export function AppLayout() {
             </span>
           )}
         </NavLink>
-        <NavLink to="/library" className={({ isActive }) => `flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors min-h-[44px] ${isActive ? 'text-[#C8F04B] bg-[rgba(200,240,75,0.06)]' : 'text-[#666]'}`}>
-          <Library className="w-5 h-5" />
-          <span className="text-[10px] font-medium">{t('library')}</span>
-        </NavLink>
-        <NavLink to="/playlists" className={({ isActive }) => `flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors min-h-[44px] ${isActive ? 'text-[#C8F04B] bg-[rgba(200,240,75,0.06)]' : 'text-[#666]'}`}>
-          <ListMusic className="w-5 h-5" />
-          <span className="text-[10px] font-medium">{t('playlists')}</span>
+        <NavLink to="/settings" className={({ isActive }) => `flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors min-h-[44px] ${isActive ? 'text-[#C8F04B] bg-[rgba(200,240,75,0.06)]' : 'text-[#666]'}`}>
+          <Settings className="w-5 h-5" />
+          <span className="text-[10px] font-medium">{t('settings')}</span>
         </NavLink>
       </nav>
     </div>

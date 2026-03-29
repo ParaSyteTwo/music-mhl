@@ -1,6 +1,8 @@
 import { useMusicStore } from '@/store/musicStore';
-import { CheckCircle, Loader2, XCircle, Music, Trash2, Clock } from 'lucide-react';
+import { CheckCircle, Loader2, XCircle, Music, Trash2, Clock, ExternalLink } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { Capacitor } from '@capacitor/core';
+import { openDownloadedFile } from '@/lib/openFileBridge';
 
 function formatDuration(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -18,6 +20,7 @@ function getProgressLabel(progress: number): string {
 
 export default function DownloadsPage() {
   const { downloads, startDownload, removeDownload } = useMusicStore();
+  const isNative = Capacitor.isNativePlatform();
 
   const completed = downloads.filter((d) => d.status === 'completed');
   const active = downloads.filter((d) => d.status === 'downloading');
@@ -35,6 +38,14 @@ export default function DownloadsPage() {
       <p className="text-xs sm:text-sm text-[#666660] mb-6 sm:mb-8">
         <span className="tabular-nums">{downloads.length}</span> total · <span className="tabular-nums">{active.length}</span> activas · <span className="tabular-nums">{queued.length}</span> en cola
       </p>
+
+      {isNative && (
+        <div className="mb-6 p-3 rounded-xl border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.03)]">
+          <p className="text-sm text-[#F5F5F0]">
+            MHL se centra en buscar y descargar. Usa "Abrir" para mandar cada archivo a tu reproductor externo favorito.
+          </p>
+        </div>
+      )}
 
       {/* Active */}
       {active.length > 0 && (
@@ -151,9 +162,19 @@ export default function DownloadsPage() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-[13px] sm:text-sm font-medium truncate text-[#F5F5F0]">{dl.track.title}</p>
-                  <p className="text-[11px] sm:text-xs text-[#666660]">{dl.track.artist}</p>
+                  <p className="text-[11px] sm:text-xs text-[#666660]">{dl.track.artist} · {dl.track.album}</p>
                 </div>
                 <span className="text-xs tabular-nums text-[#444] hidden sm:block">{formatDuration(dl.track.duration)}</span>
+                {isNative && dl.fileName && (
+                  <button
+                    onClick={() => void openDownloadedFile(dl.fileName)}
+                    className="px-2.5 py-2 text-[#C8F04B] hover:text-[#e6ff8a] transition-colors min-h-[44px] flex items-center gap-1.5"
+                    title="Abrir en reproductor"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    <span className="hidden sm:inline text-xs">Abrir</span>
+                  </button>
+                )}
                 <button
                   onClick={() => removeDownload(dl.id)}
                   className="p-2 -mr-1 text-[#666660] hover:text-red-400 active:text-red-400 transition-colors sm:opacity-0 sm:group-hover:opacity-100 min-h-[44px] min-w-[44px] flex items-center justify-center"
