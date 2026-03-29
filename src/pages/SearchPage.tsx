@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Download, Play, Pause, Search, Loader2, Music, CheckCircle, X } from 'lucide-react';
+import { Download, Play, Pause, Search, Loader2, Music, CheckCircle, X, Clock } from 'lucide-react';
 import { useMusicStore } from '@/store/musicStore';
 import { motion, AnimatePresence } from 'framer-motion';
+import { getDownloadCandidates, type DownloadCandidate, type DownloadMode } from '@/lib/api/musicApi';
+import type { Track } from '@/types/music';
 
 function formatDuration(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -39,10 +41,18 @@ export default function SearchPage() {
     currentTrack,
     isPlaying,
     startDownload,
+    startDownloadWithVideoId,
     downloads,
   } = useMusicStore();
 
   const [query, setQuery] = useState(searchQuery);
+  const [pickerTrack, setPickerTrack] = useState<Track | null>(null);
+
+  const handleDownloadClick = (e: React.MouseEvent, track: Track) => {
+    e.stopPropagation();
+    if (isDownloading(track.id)) return;
+    setPickerTrack(track);
+  };
   const [inputFocused, setInputFocused] = useState(false);
   const { recent, remove: removeRecent, refresh: refreshRecent } = useRecentSearches();
   const loadMoreRef = useRef<HTMLDivElement>(null);
@@ -229,7 +239,7 @@ export default function SearchPage() {
                           )}
                         </div>
                         <button
-                          onClick={(e) => { e.stopPropagation(); if (!downloading) startDownload(track); }}
+                          onClick={(e) => { if (!downloading) handleDownloadClick(e, track); }}
                           disabled={downloading}
                           className="absolute top-2 right-2 p-2 rounded-lg bg-black/60 text-white hover:bg-black/80 transition-colors"
                           title="Descargar MP3"
@@ -315,7 +325,7 @@ export default function SearchPage() {
                       {formatDuration(track.duration)}
                     </span>
                     <button
-                      onClick={(e) => { e.stopPropagation(); if (!downloading) startDownload(track); }}
+                      onClick={(e) => { if (!downloading) handleDownloadClick(e, track); }}
                       disabled={downloading}
                       className={`p-2.5 -mr-1 rounded-xl transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center ${
                         downloading ? 'text-[#C8F04B] cursor-wait' : downloaded ? 'text-[#C8F04B]' : 'text-[#666660] hover:text-[#C8F04B] active:text-[#C8F04B] hover:bg-[rgba(200,240,75,0.1)]'
@@ -364,6 +374,182 @@ export default function SearchPage() {
           </motion.div>
         ) : null}
       </AnimatePresence>
+
+      {/* Candidate picker */}
+      <AnimatePresence>
+        {pickerTrack && (
+          <CandidatePicker
+            track={pickerTrack}
+            onClose={() => setPickerTrack(null)}
+            onSelect={(videoId) => {
+              startDownloadWithVideoId(pickerTrack, videoId);
+              setPickerTrack(null);
+            }}
+          />
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+// ─── Candidate Picker ───
+function CandidatePicker({
+  track,
+  onClose,
+  onSelect,
+}: {
+  track: Track;
+  onClose: () => void;
+  onSelect: (videoId: string) => void;
+}) {
+  const [mode, setMode] = useState<DownloadMode>('original');
+  const [candidates, setCandidates] = useState<DownloadCandidate[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [onClose]);
+
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    getDownloadCandidates(track, mode)
+      .then(setCandidates)
+      .catch((e) => setError(e instanceof Error ? e.message : 'Error buscando candidatos'))
+      .finally(() => setLoading(false));
+  }, [track, mode]);
+
+  const MODES: { key: DownloadMode; label: string }[] = [
+    { key: 'original', label: 'Original' },
+    { key: 'cover', label: 'Cover' },
+    { key: 'live', label: 'Live' },
+  ];
+
+  function fmt(s: number) {
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${sec.toString().padStart(2, '0')}`;
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+      onClick={onClose}
+    >
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+
+      <motion.div
+        initial={{ opacity: 0, y: 60 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 60 }}
+        transition={{ type: 'spring', damping: 28, stiffness: 320 }}
+        onClick={(e) => e.stopPropagation()}
+        className="relative z-10 w-full sm:max-w-lg max-h-[88vh] sm:max-h-[80vh] flex flex-col rounded-t-2xl sm:rounded-2xl bg-[#111] border border-[rgba(255,255,255,0.08)] overflow-hidden shadow-2xl"
+      >
+        {/* Header */}
+        <div className="flex items-center gap-3 px-4 pt-4 pb-3 border-b border-[rgba(255,255,255,0.06)] flex-shrink-0">
+          {track.cover && (
+            <img src={track.cover} alt="" className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
+          )}
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-[#F5F5F0] truncate">{track.title}</p>
+            <p className="text-xs text-[#555] truncate">{track.artist}</p>
+          </div>
+          <motion.button
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            onClick={onClose}
+            className="w-8 h-8 rounded-full bg-[rgba(255,255,255,0.08)] hover:bg-[rgba(255,255,255,0.14)] flex items-center justify-center flex-shrink-0 transition-colors"
+          >
+            <X className="w-4 h-4 text-[#888]" />
+          </motion.button>
+        </div>
+
+        {/* Mode tabs */}
+        <div className="flex gap-1.5 px-4 py-3 flex-shrink-0">
+          {MODES.map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => setMode(key)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                mode === key
+                  ? 'bg-[#C8F04B] text-[#080808]'
+                  : 'bg-[rgba(255,255,255,0.06)] text-[#888] hover:bg-[rgba(255,255,255,0.1)] hover:text-[#F5F5F0]'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+          <span className="ml-auto text-[10px] text-[#444] self-center">Elige la versión a descargar</span>
+        </div>
+
+        {/* Candidates list */}
+        <div className="overflow-y-auto flex-1 px-3 pb-4">
+          {loading ? (
+            <div className="space-y-2 mt-1">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="h-14 rounded-xl bg-[rgba(255,255,255,0.04)] animate-pulse" style={{ animationDelay: `${i * 80}ms` }} />
+              ))}
+            </div>
+          ) : error ? (
+            <p className="text-center text-xs text-red-400 py-8">{error}</p>
+          ) : candidates.length === 0 ? (
+            <p className="text-center text-xs text-[#555] py-8">No se encontraron resultados</p>
+          ) : (
+            <div className="space-y-1.5 mt-1">
+              {candidates.map((c, i) => {
+                const durationMatch = track.duration > 0 && c.duration > 0
+                  ? Math.abs(c.duration - track.duration) / track.duration
+                  : 1;
+                const isClose = durationMatch <= 0.15;
+                const isBest = i === 0;
+
+                return (
+                  <motion.button
+                    key={c.videoId}
+                    initial={{ opacity: 0, x: -8 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.04 }}
+                    onClick={() => onSelect(c.videoId)}
+                    className={`w-full px-3 py-2.5 rounded-xl text-left flex items-center gap-3 group transition-all ${
+                      isBest
+                        ? 'bg-[rgba(200,240,75,0.07)] border border-[rgba(200,240,75,0.2)] hover:bg-[rgba(200,240,75,0.12)]'
+                        : 'bg-[rgba(255,255,255,0.03)] border border-transparent hover:bg-[rgba(255,255,255,0.07)]'
+                    }`}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] text-[#F5F5F0] leading-tight line-clamp-2">{c.title}</p>
+                      <p className="text-[11px] text-[#555] truncate mt-0.5">{c.channel}</p>
+                    </div>
+                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                      {c.duration > 0 && (
+                        <span className={`flex items-center gap-1 text-[10px] tabular-nums px-1.5 py-0.5 rounded ${
+                          isClose
+                            ? 'bg-[rgba(200,240,75,0.15)] text-[#C8F04B]'
+                            : 'bg-[rgba(255,255,255,0.06)] text-[#555]'
+                        }`}>
+                          <Clock className="w-2.5 h-2.5" />
+                          {fmt(c.duration)}
+                        </span>
+                      )}
+                      {isBest && (
+                        <span className="text-[9px] text-[#C8F04B] font-medium">mejor match</span>
+                      )}
+                    </div>
+                  </motion.button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </motion.div>
     </motion.div>
   );
 }

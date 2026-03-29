@@ -607,6 +607,52 @@ async def search(
         raise HTTPException(status_code=502, detail=f"Search failed: {exc}") from exc
 
 
+@app.post("/candidates")
+async def candidates(
+    payload: dict[str, Any],
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    require_service_key(authorization)
+
+    title = str(payload.get("title") or "").strip()
+    artist = str(payload.get("artist") or "").strip()
+    album = str(payload.get("album") or "").strip()
+    duration = int(payload.get("duration") or 0)
+    mode = str(payload.get("mode") or "original").strip().lower()
+
+    if not title or not artist:
+        raise HTTPException(status_code=400, detail="title and artist are required")
+
+    if mode == "cover":
+        query = f"{title} cover"
+    elif mode == "live":
+        query = f"{title} {artist} live"
+    else:
+        query = f"{title} {artist} official audio"
+
+    try:
+        results = search_candidates(query, limit=8)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Search failed: {exc}") from exc
+
+    scored = sorted(
+        [
+            {
+                "videoId": c["videoId"],
+                "title": c["title"],
+                "channel": c["channel"],
+                "duration": int(c.get("duration") or 0),
+                "score": score_candidate(c, title, artist, album, duration),
+            }
+            for c in results
+        ],
+        key=lambda x: x["score"],
+        reverse=True,
+    )
+
+    return {"success": True, "candidates": scored}
+
+
 @app.post("/resolve")
 async def resolve(
     payload: dict[str, Any],

@@ -145,6 +145,32 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ success: res.ok, service: payload }, res.ok ? 200 : 502);
     }
 
+    if (action === "getCandidates") {
+      const title = typeof body?.title === "string" ? body.title.trim() : "";
+      const artist = typeof body?.artist === "string" ? body.artist.trim() : "";
+      const album = typeof body?.album === "string" ? body.album.trim() : "";
+      const duration = typeof body?.duration === "number" && body.duration > 0 ? body.duration : 0;
+      const mode = typeof body?.mode === "string" ? body.mode : "original";
+      if (!title || !artist) {
+        return jsonResponse({ success: false, error: "title and artist are required" }, 400);
+      }
+      const ip = getClientIp(req);
+      const rateResult = checkRateLimit(ip);
+      if (!rateResult.ok) {
+        return new Response(JSON.stringify({ success: false, error: rateResult.message }), {
+          status: 429,
+          headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": String(rateResult.retryAfter) },
+        });
+      }
+      const res = await callService("/candidates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, artist, album, duration, mode }),
+      });
+      const data = await res.json();
+      return jsonResponse(data, res.ok ? 200 : 502);
+    }
+
     if (action !== "webDownloadTicket") {
       return jsonResponse({ success: false, error: "Invalid action" }, 400);
     }
@@ -154,6 +180,7 @@ Deno.serve(async (req: Request) => {
     const album = typeof body?.album === "string" ? body.album.trim() : "";
     const format = body?.format === "aac" ? "aac" : "mp3";
     const duration = typeof body?.duration === "number" && body.duration > 0 ? body.duration : 0;
+    const videoIdOverride = typeof body?.videoId === "string" && body.videoId.trim() ? body.videoId.trim() : null;
 
     if (!title || !artist) {
       return jsonResponse({ success: false, error: "title and artist are required" }, 400);
@@ -175,18 +202,24 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const resolveRes = await callService("/resolve", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title, artist, album, format, duration }),
-    });
-
-    const resolvePayload = await resolveRes.json();
-    if (!resolveRes.ok || !resolvePayload?.success) {
-      return jsonResponse(
-        { success: false, error: resolvePayload?.error || "Failed to resolve video" },
-        resolveRes.status || 502,
-      );
+    // Si el usuario ya eligió un videoId concreto, saltamos el resolve
+    let resolvedVideoId: string;
+    if (videoIdOverride) {
+      resolvedVideoId = videoIdOverride;
+    } else {
+      const resolveRes = await callService("/resolve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, artist, album, format, duration }),
+      });
+      const resolvePayload = await resolveRes.json();
+      if (!resolveRes.ok || !resolvePayload?.success) {
+        return jsonResponse(
+          { success: false, error: resolvePayload?.error || "Failed to resolve video" },
+          resolveRes.status || 502,
+        );
+      }
+      resolvedVideoId = resolvePayload.videoId;
     }
 
     const tokenTtlSeconds = getEnvNumber("YTDLP_TOKEN_TTL_SECONDS", 120);
@@ -196,14 +229,10 @@ Deno.serve(async (req: Request) => {
     }
 
     const expiresAtUnix = Math.floor(Date.now() / 1000) + tokenTtlSeconds;
-    const fileName = sanitizeFileName(
-      typeof resolvePayload.fileName === "string"
-        ? resolvePayload.fileName
-        : `${title} - ${artist}.${format}`,
-    );
+    const fileName = sanitizeFileName(`${title} - ${artist}.${format}`);
     const token = await signDownloadToken(
       {
-        videoId: resolvePayload.videoId,
+        videoId: resolvedVideoId,
         fileName,
         format,
         expiresAt: expiresAtUnix,

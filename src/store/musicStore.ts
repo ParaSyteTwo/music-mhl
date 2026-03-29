@@ -48,9 +48,10 @@ interface MusicStore {
   downloadQueue: string[];
   activeDownloads: number;
   startDownload: (track: Track) => void;
+  startDownloadWithVideoId: (track: Track, videoId: string) => void;
   removeDownload: (id: string) => void;
   processDownloadQueue: () => Promise<void>;
-  _executeDownload: (track: Track, id: string) => Promise<void>;
+  _executeDownload: (track: Track, id: string, videoIdOverride?: string) => Promise<void>;
 
   // Download folder (web only, not persisted across sessions)
   downloadFolder: FileSystemDirectoryHandle | null;
@@ -254,7 +255,7 @@ export const useMusicStore = create<MusicStore>()(
           }
         },
 
-        _executeDownload: async (track: Track, id: string) => {
+        _executeDownload: async (track: Track, id: string, videoIdOverride?: string) => {
           set((s) => ({ activeDownloads: s.activeDownloads + 1 }));
 
           const updateDl = (patch: Partial<Download>) =>
@@ -275,7 +276,7 @@ export const useMusicStore = create<MusicStore>()(
 
               const audioBuffer = await downloadTrackAudio(track, (progress) => {
                 updateDl({ progress });
-              }, { format: downloadFormat, quality: mp3Quality });
+              }, { format: downloadFormat, quality: mp3Quality }, videoIdOverride);
               updateDl({ progress: 80 });
 
               if (downloadFormat === 'mp3' && Capacitor.isNativePlatform()) {
@@ -423,6 +424,25 @@ export const useMusicStore = create<MusicStore>()(
 
           if (get().activeDownloads < 2) {
             await get()._executeDownload(track, id);
+          } else {
+            set((s) => ({ downloadQueue: [...s.downloadQueue, id] }));
+          }
+        },
+
+        startDownloadWithVideoId: (track, videoId) => {
+          if (get().downloadWifiOnly && !isOnWifi()) {
+            toast.error('Descarga cancelada: solo WiFi activado', { duration: 4000 });
+            return;
+          }
+          const existing = get().downloads.find((d) => d.track.id === track.id);
+          if (existing && (existing.status === 'downloading' || existing.status === 'queued')) return;
+
+          const id = `d${Date.now()}`;
+          set((s) => ({
+            downloads: [...s.downloads, { id, track, progress: 0, status: 'queued' as const }],
+          }));
+          if (get().activeDownloads < 2) {
+            get()._executeDownload(track, id, videoId);
           } else {
             set((s) => ({ downloadQueue: [...s.downloadQueue, id] }));
           }

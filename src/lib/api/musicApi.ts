@@ -75,9 +75,65 @@ export async function getDeezerTrackGenre(albumId: string | number): Promise<str
   }
 }
 
+export type DownloadMode = 'original' | 'cover' | 'live';
+
+export interface DownloadCandidate {
+  videoId: string;
+  title: string;
+  channel: string;
+  duration: number;
+  score: number;
+}
+
 interface DownloadOptions {
   format?: 'mp3' | 'aac';
   quality?: 'alta' | 'media' | 'baja';
+}
+
+// ─── Get YouTube candidates for user selection ───
+export async function getDownloadCandidates(
+  track: Track,
+  mode: DownloadMode = 'original',
+): Promise<DownloadCandidate[]> {
+  if (Capacitor.isNativePlatform()) {
+    const { searchYouTubeNative } = await import('@/lib/ytdlpBridge');
+    const queries: Record<DownloadMode, string> = {
+      original: `${track.title} ${track.artist} official audio`,
+      cover: `${track.title} cover`,
+      live: `${track.title} ${track.artist} live`,
+    };
+    const results = await searchYouTubeNative(queries[mode]);
+    return results.slice(0, 8).map((r, i) => ({
+      videoId: r.videoId,
+      title: r.title,
+      channel: r.channel,
+      duration: r.duration,
+      score: 8 - i, // orden nativo = relevancia
+    }));
+  }
+
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+  const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+  const res = await fetch(`${supabaseUrl}/functions/v1/yt-stream`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': supabaseKey,
+      'Authorization': `Bearer ${supabaseKey}`,
+    },
+    body: JSON.stringify({
+      action: 'getCandidates',
+      title: track.title,
+      artist: track.artist,
+      album: track.album ?? '',
+      duration: track.duration ?? 0,
+      mode,
+    }),
+  });
+  if (!res.ok) throw new Error('Error obteniendo candidatos');
+  const data = await res.json();
+  if (!data.success) throw new Error(data.error || 'Sin candidatos');
+  return data.candidates as DownloadCandidate[];
 }
 
 interface WebDownloadTicketResponse {
@@ -95,11 +151,19 @@ export async function downloadTrackAudio(
   track: Track,
   onProgress?: (progress: number) => void,
   options: DownloadOptions = {},
+  videoIdOverride?: string,
 ): Promise<ArrayBuffer> {
   if (Capacitor.isNativePlatform()) {
     const { searchYouTubeNative, downloadMp3Native } = await import('@/lib/ytdlpBridge');
-    const query = `${track.title} ${track.artist}`;
 
+    onProgress?.(25);
+
+    // Si el usuario eligió un videoId concreto, lo usamos directamente
+    if (videoIdOverride) {
+      return downloadMp3Native(videoIdOverride, { format: options.format, quality: options.quality });
+    }
+
+    const query = `${track.title} ${track.artist}`;
     onProgress?.(15);
     const nativeResults = await searchYouTubeNative(`${query} official audio`);
     if (!nativeResults.length) throw new Error('No se encontró en YouTube');
@@ -110,10 +174,9 @@ export async function downloadTrackAudio(
       .map((r) => ({ ...r, dScore: track.duration ? Math.abs(r.duration - track.duration) : 999 }))
       .sort((a, b) => a.dScore - b.dScore)
       .slice(0, 3);
-    const candidates = scored;
     let lastError = '';
 
-    for (const candidate of candidates) {
+    for (const candidate of scored) {
       try {
         const buffer = await downloadMp3Native(candidate.videoId, {
           format: options.format,
@@ -146,6 +209,7 @@ export async function downloadTrackAudio(
       album: track.album ?? '',
       format: options.format ?? 'mp3',
       duration: track.duration ?? 0,
+      ...(videoIdOverride ? { videoId: videoIdOverride } : {}),
     }),
   });
 
