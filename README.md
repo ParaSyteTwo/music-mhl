@@ -1,22 +1,22 @@
 # 🎵 MHL Music
 
-## Tu musica. Tu ritmo. Tu espacio.
+## Tu música. Tu ritmo. Tu espacio.
 
-MHL Music es una app web y Android hecha para algo muy simple y muy bonito:  
+MHL Music es una app web y Android hecha para algo muy simple y muy bonito:
 **abrir, buscar, escuchar, descargar y disfrutar.**
 
 ---
 
-## ✨ ¿Que vibe tiene MHL Music?
+## ✨ ¿Qué vibe tiene MHL Music?
 
-MHL Music no quiere ser una plataforma gigantesca que te entierre en menus, muros, upsells y pantallas llenas de ruido.  
-Quiere ser una app que se siente ligera, util y musical.
+MHL Music no quiere ser una plataforma gigantesca que te entierre en menús, muros, upsells y pantallas llenas de ruido.
+Quiere ser una app que se siente ligera, útil y musical.
 
-La filosofia del proyecto es esta:
+La filosofía del proyecto es esta:
 
-- 🔎 **encuentra musica rapido**
+- 🔎 **encuentra música rápido**
 - ▶️ **escucha previews al momento**
-- ⬇️ **descarga desde la cancion elegida**
+- ⬇️ **elige exactamente qué versión bajar**
 - 🌐 **mantiene la web ligera**
 - 📱 **deja Android hacer lo suyo con potencia nativa**
 - 🔐 **no expone secretos al navegador**
@@ -27,62 +27,58 @@ La filosofia del proyecto es esta:
 
 ### 🌐 En la web
 
-- 🔍 busqueda y metadata desde Deezer
-- 🎧 reproduccion de previews desde la propia app
-- 🎟️ sistema de descarga por ticket firmado
-- 🪶 frontend servido como static site
-- ⚡ flujo web limpio:
-
-```text
-navegador -> yt-stream -> ticket firmado -> ytdlp-service
-```
+- Búsqueda y metadata desde Deezer
+- Reproducción de previews desde la propia app
+- Sistema de descarga por ticket firmado
+- Frontend servido como static site
 
 ### 📱 En Android
 
-- ⚙️ descarga nativa con `yt-dlp`
-- 🎵 flujo separado del backend web
-- 🧱 arquitectura pensada para que la web no rompa la app movil
+- Búsqueda en YouTube con múltiples queries en paralelo
+- Selector de candidatos antes de descargar — tú eliges la versión exacta
+- Descarga nativa con yt-dlp directamente en el dispositivo
+- Flujo completamente separado del backend web
 
 ### 🍎 En iPhone y iPad
 
-- 📲 la web puede instalarse como app desde Safari
-- 🎧 los previews y la navegacion web funcionan como PWA
-- 📁 los archivos descargados dependen del flujo de Safari y la app Archivos
-- ⚠️ la experiencia de descarga no es tan nativa ni tan comoda como en Android
+- La web puede instalarse como app desde Safari
+- Los previews y la navegación web funcionan como PWA
+- Los archivos descargados pueden abrirse o guardarse en Archivos
+- La experiencia de descarga no es tan nativa ni tan cómoda como en Android
 
 ### 🧠 En backend
 
 - `deezer-search` queda limitado a Deezer y metadatos
-- `yt-stream` actua como broker para descargas web
+- `yt-stream` actúa como broker para descargas web
 - `services/ytdlp-service` resuelve la descarga real en Railway
 
 ---
 
 ## 💿 Lo que quiere ser
 
-MHL Music va en esta direccion:
+MHL Music va en esta dirección:
 
 - una app que se sienta viva
-- una UX mas musical y menos tosca
-- una experiencia rapida tanto en web como en Android
+- una UX más musical y menos tosca
+- una experiencia rápida tanto en web como en Android
 - una infraestructura clara, mantenible y sin piezas haciendo trabajos que no les tocan
 
 ### 🎯 Objetivos del producto
 
-- buscar musica sin friccion
+- buscar música sin fricción
 - escuchar previews sin esperas raras
-- bajar audio desde la cancion elegida
+- elegir y bajar exactamente la versión que quieres
 - mantener secretos fuera del frontend
 - evitar pasar audio pesado por Supabase
 - tener una web simple de desplegar y una app Android fuerte por separado
 
-### 🔥 Direccion actual del proyecto
+### 🔥 Dirección actual del proyecto
 
 - pulir la experiencia web
 - seguir reforzando Android como cliente nativo
-- mejorar feedback visual, sensacion y flow de la app
-- reducir dependencias fragiles
-- dejar el sistema en una combinacion clara:
+- mejorar feedback visual, sensación y flow de la app
+- reducir dependencias frágiles
+- dejar el sistema en una combinación clara:
 
 ```text
 frontend static site + Supabase + Railway
@@ -90,11 +86,11 @@ frontend static site + Supabase + Railway
 
 ---
 
-## 🎼 Como suena por dentro
+## 🎼 Cómo suena por dentro
 
 ### 🌐 Flujo web
 
-1. El usuario busca una cancion.
+1. El usuario busca una canción.
 2. La app obtiene metadata desde Deezer.
 3. Al pulsar descargar, el frontend pide un ticket a `yt-stream`.
 4. `yt-stream` valida, limita, resuelve el video y firma un token.
@@ -102,9 +98,11 @@ frontend static site + Supabase + Railway
 
 ### 📱 Flujo Android
 
-1. El usuario busca una cancion.
-2. La app usa el plugin nativo `yt-dlp`.
-3. La descarga se resuelve en el dispositivo.
+1. El usuario busca una canción.
+2. La app lanza varias búsquedas en YouTube en paralelo.
+3. Aparece un picker con los 3 mejores candidatos puntuados por relevancia y duración.
+4. El usuario elige la versión exacta que quiere.
+5. La descarga se resuelve en el dispositivo con yt-dlp nativo.
 
 ### 🍎 Flujo en iPhone PWA
 
@@ -112,7 +110,7 @@ frontend static site + Supabase + Railway
 2. Puede añadirla a pantalla de inicio como app web.
 3. La app sigue funcionando sobre Safari/WebKit.
 4. Los audios descargados pueden abrirse o guardarse en Archivos.
-5. La experiencia de archivos y descargas es mas limitada que en Android.
+5. La experiencia de archivos y descargas es más limitada que en Android.
 
 ---
 
@@ -122,7 +120,7 @@ frontend static site + Supabase + Railway
 - **Estado:** Zustand
 - **Backend web:** Supabase Edge Functions
 - **Servicio de descargas web:** `services/ytdlp-service` desplegado en Railway
-- **Android:** Capacitor + plugin nativo `yt-dlp`
+- **Android:** Capacitor + plugin nativo yt-dlp
 
 ---
 
@@ -176,7 +174,7 @@ TEMP_DIR=/tmp/ytdlp-service
 PORT=8080
 ```
 
-`YTDLP_SIGNING_SECRET` y `DOWNLOAD_SIGNING_SECRET` deben tener el mismo valor.
+> `YTDLP_SIGNING_SECRET` y `DOWNLOAD_SIGNING_SECRET` deben tener el mismo valor.
 
 ---
 
@@ -210,37 +208,47 @@ Desplegar `services/ytdlp-service/` como servicio Docker.
 
 - Build context: `services/ytdlp-service`
 - Healthcheck: `GET /health`
-- No requiere volumen persistente para v1
+- No requiere volumen persistente
 - `ffmpeg` se instala desde el `Dockerfile`
 
 ---
 
 ## 📲 Instalar la web como app en iPhone
 
-1. Abre MHL Music en `Safari`.
-2. Pulsa el boton de `Compartir`.
-3. Baja hasta `Añadir a pantalla de inicio`.
-4. Confirma el nombre de la app.
-5. Abrela desde el icono como si fuera una app normal.
+1. Abre MHL Music en Safari
+2. Pulsa el botón de **Compartir**
+3. Baja hasta **Añadir a pantalla de inicio**
+4. Confirma el nombre de la app
+5. Ábrela desde el icono como si fuera una app normal
 
-### Qué esperar en iPhone
+**Qué esperar en iPhone**
 
 - ✅ la PWA puede abrirse como app
 - ✅ los previews y la interfaz web funcionan
 - ✅ iPhone puede reproducir `mp3`, `aac` y `m4a`
-- ✅ un archivo descargado puede abrirse o guardarse en `Archivos`
-- ⚠️ la gestion de descargas no es tan directa como en Android
+- ✅ un archivo descargado puede abrirse o guardarse en Archivos
+- ⚠️ la gestión de descargas no es tan directa como en Android
 - ⚠️ algunas acciones dependen del comportamiento de Safari
-- ⚠️ no tiene el mismo nivel de integracion nativa que la app Android
+- ⚠️ no tiene el mismo nivel de integración nativa que la app Android
 
 ---
 
-## ✅ Validacion esperada
+## 📱 Instalar la app en Android
 
-- la web obtiene ticket desde `yt-stream`
-- la descarga final viene del servicio Railway
-- los tokens caducados fallan
-- Android sigue descargando por el plugin nativo
+Descarga el APK desde la sección [Releases](../../releases) de este repositorio.
+
+1. En tu Android ve a **Ajustes → Seguridad → Fuentes desconocidas**
+2. Actívalo si hace falta
+3. Abre el APK descargado
+4. Instala la app
+
+> ⚠️ Requiere Android 8.0 o superior (API 26+)
+
+---
+
+## 🌐 Versión web
+
+Disponible en: [music-mhl.onrender.com](https://music-mhl.onrender.com)
 
 ---
 
@@ -250,10 +258,15 @@ Desplegar `services/ytdlp-service/` como servicio Docker.
 - sin secretos en el navegador
 - sin audio pesado pasando por Supabase
 - arquitectura abierta y auditable desde el repo
+- gratis para siempre — sin ads, sin paywalls
 
 ---
 
 ## 🤖 Contexto para agentes
 
 - fuente principal: `docs/context.md`
-- resumen corto para Claude: `claude.md`
+- resumen corto para Claude: `.claude/CLAUDE.md`
+
+---
+
+¿Encontraste un bug? Abre un [issue](../../issues) en este repositorio.
