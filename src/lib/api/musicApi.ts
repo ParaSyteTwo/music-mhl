@@ -1,6 +1,7 @@
 import { Track } from '@/types/music';
 import { createClient } from '@supabase/supabase-js';
 import { Capacitor } from '@capacitor/core';
+import { useMusicStore } from '@/store/musicStore';
 
 let _supabaseClient: ReturnType<typeof createClient> | null = null;
 
@@ -310,6 +311,7 @@ export async function downloadTrackAudio(
       .sort((a, b) => a.dScore - b.dScore)
       .slice(0, 3);
     let lastError = '';
+    let autoUpdated = false;
 
     for (const candidate of scored) {
       try {
@@ -320,6 +322,15 @@ export async function downloadTrackAudio(
         return buffer;
       } catch (e) {
         lastError = e instanceof Error ? e.message : 'Failed';
+        const isOutdated = /403|forbidden|outdated|older than/i.test(lastError);
+        if (isOutdated && !autoUpdated) {
+          autoUpdated = true;
+          try {
+            const { updateYtDlp } = await import('@/lib/ytdlpBridge');
+            await updateYtDlp();
+            useMusicStore.getState().setYtDlpUpdateAvailable(false);
+          } catch { /* update failure is non-fatal */ }
+        }
         continue;
       }
     }

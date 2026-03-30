@@ -304,17 +304,9 @@ def looks_anime_like(title: str, artist: str, album: str = "") -> bool:
 def build_candidate_queries(title: str, artist: str, album: str = "") -> list[str]:
     clean_title = normalize_search_term(title)
     clean_artist = normalize_search_term(artist)
-    clean_album = normalize_search_term(album)
-    queries = [
+    return [
         f"{clean_title} {clean_artist} official audio",
-        f"{clean_title} {clean_artist}",
     ]
-    fallback_query = f"{clean_title} {clean_artist} full version" if looks_anime_like(title, artist, album) else ""
-    if not fallback_query and clean_album:
-        fallback_query = f"{clean_title} {clean_album} {clean_artist}"
-    if fallback_query:
-        queries.append(fallback_query)
-    return list(dict.fromkeys(q.strip() for q in queries if q.strip()))
 
 
 def score_candidate(

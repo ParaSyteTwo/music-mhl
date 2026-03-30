@@ -63,16 +63,9 @@ function looksAnimeLike(title: string, artist: string, album = ""): boolean {
 function buildCandidateQueries(title: string, artist: string, album = ""): string[] {
   const cleanTitle = normalizeSearchTerm(title);
   const cleanArtist = normalizeSearchTerm(artist);
-  const cleanAlbum = normalizeSearchTerm(album);
-  const primaryQueries = [
+  return [
     `${cleanTitle} ${cleanArtist} official audio`,
-    `${cleanTitle} ${cleanArtist}`,
   ];
-  const fallbackQuery = looksAnimeLike(title, artist, album)
-    ? `${cleanTitle} ${cleanArtist} full version`
-    : (cleanAlbum ? `${cleanTitle} ${cleanAlbum} ${cleanArtist}` : "");
-
-  return [...new Set([...primaryQueries, fallbackQuery].map((query) => query.trim()).filter(Boolean))];
 }
 
 function scoreCandidate(

@@ -10,6 +10,7 @@ export interface YtDlpSearchResult {
 interface YtDlpPluginInterface {
   initialize(): Promise<{ success: boolean }>;
   update(): Promise<{ success: boolean; status: string }>;
+  getVersion(): Promise<{ success: boolean; version: string }>;
   search(options: { query: string }): Promise<{ success: boolean; results: YtDlpSearchResult[] }>;
   getStreamUrl(options: { videoId: string }): Promise<{ success: boolean; url: string }>;
   downloadAsMp3?: (options: { videoId: string }) => Promise<{ success: boolean; data: string; size: number }>;
@@ -78,6 +79,12 @@ export async function updateYtDlp(): Promise<string> {
   if (!initialized) await initYtDlp();
   const r = await YtDlp.update();
   return r.status;
+}
+
+export async function getYtDlpVersion(): Promise<string> {
+  if (!initialized) await initYtDlp();
+  const r = await YtDlp.getVersion();
+  return r.version;
 }
 
 export default YtDlp;

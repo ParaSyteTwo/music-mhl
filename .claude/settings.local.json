@@ -24,7 +24,9 @@
       "Bash(gh repo:*)",
       "Bash(pip install:*)",
       "Bash(curl -s https://raw.githubusercontent.com/anthropics/claude-plugins-official/main/README.md)",
-      "Bash(grep -E \"^\\\\s*[-*]\\\\s+\\\\`[a-z]\")"
+      "Bash(grep -E \"^\\\\s*[-*]\\\\s+\\\\`[a-z]\")",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ]
   }
 }

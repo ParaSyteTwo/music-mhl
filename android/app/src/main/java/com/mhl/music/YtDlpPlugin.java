@@ -99,6 +99,26 @@ public class YtDlpPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void getVersion(PluginCall call) {
+        executor.execute(() -> {
+            try {
+                ensureInitialized();
+                String version = YoutubeDL.getInstance().version(getContext());
+                JSObject result = new JSObject();
+                result.put("success", true);
+                result.put("version", version != null ? version : "unknown");
+                call.resolve(result);
+            } catch (Exception e) {
+                Log.w(TAG, "getVersion failed: " + e.getMessage());
+                JSObject result = new JSObject();
+                result.put("success", false);
+                result.put("version", "unknown");
+                call.resolve(result);
+            }
+        });
+    }
+
+    @PluginMethod
     public void search(PluginCall call) {
         String query = call.getString("query");
         if (query == null || query.isEmpty()) {

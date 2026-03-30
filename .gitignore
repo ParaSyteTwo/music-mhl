@@ -47,3 +47,5 @@ __pycache__/
 
 # Claude worktrees (embedded git repos)
 .claude/worktrees/
+
+.vercel

@@ -114,6 +114,14 @@ interface MusicStore {
   appLanguage: 'es' | 'en';
   setAppLanguage: (lang: 'es' | 'en') => void;
 
+  // ─── yt-dlp status ───
+  ytDlpVersion: string | null;
+  ytDlpUpdateAvailable: boolean;
+  ytDlpUpdating: boolean;
+  setYtDlpVersion: (version: string | null) => void;
+  setYtDlpUpdateAvailable: (v: boolean) => void;
+  setYtDlpUpdating: (v: boolean) => void;
+
   // ─── Local Library ───
   localLibrary: LocalTrack[];
   localFileRefs: Map<string, File>;
@@ -529,6 +537,14 @@ export const useMusicStore = create<MusicStore>()(
         setDownloadWifiOnly: (v) => set({ downloadWifiOnly: v }),
         appLanguage: 'es',
         setAppLanguage: (lang) => set({ appLanguage: lang }),
+
+        // ─── yt-dlp status ───
+        ytDlpVersion: null,
+        ytDlpUpdateAvailable: false,
+        ytDlpUpdating: false,
+        setYtDlpVersion: (version) => set({ ytDlpVersion: version }),
+        setYtDlpUpdateAvailable: (v) => set({ ytDlpUpdateAvailable: v }),
+        setYtDlpUpdating: (v) => set({ ytDlpUpdating: v }),
 
         // ─── Local Library ───
         localLibrary: [],
