@@ -238,7 +238,7 @@ export async function getDownloadCandidates(
 
     const finalCandidates = [...merged.values()]
       .sort((a, b) => b.score - a.score)
-      .slice(0, 8);
+      .slice(0, 3);
     candidateCache.set(cacheKey, finalCandidates);
     return finalCandidates;
   }
