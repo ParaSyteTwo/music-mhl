@@ -54,6 +54,10 @@ export default function SearchPage() {
     if (isDownloading(track.id)) return;
     setPickerTrack(track);
   };
+
+  const handleDownloadPrefetch = useCallback((track: Track) => {
+    getDownloadCandidates(track).catch(() => {});
+  }, []);
   const [inputFocused, setInputFocused] = useState(false);
   const { recent, remove: removeRecent, refresh: refreshRecent } = useRecentSearches();
   const loadMoreRef = useRef<HTMLDivElement>(null);
@@ -252,6 +256,8 @@ export default function SearchPage() {
                         </div>
                         <button
                           onClick={(e) => { if (!downloading) handleDownloadClick(e, track); }}
+                          onMouseEnter={() => { if (!downloading) handleDownloadPrefetch(track); }}
+                          onTouchStart={() => { if (!downloading) handleDownloadPrefetch(track); }}
                           disabled={downloading}
                           className="absolute top-2 right-2 p-2 rounded-lg bg-black/60 text-white hover:bg-black/80 transition-colors"
                           title="Descargar MP3"
@@ -337,6 +343,8 @@ export default function SearchPage() {
                     </span>
                     <button
                       onClick={(e) => { if (!downloading) handleDownloadClick(e, track); }}
+                      onMouseEnter={() => { if (!downloading) handleDownloadPrefetch(track); }}
+                      onTouchStart={() => { if (!downloading) handleDownloadPrefetch(track); }}
                       disabled={downloading}
                       className={`p-2.5 -mr-1 rounded-xl transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center ${
                         downloading ? 'text-[#C8F04B] cursor-wait' : downloaded ? 'text-[#C8F04B]' : 'text-[#666660] hover:text-[#C8F04B] active:text-[#C8F04B] hover:bg-[rgba(200,240,75,0.1)]'
@@ -476,7 +484,7 @@ function CandidatePicker({
         <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-[rgba(255,255,255,0.06)] flex-shrink-0">
           <div>
             <p className="text-xs font-medium text-[#F5F5F0]">Resultados inteligentes</p>
-            <p className="text-[11px] text-[#555]">Varias busquedas, una sola lista ordenada por coincidencia</p>
+            <p className="text-[11px] text-[#555]">Busqueda rapida ordenada por coincidencia</p>
           </div>
           <span className="text-[10px] text-[#444] text-right">Elige la cancion exacta a descargar</span>
         </div>

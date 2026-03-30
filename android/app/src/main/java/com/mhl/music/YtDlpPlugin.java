@@ -122,7 +122,7 @@ public class YtDlpPlugin extends Plugin {
                     }
                 }
 
-                YoutubeDLRequest request = new YoutubeDLRequest("ytsearch3:" + query);
+                YoutubeDLRequest request = new YoutubeDLRequest("ytsearch5:" + query);
                 request.addOption("--dump-json");
                 request.addOption("--flat-playlist");
                 request.addOption("--no-download");

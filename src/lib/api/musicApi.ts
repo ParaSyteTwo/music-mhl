@@ -122,16 +122,25 @@ function looksAnimeLike(track: Track): boolean {
 function buildCandidateQueries(track: Track): string[] {
   const title = normalizeSearchTerm(getPreferredTrackTitle(track));
   const artist = normalizeSearchTerm(track.artist);
-  const album = normalizeSearchTerm(getPreferredAlbumName(track));
-  const primaryQueries = [
-    `${title} ${artist} official audio`,
+  const queries = [
     `${title} ${artist}`,
+    `${title} ${artist} official audio`,
   ];
-  const fallbackQuery = looksAnimeLike(track)
-    ? `${title} ${artist} full version`
-    : (album ? `${title} ${album} ${artist}` : '');
+  if (looksAnimeLike(track)) {
+    const album = normalizeSearchTerm(getPreferredAlbumName(track));
+    queries.push(`${title} full`);
+    if (album && album !== title) queries.push(`${title} ${album}`);
+  }
+  return queries;
+}
 
-  return [...new Set([...primaryQueries, fallbackQuery].map((query) => query.trim()).filter(Boolean))];
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error('search timeout')), ms),
+    ),
+  ]);
 }
 
 function classifyCandidate(candidate: Pick<DownloadCandidate, 'title' | 'channel'>): string {
@@ -202,11 +211,14 @@ export async function getDownloadCandidates(
   if (Capacitor.isNativePlatform()) {
     const { searchYouTubeNative } = await import('@/lib/ytdlpBridge');
     const queries = buildCandidateQueries(track);
-    const merged = new Map<string, DownloadCandidate>();
 
-    for (const [queryIndex, query] of queries.entries()) {
-      const results = await searchYouTubeNative(query);
-      for (const result of results.slice(0, 3)) {
+    const resultsPerQuery = await Promise.all(
+      queries.map((q) => withTimeout(searchYouTubeNative(q), 10000).catch(() => [] as Awaited<ReturnType<typeof searchYouTubeNative>>)),
+    );
+
+    const merged = new Map<string, DownloadCandidate>();
+    resultsPerQuery.forEach((results, queryIndex) => {
+      for (const result of results.slice(0, 5)) {
         const score = scoreNativeCandidate(track, result, queryIndex);
         const current = merged.get(result.videoId);
         const candidate: DownloadCandidate = {
@@ -222,23 +234,11 @@ export async function getDownloadCandidates(
           merged.set(result.videoId, candidate);
         }
       }
-
-      const ranked = [...merged.values()].sort((a, b) => b.score - a.score);
-      if (ranked[0]?.confidence === 'alta' && ranked.length >= 2) {
-        const finalCandidates = ranked.slice(0, 3);
-        candidateCache.set(cacheKey, finalCandidates);
-        return finalCandidates;
-      }
-      if (queryIndex >= 1 && ranked[0]?.confidence !== 'baja') {
-        const finalCandidates = ranked.slice(0, 3);
-        candidateCache.set(cacheKey, finalCandidates);
-        return finalCandidates;
-      }
-    }
+    });
 
     const finalCandidates = [...merged.values()]
       .sort((a, b) => b.score - a.score)
-      .slice(0, 3);
+      .slice(0, 8);
     candidateCache.set(cacheKey, finalCandidates);
     return finalCandidates;
   }
