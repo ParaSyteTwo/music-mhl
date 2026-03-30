@@ -27,8 +27,10 @@ function mapProxiedTrack(t: any): Track {
   return {
     id: t.id || `dz-${t.deezerId}`,
     title: t.title || 'Unknown',
+    canonicalTitle: t.canonicalTitle || t.title_short || t.title || 'Unknown',
     artist: t.artist || 'Unknown',
     album: t.album || 'Unknown',
+    canonicalAlbum: t.canonicalAlbum || t.album || 'Unknown',
     duration: t.duration || 0,
     cover: t.cover || '',
     preview: t.preview || '',
@@ -90,6 +92,8 @@ interface DownloadOptions {
   quality?: 'alta' | 'media' | 'baja';
 }
 
+const candidateCache = new Map<string, DownloadCandidate[]>();
+
 function normalizeSearchTerm(value: string): string {
   return value
     .toLowerCase()
@@ -102,26 +106,32 @@ function normalizeSearchTerm(value: string): string {
     .trim();
 }
 
+function getPreferredTrackTitle(track: Track): string {
+  return track.canonicalTitle?.trim() || track.title;
+}
+
+function getPreferredAlbumName(track: Track): string {
+  return track.canonicalAlbum?.trim() || track.album;
+}
+
 function looksAnimeLike(track: Track): boolean {
-  const source = `${track.title} ${track.artist} ${track.album ?? ''}`.toLowerCase();
+  const source = `${getPreferredTrackTitle(track)} ${track.title} ${track.artist} ${getPreferredAlbumName(track)}`.toLowerCase();
   return /(anime|opening|ending|\bop\b|\bed\b|theme|ost|project|isekai)/.test(source);
 }
 
 function buildCandidateQueries(track: Track): string[] {
-  const title = normalizeSearchTerm(track.title);
+  const title = normalizeSearchTerm(getPreferredTrackTitle(track));
   const artist = normalizeSearchTerm(track.artist);
-  const album = normalizeSearchTerm(track.album ?? '');
-  const queries = [
-    `${title} ${artist}`,
+  const album = normalizeSearchTerm(getPreferredAlbumName(track));
+  const primaryQueries = [
     `${title} ${artist} official audio`,
-    album ? `${title} ${album} ${artist}` : '',
+    `${title} ${artist}`,
   ];
+  const fallbackQuery = looksAnimeLike(track)
+    ? `${title} ${artist} full version`
+    : (album ? `${title} ${album} ${artist}` : '');
 
-  if (looksAnimeLike(track)) {
-    queries[2] = `${title} ${artist} full version`;
-  }
-
-  return [...new Set(queries.map((query) => query.trim()).filter(Boolean))];
+  return [...new Set([...primaryQueries, fallbackQuery].map((query) => query.trim()).filter(Boolean))];
 }
 
 function classifyCandidate(candidate: Pick<DownloadCandidate, 'title' | 'channel'>): string {
@@ -138,13 +148,15 @@ function scoreNativeCandidate(
   queryIndex: number,
 ): number {
   const title = candidate.title.toLowerCase();
+  const normalizedTitle = normalizeSearchTerm(candidate.title);
   const channel = candidate.channel.toLowerCase();
-  const wantedTitle = normalizeSearchTerm(track.title);
+  const wantedTitle = normalizeSearchTerm(getPreferredTrackTitle(track));
   const wantedArtist = normalizeSearchTerm(track.artist);
-  const wantedAlbum = normalizeSearchTerm(track.album ?? '');
+  const wantedAlbum = normalizeSearchTerm(getPreferredAlbumName(track));
   let score = 100 - queryIndex * 8;
 
-  if (wantedTitle && title.includes(wantedTitle)) score += 30;
+  if (wantedTitle && normalizedTitle === wantedTitle) score += 40;
+  else if (wantedTitle && title.includes(wantedTitle)) score += 30;
   if (wantedArtist && title.includes(wantedArtist)) score += 18;
   if (wantedArtist && channel.includes(wantedArtist)) score += 14;
   if (wantedAlbum && title.includes(wantedAlbum)) score += 8;
@@ -157,11 +169,18 @@ function scoreNativeCandidate(
   }
 
   if (title.includes('official audio')) score += 18;
+  if (title.includes('official video')) score += 14;
   if (channel.includes('topic')) score += 10;
+  if (channel.includes('official')) score += 8;
   if (/(opening|ending|\bop\b|\bed\b|full version)/.test(title) && looksAnimeLike(track)) score += 15;
-  if (/(karaoke|reaction|nightcore|sped up|slowed|8d|instrumental)/.test(title)) score -= 22;
+  if (/(lyrics|lyric video|sub esp|sub english|subbed)/.test(title)) score -= 12;
+  if (/(karaoke|reaction|nightcore|sped up|slowed|8d|instrumental|amv|edit)/.test(title)) score -= 22;
+  if (/(dub cover|english dub cover|fan dub)/.test(title)) score -= 24;
   if (title.includes('cover') && !channel.includes(wantedArtist)) score -= 12;
   if (title.includes('live')) score -= 8;
+  if (classifyCandidate(candidate) === 'original probable') score += 10;
+  if (classifyCandidate(candidate) === 'cover') score -= 10;
+  if (classifyCandidate(candidate) === 'live') score -= 8;
 
   return score;
 }
@@ -176,6 +195,10 @@ function confidenceFromScore(score: number): 'alta' | 'media' | 'baja' {
 export async function getDownloadCandidates(
   track: Track,
 ): Promise<DownloadCandidate[]> {
+  const cacheKey = `${track.deezerId ?? track.id}|${getPreferredTrackTitle(track)}|${track.artist}|${getPreferredAlbumName(track)}`;
+  const cached = candidateCache.get(cacheKey);
+  if (cached) return cached;
+
   if (Capacitor.isNativePlatform()) {
     const { searchYouTubeNative } = await import('@/lib/ytdlpBridge');
     const queries = buildCandidateQueries(track);
@@ -183,7 +206,7 @@ export async function getDownloadCandidates(
 
     for (const [queryIndex, query] of queries.entries()) {
       const results = await searchYouTubeNative(query);
-      for (const result of results.slice(0, 6)) {
+      for (const result of results.slice(0, 3)) {
         const score = scoreNativeCandidate(track, result, queryIndex);
         const current = merged.get(result.videoId);
         const candidate: DownloadCandidate = {
@@ -202,13 +225,22 @@ export async function getDownloadCandidates(
 
       const ranked = [...merged.values()].sort((a, b) => b.score - a.score);
       if (ranked[0]?.confidence === 'alta' && ranked.length >= 2) {
-        return ranked.slice(0, 3);
+        const finalCandidates = ranked.slice(0, 3);
+        candidateCache.set(cacheKey, finalCandidates);
+        return finalCandidates;
+      }
+      if (queryIndex >= 1 && ranked[0]?.confidence !== 'baja') {
+        const finalCandidates = ranked.slice(0, 3);
+        candidateCache.set(cacheKey, finalCandidates);
+        return finalCandidates;
       }
     }
 
-    return [...merged.values()]
+    const finalCandidates = [...merged.values()]
       .sort((a, b) => b.score - a.score)
       .slice(0, 3);
+    candidateCache.set(cacheKey, finalCandidates);
+    return finalCandidates;
   }
 
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
@@ -222,9 +254,9 @@ export async function getDownloadCandidates(
     },
     body: JSON.stringify({
       action: 'getCandidates',
-      title: track.title,
+      title: getPreferredTrackTitle(track),
       artist: track.artist,
-      album: track.album ?? '',
+      album: getPreferredAlbumName(track),
       duration: track.duration ?? 0,
     }),
   });
@@ -234,7 +266,9 @@ export async function getDownloadCandidates(
   }
   const data = await res.json();
   if (!data.success) throw new Error(data.error || data.detail || 'Sin candidatos');
-  return data.candidates as DownloadCandidate[];
+  const finalCandidates = data.candidates as DownloadCandidate[];
+  candidateCache.set(cacheKey, finalCandidates);
+  return finalCandidates;
 }
 
 interface WebDownloadTicketResponse {
@@ -264,7 +298,7 @@ export async function downloadTrackAudio(
       return downloadMp3Native(videoIdOverride, { format: options.format, quality: options.quality });
     }
 
-    const query = `${track.title} ${track.artist}`;
+    const query = `${getPreferredTrackTitle(track)} ${track.artist}`;
     onProgress?.(15);
     const nativeResults = await searchYouTubeNative(`${query} official audio`);
     if (!nativeResults.length) throw new Error('No se encontró en YouTube');
@@ -305,9 +339,9 @@ export async function downloadTrackAudio(
     },
     body: JSON.stringify({
       action: 'webDownloadTicket',
-      title: track.title,
+      title: getPreferredTrackTitle(track),
       artist: track.artist,
-      album: track.album ?? '',
+      album: getPreferredAlbumName(track),
       format: options.format ?? 'mp3',
       duration: track.duration ?? 0,
       ...(videoIdOverride ? { videoId: videoIdOverride } : {}),

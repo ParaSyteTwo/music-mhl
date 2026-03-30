@@ -306,13 +306,14 @@ def build_candidate_queries(title: str, artist: str, album: str = "") -> list[st
     clean_artist = normalize_search_term(artist)
     clean_album = normalize_search_term(album)
     queries = [
-        f"{clean_title} {clean_artist}",
         f"{clean_title} {clean_artist} official audio",
+        f"{clean_title} {clean_artist}",
     ]
-    if clean_album:
-        queries.append(f"{clean_title} {clean_album} {clean_artist}")
-    if looks_anime_like(title, artist, album):
-        queries[-1] = f"{clean_title} {clean_artist} full version"
+    fallback_query = f"{clean_title} {clean_artist} full version" if looks_anime_like(title, artist, album) else ""
+    if not fallback_query and clean_album:
+        fallback_query = f"{clean_title} {clean_album} {clean_artist}"
+    if fallback_query:
+        queries.append(fallback_query)
     return list(dict.fromkeys(q.strip() for q in queries if q.strip()))
 
 
@@ -325,6 +326,7 @@ def score_candidate(
     query_index: int = 0,
 ) -> int:
     title = candidate.get("title", "").lower()
+    normalized_title = normalize_search_term(candidate.get("title", ""))
     channel = candidate.get("channel", "").lower()
     wanted_title = normalize_search_term(target_title)
     wanted_artist = normalize_search_term(target_artist)
@@ -333,7 +335,9 @@ def score_candidate(
     score = 100 - query_index * 8
 
     # --- Coincidencias básicas ---
-    if wanted_title and wanted_title in title:
+    if wanted_title and normalized_title == wanted_title:
+        score += 40
+    elif wanted_title and wanted_title in title:
         score += 30
     if wanted_artist and wanted_artist in title:
         score += 20
@@ -357,14 +361,16 @@ def score_candidate(
     # --- Bonus: versiones de audio limpio ---
     if "official audio" in title:
         score += 25
+    if "official video" in title:
+        score += 14
     if "audio only" in title:
         score += 20
     if "radio edit" in title or "radio version" in title:
         score += 18
     if "topic" in channel:
         score += 12  # Canal oficial de YouTube Music
-    if "lyrics" in title:
-        score += 5
+    if "official" in channel:
+        score += 8
     if looks_anime_like(target_title, target_artist, target_album) and (
         "opening" in title or "ending" in title or re.search(r"\bop\b|\bed\b", title) or "full version" in title
     ):
@@ -382,6 +388,8 @@ def score_candidate(
             break  # Una penalización por candidato
 
     # --- PENALIZACIONES: contenido no deseado ---
+    if "lyrics" in title or "lyric video" in title or "sub esp" in title or "sub english" in title or "subbed" in title:
+        score -= 12
     if "karaoke" in title:
         score -= 30
     if "reaction" in title:
@@ -390,6 +398,8 @@ def score_candidate(
         score -= 20
     if "cover" in title and wanted_artist not in channel:
         score -= 12  # Cover de otro artista
+    if "dub cover" in title or "english dub cover" in title or "fan dub" in title:
+        score -= 24
     if "live" in title or "en vivo" in title or "concert" in title:
         score -= 10
     if "remix" in title and "official" not in title:
@@ -403,6 +413,14 @@ def score_candidate(
     duration = int(candidate.get("duration") or 0)
     if 90 <= duration <= 600:
         score += 10
+
+    label = classify_candidate(candidate)
+    if label == "original probable":
+        score += 10
+    elif label == "cover":
+        score -= 10
+    elif label == "live":
+        score -= 8
 
     return score
 
@@ -684,7 +702,7 @@ async def candidates(
 
     try:
         for query_index, query in enumerate(queries):
-            for candidate in search_candidates(query, limit=6):
+            for candidate in search_candidates(query, limit=3):
                 video_id = str(candidate.get("videoId") or "").strip()
                 if not video_id:
                     continue
@@ -703,6 +721,8 @@ async def candidates(
                     merged[video_id] = normalized
             ranked = sorted(merged.values(), key=lambda x: int(x["score"]), reverse=True)
             if ranked and ranked[0].get("confidence") == "alta" and len(ranked) >= 2:
+                return {"success": True, "candidates": ranked[:3]}
+            if query_index >= 1 and ranked and ranked[0].get("confidence") != "baja":
                 return {"success": True, "candidates": ranked[:3]}
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Search failed: {exc}") from exc

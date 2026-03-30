@@ -20,6 +20,8 @@ import org.json.JSONObject;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -27,8 +29,15 @@ import java.util.concurrent.Executors;
 public class YtDlpPlugin extends Plugin {
 
     private static final String TAG = "YtDlpPlugin";
+    private static final int MAX_SEARCH_CACHE_ENTRIES = 24;
     private boolean isInitialized = false;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private final Map<String, JSArray> searchCache = new LinkedHashMap<String, JSArray>(MAX_SEARCH_CACHE_ENTRIES, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, JSArray> eldest) {
+            return size() > MAX_SEARCH_CACHE_ENTRIES;
+        }
+    };
 
     private synchronized void ensureInitialized() throws Exception {
         if (!isInitialized) {
@@ -56,15 +65,6 @@ public class YtDlpPlugin extends Plugin {
         executor.execute(() -> {
             try {
                 ensureInitialized();
-
-                // Auto-update yt-dlp to latest version on first run
-                try {
-                    Log.i(TAG, "Updating yt-dlp to latest version...");
-                    YoutubeDL.getInstance().updateYoutubeDL(getContext(), YoutubeDL.UpdateChannel.STABLE.INSTANCE);
-                    Log.i(TAG, "yt-dlp updated successfully");
-                } catch (Exception updateEx) {
-                    Log.w(TAG, "yt-dlp update failed (will use bundled): " + updateEx.getMessage());
-                }
 
                 JSObject result = new JSObject();
                 result.put("success", true);
@@ -110,7 +110,19 @@ public class YtDlpPlugin extends Plugin {
             try {
                 ensureInitialized();
 
-                YoutubeDLRequest request = new YoutubeDLRequest("ytsearch5:" + query);
+                synchronized (searchCache) {
+                    JSArray cached = searchCache.get(query);
+                    if (cached != null) {
+                        Log.i(TAG, "Search cache hit for: " + query);
+                        JSObject result = new JSObject();
+                        result.put("success", true);
+                        result.put("results", cached);
+                        call.resolve(result);
+                        return;
+                    }
+                }
+
+                YoutubeDLRequest request = new YoutubeDLRequest("ytsearch3:" + query);
                 request.addOption("--dump-json");
                 request.addOption("--flat-playlist");
                 request.addOption("--no-download");
@@ -147,6 +159,9 @@ public class YtDlpPlugin extends Plugin {
                 }
 
                 Log.i(TAG, "Search found " + results.length() + " results");
+                synchronized (searchCache) {
+                    searchCache.put(query, results);
+                }
                 JSObject result = new JSObject();
                 result.put("success", true);
                 result.put("results", results);

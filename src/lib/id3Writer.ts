@@ -4,6 +4,7 @@ interface ID3Tags {
   title: string;
   artist: string;
   album: string;
+  albumArtist?: string;
   coverUrl?: string;
   year?: number;
   trackNumber?: number;
@@ -35,10 +36,12 @@ async function fetchCoverArt(url: string): Promise<{ buffer: ArrayBuffer; mime: 
  */
 export async function writeID3Tags(mp3Buffer: ArrayBuffer, tags: ID3Tags): Promise<Blob> {
   const writer = new ID3Writer(mp3Buffer);
+  const albumArtist = tags.albumArtist?.trim() || tags.artist;
 
   // Core text frames
   writer.setFrame('TIT2', tags.title);       // Title
   writer.setFrame('TPE1', [tags.artist]);     // Artist(s)
+  writer.setFrame('TPE2', albumArtist);       // Album artist / band
   writer.setFrame('TALB', tags.album);        // Album
 
   if (tags.year) {

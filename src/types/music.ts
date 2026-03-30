@@ -1,8 +1,10 @@
 export interface Track {
   id: string;
   title: string;
+  canonicalTitle?: string;
   artist: string;
   album: string;
+  canonicalAlbum?: string;
   duration: number;
   cover: string;
   preview?: string;

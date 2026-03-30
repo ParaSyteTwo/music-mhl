@@ -60,12 +60,38 @@ interface DeezerGenre {
   picture_xl: string;
 }
 
+function cleanAlbumTitle(title: string): string {
+  const normalized = (title || '')
+    .replace(/\s+/g, ' ')
+    .replace(/\b(opening|ending)\s+theme\s+song\b/gi, '')
+    .replace(/\b(opening|ending)\s+theme\b/gi, '')
+    .replace(/\btheme\s+song\b/gi, '')
+    .replace(/\b(ost|original soundtrack|soundtrack)\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const parts = normalized.split(/\s[-–—:]\s/);
+  if (parts.length > 1) {
+    const [first, ...rest] = parts;
+    const suffix = rest.join(' - ');
+    if (/(opening|ending|theme|ost|soundtrack|season|anime|ver\.?|version)/i.test(suffix)) {
+      return first.trim() || normalized;
+    }
+  }
+
+  return normalized || title || 'Unknown';
+}
+
 // Transform Deezer track to our format
 function transformTrack(item: DeezerTrack) {
+  const canonicalTitle = item.title_short || item.title || 'Unknown';
+  const canonicalAlbum = cleanAlbumTitle(item.album?.title || 'Unknown');
   return {
     id: `dz-${item.id}`,
     deezerId: item.id,
-    title: item.title || item.title_short,
+    title: item.title || canonicalTitle,
+    canonicalTitle,
+    canonicalAlbum,
     artist: item.artist?.name || 'Unknown',
     album: item.album?.title || 'Unknown',
     duration: item.duration || 0,

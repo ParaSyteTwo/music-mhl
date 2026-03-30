@@ -64,17 +64,15 @@ function buildCandidateQueries(title: string, artist: string, album = ""): strin
   const cleanTitle = normalizeSearchTerm(title);
   const cleanArtist = normalizeSearchTerm(artist);
   const cleanAlbum = normalizeSearchTerm(album);
-  const queries = [
-    `${cleanTitle} ${cleanArtist}`,
+  const primaryQueries = [
     `${cleanTitle} ${cleanArtist} official audio`,
-    cleanAlbum ? `${cleanTitle} ${cleanAlbum} ${cleanArtist}` : "",
+    `${cleanTitle} ${cleanArtist}`,
   ];
+  const fallbackQuery = looksAnimeLike(title, artist, album)
+    ? `${cleanTitle} ${cleanArtist} full version`
+    : (cleanAlbum ? `${cleanTitle} ${cleanAlbum} ${cleanArtist}` : "");
 
-  if (looksAnimeLike(title, artist, album)) {
-    queries[2] = `${cleanTitle} ${cleanArtist} full version`;
-  }
-
-  return [...new Set(queries.map((query) => query.trim()).filter(Boolean))];
+  return [...new Set([...primaryQueries, fallbackQuery].map((query) => query.trim()).filter(Boolean))];
 }
 
 function scoreCandidate(
@@ -86,6 +84,7 @@ function scoreCandidate(
   queryIndex = 0,
 ): number {
   const title = String(candidate.title || "").toLowerCase();
+  const normalizedTitle = normalizeSearchTerm(String(candidate.title || ""));
   const channel = String(candidate.channel || "").toLowerCase();
   const wantedTitle = normalizeSearchTerm(targetTitle);
   const wantedArtist = normalizeSearchTerm(targetArtist);
@@ -93,7 +92,8 @@ function scoreCandidate(
 
   let score = 100 - queryIndex * 8;
 
-  if (wantedTitle && title.includes(wantedTitle)) score += 30;
+  if (wantedTitle && normalizedTitle === wantedTitle) score += 40;
+  else if (wantedTitle && title.includes(wantedTitle)) score += 30;
   if (wantedArtist && title.includes(wantedArtist)) score += 20;
   if (wantedArtist && channel.includes(wantedArtist)) score += 18;
   if (wantedAlbum && title.includes(wantedAlbum)) score += 8;
@@ -109,10 +109,11 @@ function scoreCandidate(
   }
 
   if (title.includes("official audio")) score += 25;
+  if (title.includes("official video")) score += 14;
   if (title.includes("audio only")) score += 20;
   if (title.includes("radio edit") || title.includes("radio version")) score += 18;
   if (channel.includes("topic")) score += 12;
-  if (title.includes("lyrics")) score += 5;
+  if (channel.includes("official")) score += 8;
   if (looksAnimeLike(targetTitle, targetArtist, targetAlbum) && /(opening|ending|\bop\b|\bed\b|full version)/.test(title)) {
     score += 15;
   }
@@ -129,10 +130,12 @@ function scoreCandidate(
   ];
   if (mvKeywords.some((kw) => title.includes(kw))) score -= 25;
 
+  if (/(lyrics|lyric video|sub esp|sub english|subbed)/.test(title)) score -= 12;
   if (title.includes("karaoke")) score -= 30;
   if (title.includes("reaction")) score -= 15;
   if (title.includes("nightcore") || title.includes("sped up") || title.includes("slowed") || title.includes("8d")) score -= 20;
   if (title.includes("cover") && !channel.includes(wantedArtist)) score -= 12;
+  if (title.includes("dub cover") || title.includes("english dub cover") || title.includes("fan dub")) score -= 24;
   if (title.includes("live") || title.includes("en vivo") || title.includes("concert")) score -= 10;
   if (title.includes("remix") && !title.includes("official")) score -= 8;
   if (title.includes("instrumental")) score -= 8;
@@ -140,6 +143,11 @@ function scoreCandidate(
 
   const duration = Number(candidate.duration || 0);
   if (duration >= 90 && duration <= 600) score += 10;
+
+  const label = classifyCandidate(candidate);
+  if (label === "original probable") score += 10;
+  else if (label === "cover") score -= 10;
+  else if (label === "live") score -= 8;
 
   return score;
 }
@@ -303,7 +311,7 @@ Deno.serve(async (req: Request) => {
         const searchData = await searchRes.json();
         if (!searchRes.ok || !searchData?.success) continue;
         const rawResults = Array.isArray(searchData?.results) ? searchData.results : [];
-        for (const candidate of rawResults.slice(0, 6)) {
+        for (const candidate of rawResults.slice(0, 3)) {
           const videoId = String(candidate.videoId || "");
           const titleValue = String(candidate.title || "");
           if (!videoId || !titleValue) continue;
@@ -324,6 +332,9 @@ Deno.serve(async (req: Request) => {
         }
         const ranked = [...merged.values()].sort((a, b) => Number(b.score || 0) - Number(a.score || 0));
         if (ranked[0]?.confidence === "alta" && ranked.length >= 2) {
+          return jsonResponse({ success: true, candidates: ranked.slice(0, 3) }, 200);
+        }
+        if (queryIndex >= 1 && ranked[0]?.confidence !== "baja") {
           return jsonResponse({ success: true, candidates: ranked.slice(0, 3) }, 200);
         }
       }

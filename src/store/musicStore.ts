@@ -25,6 +25,41 @@ function getProgressLabel(progress: number): string {
 
 export { getProgressLabel };
 
+function cleanTrackTitleForFileName(title: string): string {
+  const normalized = title
+    .replace(/\s+/g, ' ')
+    .replace(/\b(opening|ending)\s+theme\s+song\b/gi, '')
+    .replace(/\b(opening|ending)\s+theme\b/gi, '')
+    .replace(/\btheme\s+song\b/gi, '')
+    .replace(/\b(ost|original soundtrack|soundtrack)\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const parts = normalized.split(/\s[-–—]\s/);
+  if (parts.length > 1) {
+    const [first, ...rest] = parts;
+    const suffix = rest.join(' - ');
+    if (/(opening|ending|theme|ost|soundtrack|season|anime|ver\.?|version)/i.test(suffix)) {
+      return first.trim() || normalized;
+    }
+  }
+
+  return normalized || title.trim();
+}
+
+function buildDownloadFileName(track: Track, fileExtension: string): string {
+  const preferredTitle = track.canonicalTitle?.trim() || track.title;
+  const cleanTitle = cleanTrackTitleForFileName(preferredTitle);
+  return `${cleanTitle} - ${track.artist}.${fileExtension}`
+    .replace(/[/\\?%*:|"<>]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function getPreferredAlbumName(track: Track): string {
+  return track.canonicalAlbum?.trim() || track.album;
+}
+
 interface MusicStore {
   // Player
   currentTrack: Track | null;
@@ -293,7 +328,7 @@ export const useMusicStore = create<MusicStore>()(
           const { downloadFormat, mp3Quality } = get();
           const maxAttempts = 3;
           const fileExtension = downloadFormat === 'aac' ? 'm4a' : 'mp3';
-          const resolvedFileName = `${track.title} - ${track.artist}.${fileExtension}`.replace(/[/\\?%*:|"<>]/g, '');
+          const resolvedFileName = buildDownloadFileName(track, fileExtension);
 
           try {
           for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -313,9 +348,9 @@ export const useMusicStore = create<MusicStore>()(
                   : null;
 
                 const taggedBlob = await writeID3Tags(audioBuffer, {
-                  title: track.title,
+                  title: track.canonicalTitle?.trim() || track.title,
                   artist: track.artist,
-                  album: track.album,
+                  album: getPreferredAlbumName(track),
                   coverUrl: track.cover,
                   ...(genre ? { genre } : {}),
                 });
@@ -331,9 +366,9 @@ export const useMusicStore = create<MusicStore>()(
                   : null;
 
                 const taggedBlob = await writeID3Tags(audioBuffer, {
-                  title: track.title,
+                  title: track.canonicalTitle?.trim() || track.title,
                   artist: track.artist,
-                  album: track.album,
+                  album: getPreferredAlbumName(track),
                   coverUrl: track.cover,
                   ...(genre ? { genre } : {}),
                 });
