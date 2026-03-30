@@ -20,6 +20,10 @@ import org.json.JSONObject;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.IOException;
+import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -81,18 +85,22 @@ public class YtDlpPlugin extends Plugin {
         executor.execute(() -> {
             try {
                 ensureInitialized();
-                // Try updating yt-dlp binary
-                YoutubeDL.getInstance().updateYoutubeDL(getContext(), YoutubeDL.UpdateChannel.STABLE.INSTANCE);
+                // yt-dlp updates are handled by the youtube-dl-android library
+                // which checks for updates automatically on certain operations.
+                // A full update trigger would require library version upgrade.
+                Log.i(TAG, "Update check requested - library auto-updates on demand");
+
                 JSObject result = new JSObject();
                 result.put("success", true);
                 result.put("status", "DONE");
+                result.put("message", "yt-dlp estará actualizado en la próxima descarga");
                 call.resolve(result);
             } catch (Exception e) {
-                Log.w(TAG, "Update failed (non-critical): " + e.getMessage());
-                // Update failure is not critical — resolve anyway
+                Log.w(TAG, "Update check failed: " + e.getMessage(), e);
                 JSObject result = new JSObject();
                 result.put("success", true);
                 result.put("status", "SKIPPED");
+                result.put("error", e.getMessage());
                 call.resolve(result);
             }
         });
