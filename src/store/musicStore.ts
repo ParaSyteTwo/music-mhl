@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { Track, Download, LocalTrack } from '@/types/music';
 import { audioEngine } from '@/lib/audioEngine';
-import { searchDeezer, downloadTrackAudio, getDeezerTrackGenre } from '@/lib/api/musicApi';
+import { searchDeezer, downloadTrackAudio, getDeezerTrackMeta, getLyrics } from '@/lib/api/musicApi';
 import { writeID3Tags } from '@/lib/id3Writer';
 import {
   type ImportedAudioFile,
@@ -349,18 +349,23 @@ export const useMusicStore = create<MusicStore>()(
               }, { format: downloadFormat, quality: mp3Quality }, videoIdOverride);
               updateDl({ progress: 80 });
 
-              if (downloadFormat === 'mp3' && Capacitor.isNativePlatform()) {
-                // Android: escribir ID3 tags completos con género
-                const genre = track.deezerId
-                  ? await getDeezerTrackGenre(track.deezerId).catch(() => null)
-                  : null;
+              // Obtener metadatos extendidos y letra en paralelo
+              const [trackMeta, lyricsResult] = await Promise.all([
+                track.deezerId ? getDeezerTrackMeta(track.deezerId).catch(() => ({ genre: null, year: null, trackNumber: null })) : Promise.resolve({ genre: null, year: null, trackNumber: null }),
+                getLyrics(track.canonicalTitle?.trim() || track.title, track.artist, track.duration).catch(() => ({ synced: null, plain: null })),
+              ]);
+              const lyrics = lyricsResult.plain || null;
 
+              if (downloadFormat === 'mp3' && Capacitor.isNativePlatform()) {
                 const taggedBlob = await writeID3Tags(audioBuffer, {
                   title: track.canonicalTitle?.trim() || track.title,
                   artist: track.artist,
                   album: getPreferredAlbumName(track),
                   coverUrl: track.cover,
-                  ...(genre ? { genre } : {}),
+                  ...(trackMeta.genre ? { genre: trackMeta.genre } : {}),
+                  ...(trackMeta.year ? { year: trackMeta.year } : {}),
+                  ...(trackMeta.trackNumber ? { trackNumber: trackMeta.trackNumber } : {}),
+                  ...(lyrics ? { lyrics } : {}),
                 });
                 updateDl({ progress: 95 });
 
@@ -369,16 +374,15 @@ export const useMusicStore = create<MusicStore>()(
                 await Filesystem.writeFile({ path: `MHL Music/${resolvedFileName}`, data: base64, directory: Directory.Documents, recursive: true });
               } else if (!Capacitor.isNativePlatform()) {
                 // Web: escribir ID3 tags y guardar como .mp3
-                const genre = track.deezerId
-                  ? await getDeezerTrackGenre(track.deezerId).catch(() => null)
-                  : null;
-
                 const taggedBlob = await writeID3Tags(audioBuffer, {
                   title: track.canonicalTitle?.trim() || track.title,
                   artist: track.artist,
                   album: getPreferredAlbumName(track),
                   coverUrl: track.cover,
-                  ...(genre ? { genre } : {}),
+                  ...(trackMeta.genre ? { genre: trackMeta.genre } : {}),
+                  ...(trackMeta.year ? { year: trackMeta.year } : {}),
+                  ...(trackMeta.trackNumber ? { trackNumber: trackMeta.trackNumber } : {}),
+                  ...(lyrics ? { lyrics } : {}),
                 });
                 updateDl({ progress: 95 });
 

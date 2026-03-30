@@ -9,6 +9,7 @@ interface ID3Tags {
   year?: number;
   trackNumber?: number;
   genre?: string;
+  lyrics?: string;
 }
 
 /**
@@ -54,6 +55,10 @@ export async function writeID3Tags(mp3Buffer: ArrayBuffer, tags: ID3Tags): Promi
 
   if (tags.genre) {
     writer.setFrame('TCON', [tags.genre]);    // Genre
+  }
+
+  if (tags.lyrics) {
+    writer.setFrame('USLT', { description: '', language: 'spa', lyrics: tags.lyrics }); // Lyrics
   }
 
   // Album art (APIC frame)

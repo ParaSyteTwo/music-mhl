@@ -1,6 +1,5 @@
 package com.mhl.music;
 
-import android.util.Base64;
 import android.util.Log;
 
 import com.getcapacitor.JSArray;
@@ -10,6 +9,11 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
+import android.app.Activity;
+import android.content.Intent;
+import android.content.Context;
+import android.net.Uri;
+import android.os.Environment;
 import com.yausername.youtubedl_android.YoutubeDL;
 import com.yausername.youtubedl_android.YoutubeDLRequest;
 import com.yausername.youtubedl_android.YoutubeDLResponse;
@@ -17,13 +21,10 @@ import com.yausername.ffmpeg.FFmpeg;
 
 import org.json.JSONObject;
 
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.net.URL;
-import java.nio.file.Files;
-import java.nio.file.Paths;
+import android.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -43,11 +44,20 @@ public class YtDlpPlugin extends Plugin {
         }
     };
 
+    // (Removed SAF/picker code - using MediaStore-only storage)
+
     private synchronized void ensureInitialized() throws Exception {
         if (!isInitialized) {
             try {
                 YoutubeDL.getInstance().init(getContext());
                 Log.i(TAG, "yt-dlp initialized");
+                try {
+                    // For Kotlin-generated sealed/object classes the instance is exposed as INSTANCE
+                    YoutubeDL.getInstance().updateYoutubeDL(getContext(), YoutubeDL.UpdateChannel.STABLE.INSTANCE);
+                    Log.i(TAG, "yt-dlp update triggered (STABLE)");
+                } catch (Exception e) {
+                    Log.w(TAG, "yt-dlp update failed: " + e.getMessage());
+                }
             } catch (Exception e) {
                 Log.e(TAG, "yt-dlp init error: " + e.getMessage());
                 throw e;
@@ -62,8 +72,12 @@ public class YtDlpPlugin extends Plugin {
             isInitialized = true;
             Log.i(TAG, "yt-dlp + FFmpeg ready");
         }
+
     }
 
+    // Removed SAF/picker helpers — plugin now uses MediaStore to save downloads publicly
+
+    // Writing directly to public Downloads/MHL Music is used instead of copying via MediaStore.
     @PluginMethod
     public void initialize(PluginCall call) {
         executor.execute(() -> {
@@ -269,36 +283,24 @@ public class YtDlpPlugin extends Plugin {
                 }
             }
 
-            try {
+                try {
                 ensureInitialized();
 
                 String url = "https://www.youtube.com/watch?v=" + videoId;
-                String outputTemplate = new File(cacheDir, videoId + ".%(ext)s").getAbsolutePath();
+
+                String fileName = "audio_" + System.currentTimeMillis() + ".mp3";
+
+                // Descargar al caché privado (no visible para otras apps)
+                File outputFile = new File(cacheDir, fileName);
+                String outputPath = outputFile.getAbsolutePath();
 
                 YoutubeDLRequest request = new YoutubeDLRequest(url);
-                if (format != null && format.equalsIgnoreCase("aac")) {
-                    // Prefer m4a containers (AAC) if available
-                    request.addOption("-f", "bestaudio[ext=m4a]/bestaudio");
-                    // No extraction (-x) so original container kept
-                } else {
-                    // Default: mp3 conversion
-                    request.addOption("-f", "bestaudio");
-                    request.addOption("-x");
-                    request.addOption("--audio-format", "mp3");
-                    // Map quality words to yt-dlp numeric scale (lower is better)
-                    String q = "2";
-                    if (quality != null) {
-                        if (quality.equalsIgnoreCase("alta")) q = "2";
-                        else if (quality.equalsIgnoreCase("media")) q = "5";
-                        else if (quality.equalsIgnoreCase("baja")) q = "9";
-                    }
-                    request.addOption("--audio-quality", q);
-                }
-                request.addOption("-o", outputTemplate);
+                request.addOption("-x");
+                request.addOption("--audio-format", "mp3");
+                request.addOption("-o", outputPath);
                 request.addOption("--no-playlist");
-                request.addOption("--no-part"); // Don't use .part files
 
-                Log.i(TAG, "Downloading audio for: " + videoId);
+                Log.i(TAG, "Downloading audio for: " + videoId + " -> " + outputPath);
                 YoutubeDLResponse response = YoutubeDL.getInstance().execute(request);
                 Log.i(TAG, "Download stdout: " + (response.getOut() != null ? response.getOut().substring(0, Math.min(200, response.getOut().length())) : "null"));
                 String errOutput = response.getErr();
@@ -306,52 +308,25 @@ public class YtDlpPlugin extends Plugin {
                     Log.i(TAG, "Download stderr: " + errOutput.substring(0, Math.min(500, errOutput.length())));
                 }
 
-                // Find any audio file produced
-                File outputFile = null;
-
-                // First try exact mp3
-                File mp3File = new File(cacheDir, videoId + ".mp3");
-                if (mp3File.exists() && mp3File.length() > 0) {
-                    outputFile = mp3File;
-                    Log.i(TAG, "Found MP3: " + mp3File.length() + " bytes");
-                }
-
-                // If no mp3, check for any file
-                if (outputFile == null) {
-                    File[] allFiles = cacheDir.listFiles();
-                    if (allFiles != null) {
-                        for (File f : allFiles) {
-                            Log.i(TAG, "Found file: " + f.getName() + " (" + f.length() + " bytes)");
-                            if (f.length() > 0) {
-                                outputFile = f;
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                if (outputFile == null || !outputFile.exists() || outputFile.length() == 0) {
+                if (!outputFile.exists() || outputFile.length() == 0) {
                     bridge.getActivity().runOnUiThread(() -> call.reject("No audio file produced after download"));
                     return;
                 }
 
-                Log.i(TAG, "Reading file: " + outputFile.getName() + " (" + outputFile.length() + " bytes)");
-
-                // Read file as base64
-                byte[] fileData = readFileBytes(outputFile);
-                String base64 = Base64.encodeToString(fileData, Base64.NO_WRAP);
-
-                // Cleanup
-                File[] cleanup = cacheDir.listFiles();
-                if (cleanup != null) {
-                    for (File f : cleanup) f.delete();
+                // Leer archivo y codificar en base64 para devolver al bridge JS
+                byte[] fileBytes = new byte[(int) outputFile.length()];
+                try (FileInputStream fis = new FileInputStream(outputFile)) {
+                    fis.read(fileBytes);
+                } finally {
+                    outputFile.delete();
                 }
+                String base64Data = Base64.encodeToString(fileBytes, Base64.NO_WRAP);
 
                 JSObject result = new JSObject();
                 result.put("success", true);
-                result.put("data", base64);
-                result.put("size", fileData.length);
-                result.put("fileName", outputFile.getName());
+                result.put("data", base64Data);
+                result.put("fileName", fileName);
+                result.put("size", fileBytes.length);
                 bridge.getActivity().runOnUiThread(() -> call.resolve(result));
             } catch (Exception e) {
                 Log.e(TAG, "downloadAudio failed: " + e.getMessage(), e);
@@ -366,15 +341,5 @@ public class YtDlpPlugin extends Plugin {
         downloadAudio(call);
     }
 
-    private byte[] readFileBytes(File file) throws Exception {
-        FileInputStream fis = new FileInputStream(file);
-        ByteArrayOutputStream bos = new ByteArrayOutputStream();
-        byte[] buffer = new byte[8192];
-        int len;
-        while ((len = fis.read(buffer)) != -1) {
-            bos.write(buffer, 0, len);
-        }
-        fis.close();
-        return bos.toByteArray();
-    }
+    
 }

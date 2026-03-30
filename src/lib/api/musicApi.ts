@@ -68,13 +68,17 @@ export async function getDeezerAlbum(albumId: string) {
   return callDeezerProxy({ action: 'album', albumId });
 }
 
-// ─── Genre for a track (via its album) ───
-export async function getDeezerTrackGenre(albumId: string | number): Promise<string | null> {
+// ─── Full metadata for a track (genre, year, track number) ───
+export async function getDeezerTrackMeta(trackId: string | number): Promise<{ genre: string | null; year: number | null; trackNumber: number | null }> {
   try {
-    const data = await callDeezerProxy({ action: 'album', albumId: String(albumId) });
-    return data?.album?.genre || null;
+    const data = await callDeezerProxy({ action: 'trackMeta', trackId: String(trackId) });
+    return {
+      genre: data?.genre || null,
+      year: data?.year || null,
+      trackNumber: data?.trackNumber || null,
+    };
   } catch {
-    return null;
+    return { genre: null, year: null, trackNumber: null };
   }
 }
 
@@ -207,41 +211,63 @@ export async function getDownloadCandidates(
 ): Promise<DownloadCandidate[]> {
   const cacheKey = `${track.deezerId ?? track.id}|${getPreferredTrackTitle(track)}|${track.artist}|${getPreferredAlbumName(track)}`;
   const cached = candidateCache.get(cacheKey);
-  if (cached) return cached;
+  // Solo retorna cache si tiene resultados (evita cachear búsquedas vacías)
+  if (cached && cached.length > 0) return cached;
 
   if (Capacitor.isNativePlatform()) {
-    const { searchYouTubeNative } = await import('@/lib/ytdlpBridge');
-    const queries = buildCandidateQueries(track);
+    try {
+      const { searchYouTubeNative } = await import('@/lib/ytdlpBridge');
+      const queries = buildCandidateQueries(track);
+      console.log('[getDownloadCandidates] Native platform detected. Queries:', queries);
 
-    const resultsPerQuery = await Promise.all(
-      queries.map((q) => withTimeout(searchYouTubeNative(q), 10000).catch(() => [] as Awaited<ReturnType<typeof searchYouTubeNative>>)),
-    );
+      // Aumentar timeout a 30 segundos para búsquedas en paralelo
+      const resultsPerQuery = await Promise.all(
+        queries.map((q) => {
+          console.log('[searchYouTubeNative] Starting search for query:', q);
+          return withTimeout(searchYouTubeNative(q), 30000)
+            .catch((err) => {
+              console.error('[searchYouTubeNative] Error for query', q, ':', err);
+              return [] as Awaited<ReturnType<typeof searchYouTubeNative>>;
+            });
+        }),
+      );
 
-    const merged = new Map<string, DownloadCandidate>();
-    resultsPerQuery.forEach((results, queryIndex) => {
-      for (const result of results.slice(0, 5)) {
-        const score = scoreNativeCandidate(track, result, queryIndex);
-        const current = merged.get(result.videoId);
-        const candidate: DownloadCandidate = {
-          videoId: result.videoId,
-          title: result.title,
-          channel: result.channel,
-          duration: result.duration,
-          score,
-          label: classifyCandidate(result),
-          confidence: confidenceFromScore(score),
-        };
-        if (!current || score > current.score) {
-          merged.set(result.videoId, candidate);
+      console.log('[getDownloadCandidates] All results:', resultsPerQuery);
+
+      const merged = new Map<string, DownloadCandidate>();
+      resultsPerQuery.forEach((results, queryIndex) => {
+        console.log('[getDownloadCandidates] Processing query index', queryIndex, '- got', results.length, 'results');
+        for (const result of results.slice(0, 5)) {
+          const score = scoreNativeCandidate(track, result, queryIndex);
+          const current = merged.get(result.videoId);
+          const candidate: DownloadCandidate = {
+            videoId: result.videoId,
+            title: result.title,
+            channel: result.channel,
+            duration: result.duration,
+            score,
+            label: classifyCandidate(result),
+            confidence: confidenceFromScore(score),
+          };
+          if (!current || score > current.score) {
+            merged.set(result.videoId, candidate);
+          }
         }
-      }
-    });
+      });
 
-    const finalCandidates = [...merged.values()]
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 3);
-    candidateCache.set(cacheKey, finalCandidates);
-    return finalCandidates;
+      const finalCandidates = [...merged.values()]
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 3);
+      console.log('[getDownloadCandidates] Final candidates:', finalCandidates);
+      // Solo cachear si hay resultados (evita cachear búsquedas fallidas)
+      if (finalCandidates.length > 0) {
+        candidateCache.set(cacheKey, finalCandidates);
+      }
+      return finalCandidates;
+    } catch (err) {
+      console.error('[getDownloadCandidates] Native error:', err);
+      throw err;
+    }
   }
 
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;

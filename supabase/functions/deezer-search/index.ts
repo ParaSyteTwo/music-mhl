@@ -414,6 +414,46 @@ Deno.serve(async (req) => {
       });
     }
 
+    // TrackMeta action — fetches genre, year and track number for a given track ID
+    if (action === 'trackMeta') {
+      const trackId = body.trackId;
+      if (!trackId) {
+        return new Response(
+          JSON.stringify({ error: 'trackId is required' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      try {
+        const trackRes = await fetch(`https://api.deezer.com/track/${trackId}`);
+        if (!trackRes.ok) throw new Error('Failed to fetch track');
+        const track = await trackRes.json();
+        const albumId = track.album?.id;
+        const trackNumber = track.track_position ?? null;
+        const releaseDate: string | null = track.release_date || null;
+        const year = releaseDate ? parseInt(releaseDate.split('-')[0], 10) : null;
+
+        let genre: string | null = null;
+        if (albumId) {
+          const albumRes = await fetch(`https://api.deezer.com/album/${albumId}`);
+          if (albumRes.ok) {
+            const album = await albumRes.json();
+            genre = album.genres?.data?.[0]?.name || null;
+          }
+        }
+
+        return new Response(
+          JSON.stringify({ success: true, genre, year, trackNumber }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      } catch (error) {
+        console.error('trackMeta action error:', error);
+        return new Response(
+          JSON.stringify({ success: false, error: 'Failed to fetch track metadata' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+        );
+      }
+    }
+
     // Album action
     if (action === 'album') {
       const albumId = body.albumId;

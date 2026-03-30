@@ -45,9 +45,20 @@ export async function initYtDlp(): Promise<boolean> {
 }
 
 export async function searchYouTubeNative(query: string): Promise<YtDlpSearchResult[]> {
-  if (!initialized) await initYtDlp();
-  const result = await YtDlp.search({ query });
-  return result.results || [];
+  console.log('[ytdlpBridge.searchYouTubeNative] Searching:', query, 'initialized:', initialized);
+  if (!initialized) {
+    console.log('[ytdlpBridge.searchYouTubeNative] Not initialized, initializing...');
+    await initYtDlp();
+  }
+  console.log('[ytdlpBridge.searchYouTubeNative] Calling YtDlp.search()...');
+  try {
+    const result = await YtDlp.search({ query });
+    console.log('[ytdlpBridge.searchYouTubeNative] Search result:', result);
+    return result.results || [];
+  } catch (err) {
+    console.error('[ytdlpBridge.searchYouTubeNative] Error:', err);
+    throw err;
+  }
 }
 
 export async function downloadMp3Native(videoId: string, opts?: { format?: string; quality?: string }): Promise<ArrayBuffer> {

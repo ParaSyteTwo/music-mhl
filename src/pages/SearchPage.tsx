@@ -6,6 +6,7 @@ import { getDownloadCandidates, type DownloadCandidate } from '@/lib/api/musicAp
 import type { Track } from '@/types/music';
 import { Capacitor } from '@capacitor/core';
 import { createPortal } from 'react-dom';
+import { toast } from 'sonner';
 
 function formatDuration(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -432,9 +433,22 @@ function CandidatePicker({
   useEffect(() => {
     setLoading(true);
     setError(null);
+    console.log('[CandidatePicker] Fetching candidates for:', track.title);
     getDownloadCandidates(track)
-      .then(setCandidates)
-      .catch((e) => setError(e instanceof Error ? e.message : 'Error buscando candidatos'))
+      .then((cands) => {
+        console.log('[CandidatePicker] Got candidates:', cands);
+        setCandidates(cands);
+        if (cands.length === 0) {
+          toast.warning('No se encontraron candidatos de descarga');
+          setError('Sin resultados');
+        }
+      })
+      .catch((e) => {
+        const errorMsg = e instanceof Error ? e.message : 'Error buscando candidatos';
+        console.error('[CandidatePicker] Error:', e, errorMsg);
+        toast.error(errorMsg);
+        setError(errorMsg);
+      })
       .finally(() => setLoading(false));
   }, [track]);
 
@@ -463,7 +477,7 @@ function CandidatePicker({
         onClick={(e) => e.stopPropagation()}
         className={`relative z-10 w-full sm:max-w-lg flex flex-col bg-[#111] border border-[rgba(255,255,255,0.08)] overflow-hidden shadow-2xl ${isNativeMobile ? 'max-h-[92vh] min-h-[48vh] rounded-2xl' : 'max-h-[88vh] sm:max-h-[80vh] rounded-t-2xl sm:rounded-2xl'}`}
       >
-        <div className="flex items-center gap-3 px-4 pt-4 pb-3 border-b border-[rgba(255,255,255,0.06)] flex-shrink-0">
+        <div className="flex items-center gap-3 px-4 pb-3 border-b border-[rgba(255,255,255,0.06)] flex-shrink-0" style={{ paddingTop: 'calc(var(--sat) + 12px)' }}>
           {track.cover && (
             <img src={track.cover} alt="" className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
           )}

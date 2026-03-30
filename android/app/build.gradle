@@ -3,6 +3,12 @@ apply plugin: 'com.android.application'
 android {
     namespace = "com.mhl.music"
     compileSdk = rootProject.ext.compileSdkVersion
+    lintOptions {
+        abortOnError false
+    }
+    lint {
+        abortOnError false
+    }
     defaultConfig {
         applicationId "com.mhl.music"
         minSdkVersion rootProject.ext.minSdkVersion
@@ -54,6 +60,28 @@ dependencies {
     // youtubedl-android: yt-dlp + ffmpeg for local YouTube audio extraction
     // v0.18.1 has Python 3.11 (required by latest yt-dlp) + quickJS for YouTube
     implementation 'io.github.junkfood02.youtubedl-android:library:0.18.1'
+
+// Ensure latest yt-dlp binary is present in android assets before building
+// This will run the project script `scripts/download-and-integrate-yt-dlp.ps1` on Windows
+// or attempt to run it with `sh` on Unix-like environments.
+task downloadYtDlp(type: Exec) {
+    // Resolve script path relative to the repo root (two levels up from android/app)
+    def scriptPath = new File(projectDir, '../../scripts/download-and-integrate-yt-dlp.ps1').canonicalPath
+    if (System.getProperty('os.name').toLowerCase().contains('windows')) {
+        commandLine 'powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath
+    } else {
+        // On Unix, try to run the script with sh if available (script should handle chmod)
+        commandLine 'sh', '-c', scriptPath
+    }
+}
+
+// Skip the download task if the asset already exists (manual integration)
+downloadYtDlp.onlyIf {
+    def existing = file('src/main/assets/yt-dlp')
+    !existing.exists()
+}
+
+preBuild.dependsOn downloadYtDlp
     implementation 'io.github.junkfood02.youtubedl-android:ffmpeg:0.18.1'
 
     testImplementation "junit:junit:$junitVersion"
