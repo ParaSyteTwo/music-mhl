@@ -1,5 +1,24 @@
 # Changelog
 
+## v1.2.3 - 2026-03-31
+
+### Fixed
+
+- Corregido un error que generaba archivos duplicados al descargar pistas.
+
+### Improved
+
+- Mejora en la extracción y escritura de metadatos (más campos y mayor precisión).
+
+### Optimized
+
+- Optimización en el flujo de descarga y procesamiento para reducir uso de CPU y memoria.
+
+### Notes
+
+- Android and web builds updated to reflect metadata and performance fixes.
+
+
 ## v1.1.0 - 2026-03-29
 
 ### Added
