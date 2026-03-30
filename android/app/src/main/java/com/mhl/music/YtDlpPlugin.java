@@ -72,10 +72,10 @@ public class YtDlpPlugin extends Plugin {
 
                 JSObject result = new JSObject();
                 result.put("success", true);
-                call.resolve(result);
+                bridge.getActivity().runOnUiThread(() -> call.resolve(result));
             } catch (Exception e) {
                 Log.e(TAG, "Init failed", e);
-                call.reject("Failed to initialize yt-dlp: " + e.getMessage());
+                bridge.getActivity().runOnUiThread(() -> call.reject("Failed to initialize yt-dlp: " + e.getMessage()));
             }
         });
     }
@@ -94,14 +94,14 @@ public class YtDlpPlugin extends Plugin {
                 result.put("success", true);
                 result.put("status", "DONE");
                 result.put("message", "yt-dlp estará actualizado en la próxima descarga");
-                call.resolve(result);
+                bridge.getActivity().runOnUiThread(() -> call.resolve(result));
             } catch (Exception e) {
                 Log.w(TAG, "Update check failed: " + e.getMessage(), e);
                 JSObject result = new JSObject();
                 result.put("success", true);
                 result.put("status", "SKIPPED");
                 result.put("error", e.getMessage());
-                call.resolve(result);
+                bridge.getActivity().runOnUiThread(() -> call.resolve(result));
             }
         });
     }
@@ -115,13 +115,13 @@ public class YtDlpPlugin extends Plugin {
                 JSObject result = new JSObject();
                 result.put("success", true);
                 result.put("version", version != null ? version : "unknown");
-                call.resolve(result);
+                bridge.getActivity().runOnUiThread(() -> call.resolve(result));
             } catch (Exception e) {
                 Log.w(TAG, "getVersion failed: " + e.getMessage());
                 JSObject result = new JSObject();
                 result.put("success", false);
                 result.put("version", "unknown");
-                call.resolve(result);
+                bridge.getActivity().runOnUiThread(() -> call.resolve(result));
             }
         });
     }
@@ -145,7 +145,7 @@ public class YtDlpPlugin extends Plugin {
                         JSObject result = new JSObject();
                         result.put("success", true);
                         result.put("results", cached);
-                        call.resolve(result);
+                        bridge.getActivity().runOnUiThread(() -> call.resolve(result));
                         return;
                     }
                 }
@@ -193,10 +193,10 @@ public class YtDlpPlugin extends Plugin {
                 JSObject result = new JSObject();
                 result.put("success", true);
                 result.put("results", results);
-                call.resolve(result);
+                bridge.getActivity().runOnUiThread(() -> call.resolve(result));
             } catch (Exception e) {
                 Log.e(TAG, "Search failed: " + e.getMessage(), e);
-                call.reject("Search failed: " + e.getMessage());
+                bridge.getActivity().runOnUiThread(() -> call.reject("Search failed: " + e.getMessage()));
             }
         });
     }
@@ -231,7 +231,7 @@ public class YtDlpPlugin extends Plugin {
                 }
 
                 if (streamUrl == null || streamUrl.isEmpty()) {
-                    call.reject("No stream URL found");
+                    bridge.getActivity().runOnUiThread(() -> call.reject("No stream URL found"));
                     return;
                 }
 
@@ -239,10 +239,10 @@ public class YtDlpPlugin extends Plugin {
                 JSObject result = new JSObject();
                 result.put("success", true);
                 result.put("url", streamUrl);
-                call.resolve(result);
+                bridge.getActivity().runOnUiThread(() -> call.resolve(result));
             } catch (Exception e) {
                 Log.e(TAG, "getStreamUrl failed: " + e.getMessage(), e);
-                call.reject("Stream extraction failed: " + e.getMessage());
+                bridge.getActivity().runOnUiThread(() -> call.reject("Stream extraction failed: " + e.getMessage()));
             }
         });
     }
@@ -331,7 +331,7 @@ public class YtDlpPlugin extends Plugin {
                 }
 
                 if (outputFile == null || !outputFile.exists() || outputFile.length() == 0) {
-                    call.reject("No audio file produced after download");
+                    bridge.getActivity().runOnUiThread(() -> call.reject("No audio file produced after download"));
                     return;
                 }
 
@@ -352,10 +352,10 @@ public class YtDlpPlugin extends Plugin {
                 result.put("data", base64);
                 result.put("size", fileData.length);
                 result.put("fileName", outputFile.getName());
-                call.resolve(result);
+                bridge.getActivity().runOnUiThread(() -> call.resolve(result));
             } catch (Exception e) {
                 Log.e(TAG, "downloadAudio failed: " + e.getMessage(), e);
-                call.reject("Download failed: " + e.getMessage());
+                bridge.getActivity().runOnUiThread(() -> call.reject("Download failed: " + e.getMessage()));
             }
         });
     }
