@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Settings, Folder, AlertTriangle, Wifi, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { Settings, Folder, AlertTriangle, Wifi, RefreshCw, CheckCircle2, FolderOpen, X } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useMusicStore } from '@/store/musicStore';
 import { t } from '@/lib/i18n';
@@ -56,7 +56,16 @@ export default function SettingsPage() {
     }
   };
 
-  // No folder picker: downloads are saved via MediaStore to Downloads/MHL Music
+  const handlePickFolder = async () => {
+    if (!('showDirectoryPicker' in window)) return;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const handle = await (window as any).showDirectoryPicker({ mode: 'readwrite' });
+      setDownloadFolder(handle, handle.name);
+    } catch {
+      // Usuario canceló — no hacer nada
+    }
+  };
 
   return (
     <motion.div
@@ -135,15 +144,58 @@ export default function SettingsPage() {
         <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">Carpeta de descargas</h2>
 
         <div className="p-4 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)]">
-          <div className="flex items-center gap-3">
-            <Folder className="w-5 h-5 text-[#C8F04B] flex-shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm text-[#F5F5F0] font-medium">MHL Music/</p>
-              <p className="text-xs text-[#666660] mt-0.5">
-                Las descargas se guardan automáticamente en la carpeta Descargas/MHL Music del dispositivo.
-              </p>
+          {isAndroid ? (
+            <div className="flex items-center gap-3">
+              <Folder className="w-5 h-5 text-[#C8F04B] flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-[#F5F5F0] font-medium">MHL Music/</p>
+                <p className="text-xs text-[#666660] mt-0.5">
+                  Las descargas se guardan automáticamente en la carpeta Descargas/MHL Music del dispositivo.
+                </p>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="flex items-center gap-3">
+              <Folder className="w-5 h-5 text-[#C8F04B] flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                {downloadFolderName ? (
+                  <>
+                    <p className="text-sm text-[#F5F5F0] font-medium truncate">{downloadFolderName}/</p>
+                    <p className="text-xs text-[#666660] mt-0.5">Las canciones se guardarán en esta carpeta.</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm text-[#F5F5F0] font-medium">Sin carpeta seleccionada</p>
+                    <p className="text-xs text-[#666660] mt-0.5">
+                      {'showDirectoryPicker' in window
+                        ? 'Elige una carpeta para guardar las descargas directamente.'
+                        : 'Tu navegador no soporta selector de carpeta. Las canciones se descargarán al lugar por defecto.'}
+                    </p>
+                  </>
+                )}
+              </div>
+              {'showDirectoryPicker' in window && (
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {downloadFolderName && (
+                    <button
+                      onClick={clearDownloadFolder}
+                      className="p-1.5 rounded-md text-[#666660] hover:text-[#F5F5F0] hover:bg-[rgba(255,255,255,0.06)] transition-colors"
+                      title="Quitar carpeta"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                  <button
+                    onClick={handlePickFolder}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold bg-[#C8F04B] text-[#18181A] hover:bg-[#d4f56a] transition-colors"
+                  >
+                    <FolderOpen className="w-3.5 h-3.5" />
+                    {downloadFolderName ? 'Cambiar' : 'Elegir carpeta'}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </section>
 
