@@ -1,0 +1,30 @@
+name: Keep-alive ping
+
+on:
+  schedule:
+    - cron: "0 10 */5 * *"  # cada 5 días a las 10:00 UTC
+  workflow_dispatch:         # también se puede lanzar manualmente
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping deezer-search
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+            "${{ secrets.SUPABASE_URL }}/functions/v1/deezer-search" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{"action":"search","query":"test"}')
+          echo "deezer-search status: $STATUS"
+          [ "$STATUS" -ge 200 ] && [ "$STATUS" -lt 500 ]
+
+      - name: Ping yt-stream
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+            "${{ secrets.SUPABASE_URL }}/functions/v1/yt-stream" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{"action":"health"}')
+          echo "yt-stream status: $STATUS"
+          [ "$STATUS" -ge 200 ] && [ "$STATUS" -lt 500 ]
