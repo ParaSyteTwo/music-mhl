@@ -193,6 +193,10 @@ ALLOWED_ORIGINS = [
 
 download_slots = BoundedSemaphore(value=max(1, MAX_CONCURRENT_DOWNLOADS))
 
+_ytdlp_update_lock = Lock()
+_ytdlp_last_update_ts: float = 0.0
+_YTDLP_UPDATE_COOLDOWN = 3600  # máximo un intento de actualización por hora
+
 
 def utc_now_ts() -> int:
     return int(datetime.now(timezone.utc).timestamp())
@@ -485,6 +489,51 @@ def build_download_options(video_id: str, format_name: str, workdir: Path) -> di
     }
 
 
+def classify_ytdlp_error(err: Exception) -> str:
+    """Clasifica el error de yt-dlp para dar mensajes claros y decidir si auto-actualizar."""
+    msg = str(err).lower()
+    if any(k in msg for k in ("sign in", "confirm your age", "login required", "private video", "members-only")):
+        return "ytdlp_auth"
+    if any(k in msg for k in ("http error 403", "403 forbidden", "video unavailable", "this video is not available", "has been removed")):
+        return "ytdlp_blocked"
+    if any(k in msg for k in ("unable to extract", "unsupported url", "no video formats found", "requested format", "could not find")):
+        return "ytdlp_extractor"
+    if any(k in msg for k in ("timed out", "timeout", "connectionerror", "network", "read error", "ssl", "connection reset")):
+        return "ytdlp_network"
+    return "ytdlp_unknown"
+
+
+_YTDLP_ERROR_LABELS: dict[str, str] = {
+    "ytdlp_auth":      "El video requiere autenticación (privado, restringido por edad o solo para miembros)",
+    "ytdlp_blocked":   "YouTube bloqueó la descarga — posible detección de bot o IP de datacenter",
+    "ytdlp_extractor": "yt-dlp no pudo extraer el audio — versión posiblemente desactualizada (actualización automática iniciada)",
+    "ytdlp_network":   "Error de red al conectar con YouTube — reintenta en unos segundos",
+    "ytdlp_unknown":   "yt-dlp falló con un error inesperado",
+}
+
+
+def try_auto_update_ytdlp() -> bool:
+    """
+    Intenta actualizar yt-dlp vía pip. Máximo una vez por hora.
+    Retorna True si la actualización se ejecutó sin errores.
+    """
+    global _ytdlp_last_update_ts
+    with _ytdlp_update_lock:
+        now = datetime.now(timezone.utc).timestamp()
+        if now - _ytdlp_last_update_ts < _YTDLP_UPDATE_COOLDOWN:
+            return False
+        _ytdlp_last_update_ts = now
+
+    try:
+        result = subprocess.run(
+            ["pip", "install", "--upgrade", "--quiet", "yt-dlp"],
+            capture_output=True, text=True, timeout=120,
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
+
+
 def get_rapidapi_audio_url(video_id: str) -> str | None:
     if not RAPIDAPI_KEY:
         return None
@@ -543,9 +592,11 @@ def convert_audio(source_path: Path, target_path: Path, format_name: str) -> Non
 
 
 def download_via_rapidapi(video_id: str, format_name: str, workdir: Path) -> Path:
+    if not RAPIDAPI_KEY:
+        raise RuntimeError("RapidAPI no configurada (RAPIDAPI_KEY ausente)")
     audio_url = get_rapidapi_audio_url(video_id)
     if not audio_url:
-        raise RuntimeError("RapidAPI audio URL not available")
+        raise RuntimeError("RapidAPI no devolvió URL de audio para este video")
 
     source_path = workdir / "rapid-source"
     with httpx.stream("GET", audio_url, follow_redirects=True, timeout=60) as response:
@@ -633,7 +684,23 @@ app.add_middleware(
 
 @app.get("/health")
 async def health() -> dict[str, Any]:
-    return {"ok": True, "service": "ytdlp-service"}
+    issues: list[str] = []
+    if not SERVICE_API_KEY:
+        issues.append("SERVICE_API_KEY no configurada")
+    if not DOWNLOAD_SIGNING_SECRET:
+        issues.append("DOWNLOAD_SIGNING_SECRET no configurada")
+    try:
+        get_ffmpeg_exe()
+    except Exception:
+        issues.append("ffmpeg no disponible")
+    return {
+        "ok": len(issues) == 0,
+        "service": "ytdlp-service",
+        "issues": issues,
+        "rapidapi_configured": bool(RAPIDAPI_KEY),
+        "ytapi_configured": bool(YTAPI_KEY),
+        "cookies_configured": bool(YOUTUBE_COOKIES_B64 or YOUTUBE_COOKIES.strip()),
+    }
 
 
 @app.get("/ytapi-stats")
@@ -671,7 +738,7 @@ async def search(
         results = search_candidates(q, limit=5)
         return {"success": True, "results": results}
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Search failed: {exc}") from exc
+        raise HTTPException(status_code=502, detail=f"Búsqueda fallida en YouTube: {exc}") from exc
 
 
 @app.post("/candidates")
@@ -717,7 +784,7 @@ async def candidates(
             if query_index >= 1 and ranked and ranked[0].get("confidence") != "baja":
                 return {"success": True, "candidates": ranked[:3]}
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Search failed: {exc}") from exc
+        raise HTTPException(status_code=502, detail=f"Error al buscar candidatos en YouTube: {exc}") from exc
 
     scored = sorted(merged.values(), key=lambda x: int(x["score"]), reverse=True)[:3]
 
@@ -745,10 +812,10 @@ async def resolve(
     try:
         candidates = search_candidates(f"{title} {artist} official audio", limit=8)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Resolve failed: {exc}") from exc
+        raise HTTPException(status_code=502, detail=f"Error al buscar el video en YouTube: {exc}") from exc
 
     if not candidates:
-        raise HTTPException(status_code=404, detail="No YouTube candidates found")
+        raise HTTPException(status_code=404, detail="No se encontró ningún video de YouTube para esta canción")
 
     chosen = max(candidates, key=lambda item: score_candidate(item, title, artist, album, duration))
     safe_name = sanitize_filename(f"{title} - {artist}.{format_name}")
@@ -772,50 +839,83 @@ async def download(token: str = Query(...)) -> FileResponse:
     format_name = str(payload.get("format") or "mp3").strip().lower()
 
     if not video_id:
-        raise HTTPException(status_code=400, detail="Token missing videoId")
+        raise HTTPException(status_code=400, detail="Token inválido: falta el identificador de video")
     if not download_slots.acquire(blocking=False):
-        raise HTTPException(status_code=429, detail="Too many concurrent downloads")
+        raise HTTPException(
+            status_code=429,
+            detail="Servidor ocupado: demasiadas descargas simultáneas. Inténtalo de nuevo en unos segundos.",
+        )
 
     workdir = Path(tempfile.mkdtemp(prefix="mhl-", dir=str(TEMP_DIR)))
+    ytdlp_err_msg = "yt-dlp falló"
+
     try:
         output: Path | None = None
-        try:
+        ytdlp_ok = False
+
+        # ── Intento 1: yt-dlp ────────────────────────────────────────────────
+        def _run_ytdlp() -> Path | None:
             with YoutubeDL(build_download_options(video_id, format_name, workdir)) as ydl:
                 ydl.download([f"https://www.youtube.com/watch?v={video_id}"])
-            expected_ext = "m4a" if format_name == "aac" else "mp3"
-            output = next(workdir.glob(f"audio*.{expected_ext}"), None)
+            ext = "m4a" if format_name == "aac" else "mp3"
+            return next(workdir.glob(f"audio*.{ext}"), None)
+
+        try:
+            output = _run_ytdlp()
+            ytdlp_ok = True
         except Exception as ytdlp_err:
-            # yt-dlp murió completamente — registrar fallo único consecutivo
+            err_type = classify_ytdlp_error(ytdlp_err)
+            ytdlp_err_msg = _YTDLP_ERROR_LABELS.get(err_type, str(ytdlp_err))
             record_ytdlp_failure(video_id)
 
+            # Si el extractor está desactualizado, actualizar yt-dlp y reintentar una vez
+            if err_type in ("ytdlp_extractor", "ytdlp_blocked", "ytdlp_unknown"):
+                if try_auto_update_ytdlp():
+                    try:
+                        import importlib
+                        import yt_dlp as _yt_mod
+                        importlib.reload(_yt_mod)
+                        output = _run_ytdlp()
+                        ytdlp_ok = True
+                    except Exception:
+                        pass  # Sigue con fallbacks
+
+        if ytdlp_ok:
+            record_ytdlp_success()
+
+        # ── Intento 2: RapidAPI (solo si está configurada) ───────────────────
+        if not ytdlp_ok and RAPIDAPI_KEY:
             try:
                 output = download_via_rapidapi(video_id, format_name, workdir)
-            except Exception as rapid_err:
-                # RapidAPI también falló — comprobar si yt-api está desbloqueada
-                allowed, reason = can_use_ytapi()
-                if not allowed:
-                    raise RuntimeError(
-                        f"yt-dlp falló y yt-api no disponible ({reason}). "
-                        f"yt-dlp: {ytdlp_err} | rapidapi: {rapid_err}"
-                    ) from rapid_err
+                ytdlp_ok = True  # Fallback exitoso
+            except Exception:
+                pass  # Continúa con el último recurso
 
-                try:
-                    output = download_via_ytapi(video_id, format_name, workdir)
-                    record_ytapi_use()
-                except Exception as ytapi_err:
-                    raise RuntimeError(
-                        f"Todos los métodos fallaron. "
-                        f"yt-dlp: {ytdlp_err} | rapidapi: {rapid_err} | ytapi: {ytapi_err}"
-                    ) from ytapi_err
-        else:
-            # yt-dlp tuvo éxito — reiniciar contador de fallos consecutivos
-            record_ytdlp_success()
+        # ── Intento 3: yt-api (último recurso, con límite diario) ────────────
+        if not ytdlp_ok:
+            allowed, reason = can_use_ytapi()
+            if not allowed:
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"{ytdlp_err_msg}. Sin métodos alternativos disponibles: {reason}.",
+                )
+            try:
+                output = download_via_ytapi(video_id, format_name, workdir)
+                record_ytapi_use()
+            except Exception as ytapi_err:
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"{ytdlp_err_msg}. El último recurso (yt-api) también falló: {ytapi_err}",
+                ) from ytapi_err
 
         if output is None:
             output = next(iter(workdir.glob("*")), None)
         if output is None or not output.exists():
             cleanup_job(workdir)
-            raise HTTPException(status_code=502, detail="No output file generated")
+            raise HTTPException(
+                status_code=502,
+                detail="No se generó el archivo de audio. El video puede no existir o estar eliminado.",
+            )
 
         return FileResponse(
             path=output,
@@ -827,7 +927,7 @@ async def download(token: str = Query(...)) -> FileResponse:
         raise
     except Exception as exc:
         cleanup_job(workdir)
-        raise HTTPException(status_code=502, detail=f"Download failed: {exc}") from exc
+        raise HTTPException(status_code=502, detail=f"Error inesperado durante la descarga: {exc}") from exc
 
 
 @app.exception_handler(HTTPException)
