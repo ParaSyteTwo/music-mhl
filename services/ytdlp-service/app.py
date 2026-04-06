@@ -1,4 +1,5 @@
 import base64
+import collections
 import hashlib
 import hmac
 import json
@@ -196,6 +197,21 @@ download_slots = BoundedSemaphore(value=max(1, MAX_CONCURRENT_DOWNLOADS))
 _ytdlp_update_lock = Lock()
 _ytdlp_last_update_ts: float = 0.0
 _YTDLP_UPDATE_COOLDOWN = 3600  # máximo un intento de actualización por hora
+
+# ── Caché de video IDs resueltos ─────────────────────────────────────────────
+# Clave: "título normalizado|artista normalizado"
+# Valor: {"videoId": str, "ts": float}
+_RESOLVE_CACHE_MAX = 100_000
+_RESOLVE_CACHE_TTL = 86400  # 24 horas en segundos
+_resolve_cache: collections.OrderedDict[str, dict[str, Any]] = collections.OrderedDict()
+_resolve_cache_lock = Lock()
+
+# ── Clientes de YouTube en orden de preferencia ───────────────────────────────
+# android_music: no requiere PO Token, menos bloqueado en datacenters
+# ios: cliente alternativo con rate limits independientes
+# android: cliente genérico de Android
+# web: último recurso, requiere PO Token en datacenters
+_YTDLP_CLIENTS = ["android_music", "ios", "android", "web"]
 
 
 def utc_now_ts() -> int:
@@ -454,7 +470,7 @@ def build_token(video_id: str, file_name: str, format_name: str) -> dict[str, An
     }
 
 
-def build_download_options(video_id: str, format_name: str, workdir: Path) -> dict[str, Any]:
+def build_download_options(video_id: str, format_name: str, workdir: Path, client: str = "android_music") -> dict[str, Any]:
     ext = "m4a" if format_name == "aac" else "mp3"
     try:
         ffmpeg_location = get_ffmpeg_exe()
@@ -476,6 +492,7 @@ def build_download_options(video_id: str, format_name: str, workdir: Path) -> di
         "paths": {"home": str(workdir)},
         "outtmpl": {"default": "audio.%(ext)s"},
         "format": "bestaudio/best",
+        "extractor_args": {"youtube": {"player_client": [client]}},
         "postprocessors": [
             {
                 "key": "FFmpegExtractAudio",
@@ -700,6 +717,8 @@ async def health() -> dict[str, Any]:
         "rapidapi_configured": bool(RAPIDAPI_KEY),
         "ytapi_configured": bool(YTAPI_KEY),
         "cookies_configured": bool(YOUTUBE_COOKIES_B64 or YOUTUBE_COOKIES.strip()),
+        "resolve_cache_entries": len(_resolve_cache),
+        "resolve_cache_max": _RESOLVE_CACHE_MAX,
     }
 
 
@@ -791,6 +810,38 @@ async def candidates(
     return {"success": True, "candidates": scored}
 
 
+def _cache_key(title: str, artist: str) -> str:
+    return f"{normalize_search_term(title)}|{normalize_search_term(artist)}"
+
+
+def _cache_get(key: str) -> dict[str, Any] | None:
+    with _resolve_cache_lock:
+        entry = _resolve_cache.get(key)
+        if entry is None:
+            return None
+        if datetime.now(timezone.utc).timestamp() - entry["ts"] > _RESOLVE_CACHE_TTL:
+            del _resolve_cache[key]
+            return None
+        # Mover al final para mantener orden LRU
+        _resolve_cache.move_to_end(key)
+        return entry
+
+
+def _cache_set(key: str, video_id: str, candidate: dict[str, Any]) -> None:
+    with _resolve_cache_lock:
+        if key in _resolve_cache:
+            _resolve_cache.move_to_end(key)
+        else:
+            if len(_resolve_cache) >= _RESOLVE_CACHE_MAX:
+                _resolve_cache.popitem(last=False)  # Elimina el más antiguo (O(1))
+        _resolve_cache[key] = {
+            "videoId": video_id,
+            "title": candidate.get("title", ""),
+            "duration": int(candidate.get("duration") or 0),
+            "ts": datetime.now(timezone.utc).timestamp(),
+        }
+
+
 @app.post("/resolve")
 async def resolve(
     payload: dict[str, Any],
@@ -809,6 +860,23 @@ async def resolve(
     if format_name not in {"mp3", "aac"}:
         raise HTTPException(status_code=400, detail="format must be mp3 or aac")
 
+    cache_key = _cache_key(title, artist)
+    cached = _cache_get(cache_key)
+
+    if cached:
+        safe_name = sanitize_filename(f"{title} - {artist}.{format_name}")
+        token_info = build_token(cached["videoId"], safe_name, format_name)
+        return {
+            "success": True,
+            "videoId": cached["videoId"],
+            "title": cached["title"],
+            "duration": cached["duration"],
+            "format": format_name,
+            "fileName": safe_name,
+            "cached": True,
+            **token_info,
+        }
+
     try:
         candidates = search_candidates(f"{title} {artist} official audio", limit=8)
     except Exception as exc:
@@ -818,6 +886,8 @@ async def resolve(
         raise HTTPException(status_code=404, detail="No se encontró ningún video de YouTube para esta canción")
 
     chosen = max(candidates, key=lambda item: score_candidate(item, title, artist, album, duration))
+    _cache_set(cache_key, chosen["videoId"], chosen)
+
     safe_name = sanitize_filename(f"{title} - {artist}.{format_name}")
     token_info = build_token(chosen["videoId"], safe_name, format_name)
     return {
@@ -827,6 +897,7 @@ async def resolve(
         "duration": chosen.get("duration") or 0,
         "format": format_name,
         "fileName": safe_name,
+        "cached": False,
         **token_info,
     }
 
@@ -853,32 +924,45 @@ async def download(token: str = Query(...)) -> FileResponse:
         output: Path | None = None
         ytdlp_ok = False
 
-        # ── Intento 1: yt-dlp ────────────────────────────────────────────────
-        def _run_ytdlp() -> Path | None:
-            with YoutubeDL(build_download_options(video_id, format_name, workdir)) as ydl:
+        # ── Intentos yt-dlp: rotar clientes hasta que uno funcione ───────────
+        def _run_ytdlp(client: str) -> Path | None:
+            with YoutubeDL(build_download_options(video_id, format_name, workdir, client)) as ydl:
                 ydl.download([f"https://www.youtube.com/watch?v={video_id}"])
             ext = "m4a" if format_name == "aac" else "mp3"
             return next(workdir.glob(f"audio*.{ext}"), None)
 
-        try:
-            output = _run_ytdlp()
-            ytdlp_ok = True
-        except Exception as ytdlp_err:
-            err_type = classify_ytdlp_error(ytdlp_err)
-            ytdlp_err_msg = _YTDLP_ERROR_LABELS.get(err_type, str(ytdlp_err))
-            record_ytdlp_failure(video_id)
+        last_ytdlp_err: Exception | None = None
+        updated_once = False
+        for client in _YTDLP_CLIENTS:
+            try:
+                output = _run_ytdlp(client)
+                ytdlp_ok = True
+                break
+            except Exception as ytdlp_err:
+                last_ytdlp_err = ytdlp_err
+                err_type = classify_ytdlp_error(ytdlp_err)
+                # Si es error de extractor/desconocido, intentar auto-update una sola vez
+                # antes de seguir rotando clientes
+                if not updated_once and err_type in ("ytdlp_extractor", "ytdlp_unknown"):
+                    updated_once = True
+                    if try_auto_update_ytdlp():
+                        try:
+                            import importlib
+                            import yt_dlp as _yt_mod
+                            importlib.reload(_yt_mod)
+                            output = _run_ytdlp(client)
+                            ytdlp_ok = True
+                            break
+                        except Exception as retry_err:
+                            last_ytdlp_err = retry_err
+                # Si el video es privado/edad restringida, no tiene sentido rotar clientes
+                if err_type == "ytdlp_auth":
+                    break
 
-            # Si el extractor está desactualizado, actualizar yt-dlp y reintentar una vez
-            if err_type in ("ytdlp_extractor", "ytdlp_blocked", "ytdlp_unknown"):
-                if try_auto_update_ytdlp():
-                    try:
-                        import importlib
-                        import yt_dlp as _yt_mod
-                        importlib.reload(_yt_mod)
-                        output = _run_ytdlp()
-                        ytdlp_ok = True
-                    except Exception:
-                        pass  # Sigue con fallbacks
+        if not ytdlp_ok and last_ytdlp_err is not None:
+            err_type = classify_ytdlp_error(last_ytdlp_err)
+            ytdlp_err_msg = _YTDLP_ERROR_LABELS.get(err_type, str(last_ytdlp_err))
+            record_ytdlp_failure(video_id)
 
         if ytdlp_ok:
             record_ytdlp_success()
