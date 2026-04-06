@@ -32,7 +32,16 @@
       "Bash(/c/Users/Paul/AppData/Local/Android/Sdk/platform-tools/adb.exe logcat:*)",
       "Bash(npx cap:*)",
       "Bash(./gradlew assembleRelease)",
-      "Bash(xargs grep:*)"
+      "Bash(xargs grep:*)",
+      "Bash(git -C d:/Programacion/Proyectos/music-mhl ls-files scripts/android/)",
+      "Bash(git -C d:/Programacion/Proyectos/music-mhl status --short)",
+      "Bash(git -C d:/Programacion/Proyectos/music-mhl ls-files --others --exclude-standard)",
+      "mcp__plugin_serena_serena__search_for_pattern",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('app.py'\\).read\\(\\)\\); print\\('OK - sin errores de sintaxis'\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('app.py', encoding='utf-8'\\).read\\(\\)\\); print\\('OK - sin errores de sintaxis'\\)\")",
+      "mcp__claude_ai_Supabase__get_logs",
+      "mcp__claude_ai_Supabase__get_edge_function",
+      "mcp__claude_ai_Supabase__get_project"
     ]
   }
 }
