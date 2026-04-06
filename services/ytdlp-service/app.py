@@ -995,7 +995,6 @@ async def download(token: str = Query(...)) -> FileResponse:
         if output is None:
             output = next(iter(workdir.glob("*")), None)
         if output is None or not output.exists():
-            cleanup_job(workdir)
             raise HTTPException(
                 status_code=502,
                 detail="No se generó el archivo de audio. El video puede no existir o estar eliminado.",
@@ -1008,6 +1007,7 @@ async def download(token: str = Query(...)) -> FileResponse:
             background=BackgroundTask(cleanup_job, workdir),
         )
     except HTTPException:
+        cleanup_job(workdir)
         raise
     except Exception as exc:
         cleanup_job(workdir)
