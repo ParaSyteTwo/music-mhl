@@ -24,7 +24,6 @@
     "@capacitor/filesystem": "^8.1.2",
     "@capacitor/status-bar": "^8.0.1",
     "@capawesome/capacitor-file-picker": "^8.0.2",
-    "@supabase/supabase-js": "^2.99.1",
     "browser-id3-writer": "^6.3.1",
     "clsx": "^2.1.1",
     "framer-motion": "^12.36.0",

@@ -23,7 +23,6 @@ services:
       ignoredPaths:
         - android/**
         - services/**
-        - supabase/**
         - docs/**
         - .claude/**
         - dev-dist/**
@@ -32,9 +31,9 @@ services:
         - "*.mp3"
         - ".tmp-*"
     envVars:
-      - key: VITE_SUPABASE_URL
+      - key: VITE_RAILWAY_URL
         sync: false
-      - key: VITE_SUPABASE_PUBLISHABLE_KEY
+      - key: VITE_SERVICE_API_KEY
         sync: false
     routes:
       - type: rewrite

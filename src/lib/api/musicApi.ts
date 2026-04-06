@@ -1,28 +1,23 @@
 import { Track } from '@/types/music';
-import { createClient } from '@supabase/supabase-js';
 import { Capacitor } from '@capacitor/core';
 import { useMusicStore } from '@/store/musicStore';
 
-let _supabaseClient: ReturnType<typeof createClient> | null = null;
-
-function getSupabaseClient() {
-  if (_supabaseClient) return _supabaseClient;
-
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
-  const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
-
-  _supabaseClient = createClient(supabaseUrl || '', supabaseKey || '', {
-    auth: {
-      storage: localStorage,
-      persistSession: true,
-      autoRefreshToken: true,
-    },
-  });
-
-  return _supabaseClient;
+function getRailwayUrl(): string {
+  return (import.meta.env.VITE_RAILWAY_URL as string | undefined)?.replace(/\/$/, '') ?? '';
 }
 
-// ─── Map pre-transformed data from edge function ───
+function getRailwayKey(): string {
+  return (import.meta.env.VITE_SERVICE_API_KEY as string | undefined) ?? '';
+}
+
+function railwayHeaders(): HeadersInit {
+  return {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${getRailwayKey()}`,
+  };
+}
+
+// ─── Map pre-transformed data from backend ───
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapProxiedTrack(t: any): Track {
   return {
@@ -39,12 +34,18 @@ function mapProxiedTrack(t: any): Track {
   };
 }
 
-// ─── Helper: call Supabase edge function for Deezer ───
+// ─── Helper: call Railway /deezer endpoint ───
 async function callDeezerProxy(body: Record<string, unknown>) {
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase.functions.invoke('deezer-search', { body });
-  if (error) throw new Error(error.message || 'Edge function error');
-  return data;
+  const res = await fetch(`${getRailwayUrl()}/deezer`, {
+    method: 'POST',
+    headers: railwayHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => null) as { error?: string } | null;
+    throw new Error(err?.error || 'Deezer proxy error');
+  }
+  return res.json();
 }
 
 // ─── Deezer Search ───
@@ -211,7 +212,6 @@ export async function getDownloadCandidates(
 ): Promise<DownloadCandidate[]> {
   const cacheKey = `${track.deezerId ?? track.id}|${getPreferredTrackTitle(track)}|${track.artist}|${getPreferredAlbumName(track)}`;
   const cached = candidateCache.get(cacheKey);
-  // Solo retorna cache si tiene resultados (evita cachear búsquedas vacías)
   if (cached && cached.length > 0) return cached;
 
   if (Capacitor.isNativePlatform()) {
@@ -220,7 +220,6 @@ export async function getDownloadCandidates(
       const queries = buildCandidateQueries(track);
       console.log('[getDownloadCandidates] Native platform detected. Queries:', queries);
 
-      // Aumentar timeout a 30 segundos para búsquedas en paralelo
       const resultsPerQuery = await Promise.all(
         queries.map((q) => {
           console.log('[searchYouTubeNative] Starting search for query:', q);
@@ -259,7 +258,6 @@ export async function getDownloadCandidates(
         .sort((a, b) => b.score - a.score)
         .slice(0, 3);
       console.log('[getDownloadCandidates] Final candidates:', finalCandidates);
-      // Solo cachear si hay resultados (evita cachear búsquedas fallidas)
       if (finalCandidates.length > 0) {
         candidateCache.set(cacheKey, finalCandidates);
       }
@@ -270,17 +268,11 @@ export async function getDownloadCandidates(
     }
   }
 
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
-  const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
-  const res = await fetch(`${supabaseUrl}/functions/v1/yt-stream`, {
+  // Web: llamar Railway /candidates directamente
+  const res = await fetch(`${getRailwayUrl()}/candidates`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'apikey': supabaseKey,
-      'Authorization': `Bearer ${supabaseKey}`,
-    },
+    headers: railwayHeaders(),
     body: JSON.stringify({
-      action: 'getCandidates',
       title: getPreferredTrackTitle(track),
       artist: track.artist,
       album: getPreferredAlbumName(track),
@@ -308,7 +300,7 @@ interface WebDownloadTicketResponse {
 
 // ─── Download track audio ───
 // Android: yt-dlp local (via YtDlpPlugin nativo)
-// Web: Supabase broker issues a short-lived ticket for the external yt-dlp service
+// Web: Railway emite un ticket de descarga de corta duración
 export async function downloadTrackAudio(
   track: Track,
   onProgress?: (progress: number) => void,
@@ -320,7 +312,6 @@ export async function downloadTrackAudio(
 
     onProgress?.(25);
 
-    // Si el usuario eligió un videoId concreto, lo usamos directamente
     if (videoIdOverride) {
       return downloadMp3Native(videoIdOverride, { format: options.format, quality: options.quality });
     }
@@ -363,19 +354,13 @@ export async function downloadTrackAudio(
     throw new Error(lastError || 'No se pudo descargar');
   }
 
+  // Web: obtener ticket de Railway y luego descargar
   onProgress?.(15);
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
-  const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
 
-  const ticketRes = await fetch(`${supabaseUrl}/functions/v1/yt-stream`, {
+  const ticketRes = await fetch(`${getRailwayUrl()}/download-ticket`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'apikey': supabaseKey,
-      'Authorization': `Bearer ${supabaseKey}`,
-    },
+    headers: railwayHeaders(),
     body: JSON.stringify({
-      action: 'webDownloadTicket',
       title: getPreferredTrackTitle(track),
       artist: track.artist,
       album: getPreferredAlbumName(track),

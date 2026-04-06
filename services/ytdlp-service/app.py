@@ -2,6 +2,8 @@ import base64
 import collections
 import hashlib
 import hmac
+import asyncio
+import json
 import os
 import re
 import shutil
@@ -13,7 +15,7 @@ from pathlib import Path
 from threading import BoundedSemaphore, Lock
 from typing import Any
 
-from fastapi import FastAPI, Header, HTTPException, Query
+from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from starlette.background import BackgroundTask
@@ -25,6 +27,13 @@ SERVICE_API_KEY = os.getenv("SERVICE_API_KEY", "").strip()
 DOWNLOAD_SIGNING_SECRET = os.getenv("DOWNLOAD_SIGNING_SECRET", "").strip()
 TOKEN_TTL_SECONDS = int(os.getenv("TOKEN_TTL_SECONDS", "120"))
 MAX_CONCURRENT_DOWNLOADS = int(os.getenv("MAX_CONCURRENT_DOWNLOADS", "3"))
+RATE_LIMIT_BURST = int(os.getenv("RATE_LIMIT_BURST", "8"))
+RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60"))
+RATE_LIMIT_DAILY = int(os.getenv("RATE_LIMIT_DAILY", "250"))
+
+# ── Rate limit store ──────────────────────────────────────────────────────────
+_rate_store: dict[str, dict] = {}
+_rate_store_lock = Lock()
 TEMP_DIR = Path(os.getenv("TEMP_DIR", "/tmp/ytdlp-service"))
 YOUTUBE_COOKIES = os.getenv("YOUTUBE_COOKIES", "")
 YOUTUBE_COOKIES_B64 = os.getenv("YOUTUBE_COOKIES_B64", "").strip()
@@ -785,6 +794,327 @@ async def download(token: str = Query(...)) -> FileResponse:
         raise HTTPException(
             status_code=502, detail=f"Error inesperado durante la descarga: {exc}"
         ) from exc
+
+
+def check_rate_limit(ip: str) -> tuple[bool, str, int]:
+    """Returns (ok, message, retry_after_seconds)."""
+    now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    window_ms = RATE_LIMIT_WINDOW_SECONDS * 1000
+
+    with _rate_store_lock:
+        state = _rate_store.get(ip, {"burst": [], "day_count": 0, "day_key": today})
+        if state["day_key"] != today:
+            state = {"burst": [], "day_count": 0, "day_key": today}
+
+        state["burst"] = [ts for ts in state["burst"] if now_ms - ts < window_ms]
+
+        if len(state["burst"]) >= RATE_LIMIT_BURST:
+            _rate_store[ip] = state
+            return False, "Too many requests in a short period", RATE_LIMIT_WINDOW_SECONDS
+
+        if state["day_count"] >= RATE_LIMIT_DAILY:
+            _rate_store[ip] = state
+            return False, "Daily quota reached", 3600
+
+        state["burst"].append(now_ms)
+        state["day_count"] += 1
+        _rate_store[ip] = state
+        return True, "", 0
+
+
+def get_client_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.headers.get("x-real-ip") or request.client.host or "unknown"
+
+
+# ── Deezer proxy ──────────────────────────────────────────────────────────────
+
+DEEZER_BASE = "https://api.deezer.com"
+
+
+async def _dz_get(path: str) -> dict[str, Any]:
+    import httpx
+    async with httpx.AsyncClient(timeout=10) as client:
+        res = await client.get(f"{DEEZER_BASE}{path}")
+        res.raise_for_status()
+        return res.json()
+
+
+async def _dz_get_many(paths: list[str]) -> list[dict[str, Any]]:
+    import httpx
+    async with httpx.AsyncClient(timeout=10) as client:
+        responses = await asyncio.gather(
+            *[client.get(f"{DEEZER_BASE}{p}") for p in paths],
+            return_exceptions=True,
+        )
+    results = []
+    for r in responses:
+        if isinstance(r, Exception):
+            raise r
+        r.raise_for_status()
+        results.append(r.json())
+    return results
+
+
+def _clean_album_title(title: str) -> str:
+    normalized = re.sub(r"\s+", " ", title or "")
+    normalized = re.sub(r"\b(opening|ending)\s+theme\s+song\b", "", normalized, flags=re.I)
+    normalized = re.sub(r"\b(opening|ending)\s+theme\b", "", normalized, flags=re.I)
+    normalized = re.sub(r"\btheme\s+song\b", "", normalized, flags=re.I)
+    normalized = re.sub(r"\b(ost|original soundtrack|soundtrack)\b", "", normalized, flags=re.I)
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    parts = re.split(r"\s[-–—:]\s", normalized)
+    if len(parts) > 1:
+        suffix = " - ".join(parts[1:])
+        if re.search(r"(opening|ending|theme|ost|soundtrack|season|anime|ver\.?|version)", suffix, re.I):
+            normalized = parts[0].strip() or normalized
+    return normalized or title or "Unknown"
+
+
+def _transform_track(item: dict[str, Any]) -> dict[str, Any]:
+    canonical_title = item.get("title_short") or item.get("title") or "Unknown"
+    album = item.get("album") or {}
+    artist = item.get("artist") or {}
+    return {
+        "id": f"dz-{item['id']}",
+        "deezerId": item["id"],
+        "title": item.get("title") or canonical_title,
+        "canonicalTitle": canonical_title,
+        "canonicalAlbum": _clean_album_title(album.get("title") or "Unknown"),
+        "artist": artist.get("name") or "Unknown",
+        "album": album.get("title") or "Unknown",
+        "duration": item.get("duration") or 0,
+        "cover": album.get("cover_big") or album.get("cover_medium") or album.get("cover_small") or "",
+        "coverSmall": album.get("cover_medium") or album.get("cover_small") or "",
+        "coverXL": album.get("cover_xl") or album.get("cover_big") or "",
+        "preview": item.get("preview") or "",
+        "artistId": artist.get("id"),
+        "albumId": album.get("id"),
+        "rank": item.get("rank"),
+    }
+
+
+def _transform_artist(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": f"dz-artist-{item['id']}",
+        "deezerId": item["id"],
+        "name": item.get("name") or "Unknown",
+        "picture": item.get("picture_xl") or item.get("picture_big") or item.get("picture_medium") or "",
+        "pictureSmall": item.get("picture_medium") or item.get("picture_small") or "",
+        "pictureXL": item.get("picture_xl") or item.get("picture_big") or "",
+        "fans": item.get("nb_fan") or 0,
+    }
+
+
+def _transform_album(item: dict[str, Any]) -> dict[str, Any]:
+    artist = item.get("artist") or {}
+    return {
+        "id": f"dz-album-{item['id']}",
+        "deezerId": item["id"],
+        "title": item.get("title") or "Unknown",
+        "artist": artist.get("name") or "Unknown",
+        "artistId": artist.get("id"),
+        "cover": item.get("cover_big") or item.get("cover_medium") or item.get("cover_small") or "",
+        "coverSmall": item.get("cover_medium") or item.get("cover_small") or "",
+        "coverXL": item.get("cover_xl") or item.get("cover_big") or "",
+        "releaseDate": item.get("release_date"),
+        "genre": (item.get("genres") or {}).get("data", [{}])[0].get("name") if (item.get("genres") or {}).get("data") else None,
+    }
+
+
+
+@app.post("/deezer")
+async def deezer_proxy(
+    payload: dict[str, Any],
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    require_service_key(authorization)
+    action = str(payload.get("action") or "search")
+
+    try:
+        if action == "search":
+            q = str(payload.get("query") or "").strip()[:200]
+            limit = min(int(payload.get("limit") or 25), 50)
+            offset = int(payload.get("offset") or 0)
+            if not q:
+                raise HTTPException(status_code=400, detail="query is required")
+            data = await _dz_get(f"/search?q={q}&limit={limit}&index={offset}")
+            return {"success": True, "tracks": [_transform_track(t) for t in data.get("data") or []], "total": data.get("total") or 0}
+
+        if action == "searchAll":
+            q = str(payload.get("query") or "").strip()[:200]
+            if not q:
+                raise HTTPException(status_code=400, detail="query is required")
+            tracks_d, artists_d, albums_d = await _dz_get_many([
+                f"/search?q={q}&limit=10",
+                f"/search/artist?q={q}&limit=5",
+                f"/search/album?q={q}&limit=5",
+            ])
+            return {
+                "success": True,
+                "tracks": [_transform_track(t) for t in tracks_d.get("data") or []],
+                "artists": [_transform_artist(a) for a in artists_d.get("data") or []],
+                "albums": [_transform_album(a) for a in albums_d.get("data") or []],
+            }
+
+        if action == "artist":
+            artist_id = payload.get("artistId")
+            if not artist_id:
+                raise HTTPException(status_code=400, detail="artistId is required")
+            info_d, top_d, albums_d, related_d = await _dz_get_many([
+                f"/artist/{artist_id}",
+                f"/artist/{artist_id}/top?limit=10",
+                f"/artist/{artist_id}/albums?limit=10",
+                f"/artist/{artist_id}/related?limit=8",
+            ])
+            return {
+                "success": True,
+                "info": {"id": info_d["id"], "name": info_d["name"], "picture": info_d.get("picture_xl") or info_d.get("picture_big") or "", "fans": info_d.get("nb_fan") or 0},
+                "topTracks": [_transform_track(t) for t in top_d.get("data") or []],
+                "albums": [_transform_album(a) for a in albums_d.get("data") or []],
+                "related": [_transform_artist(a) for a in related_d.get("data") or []],
+            }
+
+        if action == "album":
+            album_id = payload.get("albumId")
+            if not album_id:
+                raise HTTPException(status_code=400, detail="albumId is required")
+            album_d = await _dz_get(f"/album/{album_id}")
+            artist_albums_d = await _dz_get(f"/artist/{album_d['artist']['id']}/albums?limit=20")
+            return {
+                "success": True,
+                "album": {
+                    "id": album_d["id"],
+                    "title": album_d.get("title") or "",
+                    "cover": album_d.get("cover_xl") or album_d.get("cover_big") or album_d.get("cover_medium") or "",
+                    "artist": {"id": album_d["artist"]["id"], "name": album_d["artist"]["name"]},
+                    "releaseDate": album_d.get("release_date"),
+                    "trackCount": album_d.get("nb_tracks") or 0,
+                    "tracks": [_transform_track(t) for t in (album_d.get("tracks") or {}).get("data") or []],
+                    "genre": ((album_d.get("genres") or {}).get("data") or [{}])[0].get("name") if (album_d.get("genres") or {}).get("data") else None,
+                },
+                "moreByArtist": [_transform_album(a) for a in (artist_albums_d.get("data") or []) if a["id"] != album_id][:4],
+            }
+
+        if action == "trackMeta":
+            track_id = payload.get("trackId")
+            if not track_id:
+                raise HTTPException(status_code=400, detail="trackId is required")
+            track_d = await _dz_get(f"/track/{track_id}")
+            album_id = (track_d.get("album") or {}).get("id")
+            track_number = track_d.get("track_position")
+            release_date: str | None = track_d.get("release_date")
+            year = int(release_date.split("-")[0]) if release_date else None
+            genre = None
+            if album_id:
+                try:
+                    album_d = await _dz_get(f"/album/{album_id}")
+                    genre = ((album_d.get("genres") or {}).get("data") or [{}])[0].get("name") if (album_d.get("genres") or {}).get("data") else None
+                except Exception:
+                    pass
+            return {"success": True, "genre": genre, "year": year, "trackNumber": track_number}
+
+        if action == "home":
+            genre_ids = [132, 116, 152, 106, 165, 197]
+            genre_names = {132: "Pop", 116: "Rap", 152: "Rock", 106: "Electronic", 165: "R&B", 197: "Latin"}
+            paths = [
+                "/chart/0/tracks?limit=20",
+                "/genre",
+                "/chart/0/artists?limit=12",
+                "/chart/0/albums?limit=12",
+                *[f"/chart/{gid}/tracks?limit=10" for gid in genre_ids],
+            ]
+            results = await _dz_get_many(paths)
+            top_tracks_d, genres_d, artists_d, albums_d, *genre_tracks = results
+            by_genre = {
+                genre_names[gid]: {"genreId": gid, "tracks": [_transform_track(t) for t in (genre_tracks[i].get("data") or [])]}
+                for i, gid in enumerate(genre_ids)
+            }
+            return {
+                "success": True,
+                "topTracks": [_transform_track(t) for t in top_tracks_d.get("data") or []],
+                "genres": [{"id": g["id"], "name": g["name"], "picture": g.get("picture_xl") or g.get("picture_big") or g.get("picture_medium") or ""} for g in (genres_d.get("data") or [])[:50]],
+                "byGenre": by_genre,
+                "trendingArtists": [_transform_artist(a) for a in artists_d.get("data") or []],
+                "newAlbums": [_transform_album(a) for a in albums_d.get("data") or []],
+            }
+
+        if action == "genre":
+            genre_id = payload.get("genreId")
+            if not genre_id:
+                raise HTTPException(status_code=400, detail="genreId is required")
+            data = await _dz_get(f"/chart/{genre_id}/tracks?limit=25")
+            tracks = [_transform_track(t) for t in data.get("data") or []]
+            return {"success": True, "tracks": tracks, "total": data.get("total") or len(tracks)}
+
+        raise HTTPException(status_code=400, detail=f"Unknown action: {action}")
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Deezer error: {exc}") from exc
+
+
+# ── Download ticket (web browser flow) ───────────────────────────────────────
+
+@app.post("/download-ticket")
+async def download_ticket(
+    payload: dict[str, Any],
+    request: Request,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    require_service_key(authorization)
+
+    title = str(payload.get("title") or "").strip()
+    artist = str(payload.get("artist") or "").strip()
+    album = str(payload.get("album") or "").strip()
+    format_name = "aac" if payload.get("format") == "aac" else "mp3"
+    duration = int(payload.get("duration") or 0)
+    video_id_override = str(payload.get("videoId") or "").strip() or None
+
+    if not title or not artist:
+        raise HTTPException(status_code=400, detail="title and artist are required")
+
+    ip = get_client_ip(request)
+    ok, message, retry_after = check_rate_limit(ip)
+    if not ok:
+        raise HTTPException(status_code=429, detail=message)
+
+    if video_id_override:
+        resolved_video_id = video_id_override
+    else:
+        cache_key = _cache_key(title, artist)
+        cached = _cache_get(cache_key)
+        if cached:
+            resolved_video_id = cached["videoId"]
+        else:
+            try:
+                results = search_candidates(f"{title} {artist} official audio", limit=8)
+            except Exception as exc:
+                raise HTTPException(status_code=502, detail=f"Error buscando video: {exc}") from exc
+            if not results:
+                raise HTTPException(status_code=404, detail="No se encontró ningún video de YouTube")
+            chosen = max(results, key=lambda c: score_candidate(c, title, artist, album, duration))
+            _cache_set(cache_key, chosen["videoId"], chosen)
+            resolved_video_id = chosen["videoId"]
+
+    safe_name = sanitize_filename(f"{title} - {artist}.{format_name}")
+    token_info = build_token(resolved_video_id, safe_name, format_name)
+
+    service_url = os.getenv("RAILWAY_PUBLIC_DOMAIN", "")
+    if service_url and not service_url.startswith("http"):
+        service_url = f"https://{service_url}"
+
+    download_url = f"{service_url}/download?token={token_info['token']}"
+    return {
+        "success": True,
+        "fileName": safe_name,
+        "expiresAt": token_info["expiresAt"],
+        "downloadUrl": download_url,
+    }
 
 
 @app.exception_handler(HTTPException)

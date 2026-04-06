@@ -46,7 +46,15 @@ __pycache__/
 # Temp files
 .tmp-*
 
-# Claude worktrees (embedded git repos)
+# Claude Code
 .claude/worktrees/
+.claude/settings.local.json
 
+# Vercel / Render (no configs sensibles)
 .vercel
+
+# Python linter cache
+.ruff_cache/
+
+# Serena IDE cache
+.serena/cache
