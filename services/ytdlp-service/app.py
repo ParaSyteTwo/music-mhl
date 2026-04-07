@@ -745,6 +745,7 @@ async def download(token: str = Query(...)) -> FileResponse:
                 break
             except Exception as ytdlp_err:
                 last_ytdlp_err = ytdlp_err
+                print(f"[ytdlp] client={client} error={type(ytdlp_err).__name__}: {ytdlp_err}", flush=True)
                 err_type = classify_ytdlp_error(ytdlp_err)
                 # Si es error de extractor/desconocido, intentar auto-update una sola vez
                 # antes de seguir rotando clientes
