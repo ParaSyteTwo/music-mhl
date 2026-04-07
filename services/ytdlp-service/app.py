@@ -562,6 +562,37 @@ async def health() -> dict[str, Any]:
     }
 
 
+@app.get("/internal/keepalive-yt")
+async def keepalive_youtube(authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    require_service_key(authorization)
+    active_b64 = _get_active_cookies_b64()
+    if not active_b64:
+        return {"ok": False, "reason": "no cookies configured"}
+
+    with tempfile.TemporaryDirectory() as tmp:
+        cookies_path = Path(tmp) / "cookies.txt"
+        _b64 = active_b64.rstrip("=")
+        _b64 += "=" * (-len(_b64) % 4)
+        cookies_path.write_bytes(base64.b64decode(_b64))
+
+        result = subprocess.run(
+            [
+                "yt-dlp",
+                "--cookies", str(cookies_path),
+                "--skip-download",
+                "--quiet",
+                "--no-warnings",
+                "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            ],
+            capture_output=True,
+            timeout=30,
+        )
+
+    ok = result.returncode == 0
+    print(f"[keepalive-yt] cookies #{_cookies_index + 1} ok={ok}", flush=True)
+    return {"ok": ok, "cookies_index": _cookies_index + 1}
+
+
 @app.get("/search")
 async def search(
     q: str = Query(..., min_length=2),
