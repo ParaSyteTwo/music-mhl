@@ -1123,3 +1123,4 @@ async def http_error_handler(_, exc: HTTPException) -> JSONResponse:
     return JSONResponse(
         status_code=exc.status_code, content={"success": False, "error": exc.detail}
     )
+
