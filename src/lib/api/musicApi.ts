@@ -41,11 +41,14 @@ async function callDeezerProxy(body: Record<string, unknown>) {
     headers: railwayHeaders(),
     body: JSON.stringify(body),
   });
+  const text = await res.text();
   if (!res.ok) {
-    const err = await res.json().catch(() => null) as { error?: string } | null;
-    throw new Error(err?.error || 'Deezer proxy error');
+    let err: { error?: string; detail?: string } | null = null;
+    try { err = JSON.parse(text); } catch { /* ignore */ }
+    throw new Error(err?.error || err?.detail || 'Deezer proxy error');
   }
-  return res.json();
+  if (!text) throw new Error('Empty response from Deezer proxy');
+  return JSON.parse(text);
 }
 
 // ─── Deezer Search ───
