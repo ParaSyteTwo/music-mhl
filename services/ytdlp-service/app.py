@@ -31,6 +31,8 @@ MAX_CONCURRENT_DOWNLOADS = int(os.getenv("MAX_CONCURRENT_DOWNLOADS", "3"))
 RATE_LIMIT_BURST = int(os.getenv("RATE_LIMIT_BURST", "8"))
 RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60"))
 RATE_LIMIT_DAILY = int(os.getenv("RATE_LIMIT_DAILY", "250"))
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "").strip()
 
 # ── Rate limit store ──────────────────────────────────────────────────────────
 _rate_store: dict[str, dict] = {}
@@ -562,19 +564,34 @@ async def health() -> dict[str, Any]:
     }
 
 
-@app.get("/internal/keepalive-yt")
-async def keepalive_youtube(authorization: str | None = Header(default=None)) -> dict[str, Any]:
-    require_service_key(authorization)
-    active_b64 = _get_active_cookies_b64()
-    if not active_b64:
-        return {"ok": False, "reason": "no cookies configured"}
+def _decode_cookies_to_file(b64: str, path: Path) -> None:
+    _b64 = b64.rstrip("=")
+    _b64 += "=" * (-len(_b64) % 4)
+    path.write_bytes(base64.b64decode(_b64))
 
+
+def _ytdlp_version_info() -> dict[str, Any]:
+    """Devuelve versión de yt-dlp y días desde su fecha de release."""
+    try:
+        result = subprocess.run(
+            ["yt-dlp", "--version"], capture_output=True, text=True, timeout=10
+        )
+        version = result.stdout.strip()  # formato: YYYY.MM.DD
+        parts = version.split(".")
+        if len(parts) == 3:
+            release_date = datetime(int(parts[0]), int(parts[1]), int(parts[2]), tzinfo=timezone.utc)
+            age_days = (datetime.now(timezone.utc) - release_date).days
+        else:
+            age_days = -1
+        return {"version": version, "age_days": age_days}
+    except Exception:
+        return {"version": "unknown", "age_days": -1}
+
+
+def _ping_youtube_with_cookies(b64: str) -> bool:
     with tempfile.TemporaryDirectory() as tmp:
         cookies_path = Path(tmp) / "cookies.txt"
-        _b64 = active_b64.rstrip("=")
-        _b64 += "=" * (-len(_b64) % 4)
-        cookies_path.write_bytes(base64.b64decode(_b64))
-
+        _decode_cookies_to_file(b64, cookies_path)
         result = subprocess.run(
             [
                 "yt-dlp",
@@ -587,10 +604,119 @@ async def keepalive_youtube(authorization: str | None = Header(default=None)) ->
             capture_output=True,
             timeout=30,
         )
+        return result.returncode == 0
 
-    ok = result.returncode == 0
-    print(f"[keepalive-yt] cookies #{_cookies_index + 1} ok={ok}", flush=True)
-    return {"ok": ok, "cookies_index": _cookies_index + 1}
+
+async def _send_telegram(text: str) -> None:
+    """Envía mensaje de Telegram de forma no bloqueante. No lanza excepciones."""
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        return
+    try:
+        import urllib.request
+        import urllib.parse
+        data = urllib.parse.urlencode({
+            "chat_id": TELEGRAM_CHAT_ID,
+            "text": text,
+            "parse_mode": "HTML",
+        }).encode()
+        req = urllib.request.Request(
+            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+            data=data,
+        )
+        urllib.request.urlopen(req, timeout=10)
+    except Exception as e:
+        print(f"[telegram] Error enviando mensaje: {e}", flush=True)
+
+
+@app.get("/internal/keepalive-yt")
+async def keepalive_youtube(authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    require_service_key(authorization)
+    active_b64 = _get_active_cookies_b64()
+    if not active_b64:
+        return {"ok": False, "reason": "no cookies configured", "cookies_total": 0}
+
+    cookies_total = len(_ALL_COOKIES_B64)
+    initial_index = _cookies_index
+
+    # Intentar con la cookie activa; si falla y hay más, rotar y reintentar una vez
+    ok = _ping_youtube_with_cookies(active_b64)
+    rotated = False
+    if not ok and cookies_total > 1:
+        _rotate_cookies()
+        rotated = True
+        next_b64 = _get_active_cookies_b64()
+        ok = _ping_youtube_with_cookies(next_b64)
+
+    ytdlp = _ytdlp_version_info()
+    ytdlp_old = ytdlp["age_days"] > 30
+
+    print(
+        f"[keepalive-yt] cookies #{_cookies_index + 1}/{cookies_total} "
+        f"ok={ok} rotated={rotated} yt-dlp={ytdlp['version']} ({ytdlp['age_days']}d)",
+        flush=True,
+    )
+
+    return {
+        "ok": ok,
+        "cookies_index": _cookies_index + 1,
+        "cookies_total": cookies_total,
+        "rotated": rotated,
+        "previous_index": initial_index + 1,
+        "ytdlp_version": ytdlp["version"],
+        "ytdlp_age_days": ytdlp["age_days"],
+        "ytdlp_outdated": ytdlp_old,
+    }
+
+
+@app.post("/telegram/webhook")
+async def telegram_webhook(req: Request) -> dict[str, str]:
+    """Recibe comandos del bot de Telegram (/status, /rotate)."""
+    if not TELEGRAM_BOT_TOKEN:
+        raise HTTPException(status_code=503, detail="Telegram not configured")
+
+    body = await req.json()
+    message = body.get("message", {})
+    text = message.get("text", "").strip()
+    chat_id = str(message.get("chat", {}).get("id", ""))
+
+    # Solo responder al chat autorizado
+    if chat_id != TELEGRAM_CHAT_ID:
+        return {"ok": "ignored"}
+
+    if text.startswith("/status"):
+        ytdlp = _ytdlp_version_info()
+        cookies_total = len(_ALL_COOKIES_B64)
+        active = _get_active_cookies_b64()
+        cookies_ok = bool(active)
+        lines = [
+            "<b>📊 Estado MHL</b>",
+            f"🍪 Cookies: {_cookies_index + 1}/{cookies_total} activa",
+            f"✅ Cookies OK: {cookies_ok}",
+            f"🔧 yt-dlp: {ytdlp['version']} ({ytdlp['age_days']}d)",
+        ]
+        if ytdlp["age_days"] > 30:
+            lines.append("⚠️ yt-dlp tiene más de 30 días — considera actualizar")
+        await _send_telegram("\n".join(lines))
+
+    elif text.startswith("/rotate"):
+        if len(_ALL_COOKIES_B64) <= 1:
+            await _send_telegram("⚠️ Solo hay 1 set de cookies, no hay a dónde rotar.")
+        else:
+            prev = _cookies_index + 1
+            _rotate_cookies()
+            await _send_telegram(
+                f"🔄 Cookies rotadas: #{prev} → #{_cookies_index + 1}/{len(_ALL_COOKIES_B64)}"
+            )
+
+    elif text.startswith("/help"):
+        await _send_telegram(
+            "<b>Comandos disponibles:</b>\n"
+            "/status — estado del servicio\n"
+            "/rotate — rotar set de cookies\n"
+            "/help — esta ayuda"
+        )
+
+    return {"ok": "handled"}
 
 
 @app.get("/search")

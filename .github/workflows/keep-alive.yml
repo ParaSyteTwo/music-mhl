@@ -2,7 +2,7 @@ name: Keep-alive ping
 
 on:
   schedule:
-    - cron: "0 10 */2 * *"  # cada 2 días a las 10:00 UTC
+    - cron: "0 10 */2 * *"  # cada 2 dias a las 10:00 UTC
   workflow_dispatch:
 
 jobs:
@@ -13,7 +13,7 @@ jobs:
         run: |
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
             "${{ secrets.RAILWAY_URL }}/health")
-          echo "ytdlp-service status: $STATUS"
+          echo "health status: $STATUS"
           [ "$STATUS" -ge 200 ] && [ "$STATUS" -lt 500 ]
 
       - name: Ping deezer proxy
@@ -23,7 +23,7 @@ jobs:
             -H "Authorization: Bearer ${{ secrets.SERVICE_API_KEY }}" \
             -H "Content-Type: application/json" \
             -d '{"action":"search","query":"test","limit":1}')
-          echo "deezer proxy status: $STATUS"
+          echo "deezer status: $STATUS"
           [ "$STATUS" -ge 200 ] && [ "$STATUS" -lt 500 ]
 
       - name: Keep YouTube cookies alive
@@ -32,22 +32,72 @@ jobs:
           RESP=$(curl -s -X GET \
             "${{ secrets.RAILWAY_URL }}/internal/keepalive-yt" \
             -H "Authorization: Bearer ${{ secrets.SERVICE_API_KEY }}")
-          echo "YouTube keepalive: $RESP"
+          echo "keepalive response: $RESP"
           echo "resp=$RESP" >> $GITHUB_OUTPUT
           echo "$RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); exit(0 if d.get('ok') else 1)"
 
       - name: Notificar por Telegram
         if: always()
+        env:
+          RESP: ${{ steps.keepalive.outputs.resp }}
+          JOB_STATUS: ${{ job.status }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RAILWAY_LOGS: ${{ secrets.RAILWAY_PROJECT_URL }}
+          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          RAILWAY_LOGS="https://railway.com/project/1e9118dc-50cd-460d-b336-35424ca02692"
-          if [ "${{ job.status }}" = "success" ]; then
-            MSG="✅ MHL keep-alive OK — Cookies YouTube activas"
-          else
-            MSG="❌ MHL keep-alive FALLO — Cookies YouTube pueden haber expirado"
-            MSG="$MSG%0A%0A📋 Logs GitHub Actions:%0A$RUN_URL%0A%0A🚂 Logs Railway:%0A$RAILWAY_LOGS"
-          fi
-          MSG="$MSG%0A$(date -u '+%Y-%m-%d %H:%M UTC')"
-          curl -s "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
-            --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
-            --data-urlencode "text=$MSG" > /dev/null
+          python3 << 'EOF'
+          import os, json, urllib.request, urllib.parse
+
+          resp_raw = os.environ.get("RESP", "")
+          status = os.environ.get("JOB_STATUS", "failure")
+          run_url = os.environ.get("RUN_URL", "")
+          railway_url = os.environ.get("RAILWAY_LOGS", "")
+          bot_token = os.environ.get("BOT_TOKEN", "")
+          chat_id = os.environ.get("CHAT_ID", "")
+          date = __import__("datetime").datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+
+          try:
+              d = json.loads(resp_raw)
+              cookies_info = f"Cookies #{d.get('cookies_index','?')}/{d.get('cookies_total','?')}"
+              if d.get("rotated"):
+                  cookies_info += f" (rotadas desde #{d.get('previous_index','?')})"
+              ytdlp = d.get("ytdlp_version", "?")
+              age = d.get("ytdlp_age_days", -1)
+              ytdlp_info = f"yt-dlp {ytdlp} ({age}d)"
+              if d.get("ytdlp_outdated"):
+                  ytdlp_info += " DESACTUALIZADO"
+          except Exception:
+              cookies_info = "sin detalle"
+              ytdlp_info = ""
+
+          if status == "success":
+              lines = [
+                  "MHL keep-alive OK",
+                  cookies_info,
+                  ytdlp_info,
+                  date,
+              ]
+          else:
+              lines = [
+                  "MHL keep-alive FALLO",
+                  cookies_info,
+                  ytdlp_info,
+                  date,
+                  "",
+                  "GitHub Actions:",
+                  run_url,
+                  "",
+                  "Railway logs:",
+                  railway_url,
+              ]
+
+          msg = "\n".join(l for l in lines if l is not None)
+          data = urllib.parse.urlencode({"chat_id": chat_id, "text": msg}).encode()
+          urllib.request.urlopen(
+              urllib.request.Request(
+                  f"https://api.telegram.org/bot{bot_token}/sendMessage", data=data
+              ),
+              timeout=10,
+          )
+          EOF
