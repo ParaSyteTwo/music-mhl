@@ -37,7 +37,16 @@ _rate_store: dict[str, dict] = {}
 _rate_store_lock = Lock()
 TEMP_DIR = Path(os.getenv("TEMP_DIR", "/tmp/ytdlp-service"))
 YOUTUBE_COOKIES = os.getenv("YOUTUBE_COOKIES", "")
-YOUTUBE_COOKIES_B64 = os.getenv("YOUTUBE_COOKIES_B64", "").strip()
+_ALL_COOKIES_B64 = [
+    v for v in [
+        os.getenv("YOUTUBE_COOKIES_B64", "").strip(),
+        os.getenv("YOUTUBE_COOKIES_B64_2", "").strip(),
+        os.getenv("YOUTUBE_COOKIES_B64_3", "").strip(),
+    ] if v
+]
+YOUTUBE_COOKIES_B64 = _ALL_COOKIES_B64[0] if _ALL_COOKIES_B64 else ""
+_cookies_index = 0
+_cookies_lock = Lock()
 ALLOWED_ORIGINS = [
     origin.strip()
     for origin in os.getenv("ALLOWED_ORIGINS", "*").split(",")
@@ -78,6 +87,24 @@ def sanitize_filename(value: str) -> str:
 
 def b64url_encode(raw: bytes) -> str:
     return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
+
+
+def _get_active_cookies_b64() -> str:
+    """Devuelve el set de cookies activo según el índice actual."""
+    if not _ALL_COOKIES_B64:
+        return ""
+    with _cookies_lock:
+        return _ALL_COOKIES_B64[_cookies_index % len(_ALL_COOKIES_B64)]
+
+
+def _rotate_cookies() -> None:
+    """Rota al siguiente set de cookies disponible."""
+    global _cookies_index
+    if len(_ALL_COOKIES_B64) <= 1:
+        return
+    with _cookies_lock:
+        _cookies_index = (_cookies_index + 1) % len(_ALL_COOKIES_B64)
+        print(f"[cookies] Rotando a cookies #{_cookies_index + 1}/{len(_ALL_COOKIES_B64)}", flush=True)
 
 
 def b64url_decode(raw: str) -> bytes:
@@ -357,9 +384,10 @@ def build_download_options(
         ffmpeg_location = None
 
     cookies_path = None
-    if YOUTUBE_COOKIES_B64:
+    active_b64 = _get_active_cookies_b64()
+    if active_b64:
         cookies_path = workdir / "youtube-cookies.txt"
-        _b64 = YOUTUBE_COOKIES_B64.strip().rstrip("=")
+        _b64 = active_b64.rstrip("=")
         _b64 += "=" * (-len(_b64) % 4)
         cookies_path.write_bytes(base64.b64decode(_b64))
     elif YOUTUBE_COOKIES.strip():
@@ -767,8 +795,15 @@ async def download(token: str = Query(...)) -> FileResponse:
                             break
                         except Exception as retry_err:
                             last_ytdlp_err = retry_err
-                # Si el video es privado/edad restringida, no tiene sentido rotar clientes
-                if err_type == "ytdlp_auth":
+                # Si el error es de auth, rotar cookies y reintentar una vez
+                if err_type == "ytdlp_auth" and len(_ALL_COOKIES_B64) > 1:
+                    _rotate_cookies()
+                    try:
+                        output = _run_ytdlp(client)
+                        ytdlp_ok = True
+                        break
+                    except Exception as retry_err:
+                        last_ytdlp_err = retry_err
                     break
 
         if not ytdlp_ok and last_ytdlp_err is not None:
