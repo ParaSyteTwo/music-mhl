@@ -61,6 +61,35 @@ _ytdlp_update_lock = Lock()
 _ytdlp_last_update_ts: float = 0.0
 _YTDLP_UPDATE_COOLDOWN = 3600  # máximo un intento de actualización por hora
 
+# ── Estadísticas de descargas ────────────────────────────────────────────────
+_stats_lock = Lock()
+_stats: dict[str, Any] = {"total": 0, "today": 0, "day_key": "", "errors": 0}
+
+# ── Buffer de logs de error recientes ───────────────────────────────────────
+_error_log: collections.deque[str] = collections.deque(maxlen=20)
+_error_log_lock = Lock()
+
+
+def _log_error(msg: str) -> None:
+    ts = datetime.now(timezone.utc).strftime("%H:%M:%S")
+    with _error_log_lock:
+        _error_log.append(f"[{ts}] {msg}")
+
+
+def _increment_downloads() -> None:
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    with _stats_lock:
+        if _stats["day_key"] != today:
+            _stats["today"] = 0
+            _stats["day_key"] = today
+        _stats["total"] += 1
+        _stats["today"] += 1
+
+
+def _increment_errors() -> None:
+    with _stats_lock:
+        _stats["errors"] += 1
+
 # ── Caché de video IDs resueltos ─────────────────────────────────────────────
 # Clave: "título normalizado|artista normalizado"
 # Valor: {"videoId": str, "ts": float}
@@ -497,7 +526,16 @@ def try_auto_update_ytdlp() -> bool:
             text=True,
             timeout=120,
         )
-        return result.returncode == 0
+        ok = result.returncode == 0
+        if ok:
+            info = _ytdlp_version_info()
+            threading.Thread(
+                target=lambda: asyncio.run(
+                    _send_telegram(f"yt-dlp actualizado a {info['version']}")
+                ),
+                daemon=True,
+            ).start()
+        return ok
     except Exception:
         return False
 
@@ -686,32 +724,68 @@ async def telegram_webhook(req: Request) -> dict[str, str]:
     if text.startswith("/status"):
         ytdlp = _ytdlp_version_info()
         cookies_total = len(_ALL_COOKIES_B64)
-        active = _get_active_cookies_b64()
-        cookies_ok = bool(active)
+        with _stats_lock:
+            dl_today = _stats["today"]
+            dl_total = _stats["total"]
+            dl_errors = _stats["errors"]
+        slots_free = download_slots._value  # type: ignore[attr-defined]
         lines = [
-            "<b>📊 Estado MHL</b>",
-            f"🍪 Cookies: {_cookies_index + 1}/{cookies_total} activa",
-            f"✅ Cookies OK: {cookies_ok}",
-            f"🔧 yt-dlp: {ytdlp['version']} ({ytdlp['age_days']}d)",
+            "<b>Estado MHL</b>",
+            f"Cookies: #{_cookies_index + 1}/{cookies_total}",
+            f"yt-dlp: {ytdlp['version']} ({ytdlp['age_days']}d)",
+            f"Descargas hoy: {dl_today} | total: {dl_total} | errores: {dl_errors}",
+            f"Slots libres: {slots_free}/{MAX_CONCURRENT_DOWNLOADS}",
         ]
         if ytdlp["age_days"] > 30:
-            lines.append("⚠️ yt-dlp tiene más de 30 días — considera actualizar")
+            lines.append("AVISO: yt-dlp tiene mas de 30 dias")
         await _send_telegram("\n".join(lines))
+
+    elif text.startswith("/ping"):
+        import time
+        t0 = time.monotonic()
+        _ytdlp_version_info()
+        ms = int((time.monotonic() - t0) * 1000)
+        await _send_telegram(f"Pong. Servidor respondio en {ms}ms")
+
+    elif text.startswith("/logs"):
+        with _error_log_lock:
+            recent = list(_error_log)
+        if not recent:
+            await _send_telegram("Sin errores recientes registrados.")
+        else:
+            msg = "Errores recientes:\n" + "\n".join(recent[-10:])
+            await _send_telegram(msg)
+
+    elif text.startswith("/update"):
+        await _send_telegram("Iniciando actualizacion de yt-dlp...")
+        def _do_update() -> None:
+            ok = try_auto_update_ytdlp()
+            info = _ytdlp_version_info()
+            msg = (
+                f"yt-dlp actualizado a {info['version']}"
+                if ok
+                else f"No se pudo actualizar (cooldown activo o error). Version actual: {info['version']}"
+            )
+            asyncio.run(_send_telegram(msg))
+        threading.Thread(target=_do_update, daemon=True).start()
 
     elif text.startswith("/rotate"):
         if len(_ALL_COOKIES_B64) <= 1:
-            await _send_telegram("⚠️ Solo hay 1 set de cookies, no hay a dónde rotar.")
+            await _send_telegram("Solo hay 1 set de cookies, no hay a donde rotar.")
         else:
             prev = _cookies_index + 1
             _rotate_cookies()
             await _send_telegram(
-                f"🔄 Cookies rotadas: #{prev} → #{_cookies_index + 1}/{len(_ALL_COOKIES_B64)}"
+                f"Cookies rotadas: #{prev} -> #{_cookies_index + 1}/{len(_ALL_COOKIES_B64)}"
             )
 
     elif text.startswith("/help"):
         await _send_telegram(
             "<b>Comandos disponibles:</b>\n"
             "/status — estado del servicio\n"
+            "/ping — latencia del servidor\n"
+            "/logs — ultimos errores registrados\n"
+            "/update — forzar actualizacion de yt-dlp\n"
             "/rotate — rotar set de cookies\n"
             "/help — esta ayuda"
         )
@@ -954,7 +1028,17 @@ async def download(token: str = Query(...)) -> FileResponse:
                             last_ytdlp_err = retry_err
                 # Si el error es de auth, rotar cookies y reintentar una vez
                 if err_type == "ytdlp_auth" and len(_ALL_COOKIES_B64) > 1:
+                    prev_idx = _cookies_index + 1
                     _rotate_cookies()
+                    new_idx = _cookies_index + 1
+                    threading.Thread(
+                        target=lambda p=prev_idx, n=new_idx: asyncio.run(
+                            _send_telegram(
+                                f"Cookies rotadas en produccion: #{p} -> #{n}/{len(_ALL_COOKIES_B64)}"
+                            )
+                        ),
+                        daemon=True,
+                    ).start()
                     try:
                         output = _run_ytdlp(client)
                         ytdlp_ok = True
@@ -966,6 +1050,8 @@ async def download(token: str = Query(...)) -> FileResponse:
         if not ytdlp_ok and last_ytdlp_err is not None:
             err_type = classify_ytdlp_error(last_ytdlp_err)
             ytdlp_err_msg = _YTDLP_ERROR_LABELS.get(err_type, str(last_ytdlp_err))
+            _log_error(f"{err_type}: {str(last_ytdlp_err)[:120]}")
+            _increment_errors()
             raise HTTPException(status_code=503, detail=ytdlp_err_msg)
 
         if output is None:
@@ -976,6 +1062,7 @@ async def download(token: str = Query(...)) -> FileResponse:
                 detail="No se generó el archivo de audio. El video puede no existir o estar eliminado.",
             )
 
+        _increment_downloads()
         return FileResponse(
             path=output,
             media_type="audio/mpeg" if format_name == "mp3" else "audio/mp4",
