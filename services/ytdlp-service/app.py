@@ -359,7 +359,9 @@ def build_download_options(
     cookies_path = None
     if YOUTUBE_COOKIES_B64:
         cookies_path = workdir / "youtube-cookies.txt"
-        cookies_path.write_bytes(base64.b64decode(YOUTUBE_COOKIES_B64))
+        _b64 = YOUTUBE_COOKIES_B64.strip().rstrip("=")
+        _b64 += "=" * (-len(_b64) % 4)
+        cookies_path.write_bytes(base64.b64decode(_b64))
     elif YOUTUBE_COOKIES.strip():
         cookies_path = workdir / "youtube-cookies.txt"
         cookies_path.write_text(YOUTUBE_COOKIES, encoding="utf-8")
