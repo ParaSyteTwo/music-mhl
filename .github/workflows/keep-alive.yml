@@ -39,11 +39,15 @@ jobs:
       - name: Notificar por Telegram
         if: always()
         run: |
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          RAILWAY_LOGS="https://railway.com/project/1e9118dc-50cd-460d-b336-35424ca02692"
           if [ "${{ job.status }}" = "success" ]; then
-            MSG="✅ MHL keep-alive OK%0ACookies YouTube activas"
+            MSG="✅ MHL keep-alive OK — Cookies YouTube activas"
           else
-            MSG="❌ MHL keep-alive FALLÓ%0ACookies YouTube pueden haber expirado — revisa Railway logs"
+            MSG="❌ MHL keep-alive FALLO — Cookies YouTube pueden haber expirado"
+            MSG="$MSG%0A%0A📋 Logs GitHub Actions:%0A$RUN_URL%0A%0A🚂 Logs Railway:%0A$RAILWAY_LOGS"
           fi
           MSG="$MSG%0A$(date -u '+%Y-%m-%d %H:%M UTC')"
           curl -s "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
-            -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}&text=$MSG" > /dev/null
+            --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode "text=$MSG" > /dev/null
