@@ -26,9 +26,17 @@ export function AppLayout() {
 
       {/* Banner de mantenimiento */}
       {isMaintenanceMode && (
-        <div className="relative z-50 flex items-center justify-center gap-2 px-4 py-2.5 text-sm bg-amber-500/10 border-b border-amber-500/20 text-amber-300 flex-shrink-0">
-          <span className="animate-pulse">●</span>
-          <span>Mantenimiento en curso — las descargas estarán disponibles en ≈5 min</span>
+        <div className="relative z-50 flex items-center justify-center gap-2.5 px-4 py-3 text-sm bg-amber-500/10 border-b border-amber-500/20 text-amber-200 flex-shrink-0 select-none">
+          <span className="text-base animate-bounce">🔧</span>
+          <span className="font-medium tracking-wide">
+            Mantenimiento en curso
+            <span className="text-amber-400/70 font-normal ml-1.5">— descargas disponibles en ≈5 min</span>
+          </span>
+          <span className="ml-1 flex gap-0.5">
+            <span className="w-1 h-1 rounded-full bg-amber-400 animate-bounce" style={{ animationDelay: '0ms' }} />
+            <span className="w-1 h-1 rounded-full bg-amber-400 animate-bounce" style={{ animationDelay: '150ms' }} />
+            <span className="w-1 h-1 rounded-full bg-amber-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+          </span>
         </div>
       )}
 

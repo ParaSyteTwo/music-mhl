@@ -557,7 +557,7 @@ def try_auto_update_ytdlp() -> bool:
             info = _ytdlp_version_info()
             threading.Thread(
                 target=lambda: asyncio.run(
-                    _send_telegram(f"yt-dlp actualizado a {info['version']}")
+                    _send_telegram(f"⬆️ yt-dlp actualizado automáticamente a <b>{info['version']}</b>")
                 ),
                 daemon=True,
             ).start()
@@ -758,15 +758,19 @@ async def telegram_webhook(req: Request) -> dict[str, str]:
             dl_total = _stats["total"]
             dl_errors = _stats["errors"]
         slots_free = download_slots._value  # type: ignore[attr-defined]
+        maint = " 🔧 EN MANTENIMIENTO" if _is_maintenance() else ""
+        cookie_bar = "🟢" * (_cookies_index + 1) + "⬜" * (cookies_total - _cookies_index - 1)
+        ytdlp_status = "⚠️ DESACTUALIZADO" if ytdlp["age_days"] > 30 else "✅"
         lines = [
-            "<b>Estado MHL</b>",
-            f"Cookies: #{_cookies_index + 1}/{cookies_total}",
-            f"yt-dlp: {ytdlp['version']} ({ytdlp['age_days']}d)",
-            f"Descargas hoy: {dl_today} | total: {dl_total} | errores: {dl_errors}",
-            f"Slots libres: {slots_free}/{MAX_CONCURRENT_DOWNLOADS}",
+            f"<b>📊 Estado MHL{maint}</b>",
+            "",
+            f"🍪 <b>Cookies</b>  {cookie_bar}  #{_cookies_index + 1}/{cookies_total}",
+            f"🔧 <b>yt-dlp</b>  {ytdlp['version']}  ({ytdlp['age_days']}d)  {ytdlp_status}",
+            f"📥 <b>Descargas</b>  hoy: {dl_today}  |  total: {dl_total}  |  errores: {dl_errors}",
+            f"⚡ <b>Slots libres</b>  {slots_free}/{MAX_CONCURRENT_DOWNLOADS}",
         ]
         if ytdlp["age_days"] > 30:
-            lines.append("AVISO: yt-dlp tiene mas de 30 dias")
+            lines.append("\n⚠️ yt-dlp tiene más de 30 días — usa /update")
         await _send_telegram("\n".join(lines))
 
     elif text.startswith("/ping"):
@@ -774,39 +778,41 @@ async def telegram_webhook(req: Request) -> dict[str, str]:
         t0 = time.monotonic()
         _ytdlp_version_info()
         ms = int((time.monotonic() - t0) * 1000)
-        await _send_telegram(f"Pong. Servidor respondio en {ms}ms")
+        emoji = "🟢" if ms < 500 else "🟡" if ms < 1500 else "🔴"
+        await _send_telegram(f"🏓 Pong! {emoji} Servidor respondió en <b>{ms}ms</b>")
 
     elif text.startswith("/logs"):
         with _error_log_lock:
             recent = list(_error_log)
         if not recent:
-            await _send_telegram("Sin errores recientes registrados.")
+            await _send_telegram("✅ Sin errores recientes registrados.")
         else:
-            msg = "Errores recientes:\n" + "\n".join(recent[-10:])
-            await _send_telegram(msg)
+            lines = ["🚨 <b>Últimos errores:</b>", ""] + recent[-10:]
+            await _send_telegram("\n".join(lines))
 
     elif text.startswith("/update"):
-        await _send_telegram("Iniciando actualizacion de yt-dlp...")
+        await _send_telegram("⏳ Actualizando yt-dlp...")
         def _do_update() -> None:
             ok = try_auto_update_ytdlp()
             info = _ytdlp_version_info()
             msg = (
-                f"yt-dlp actualizado a {info['version']}"
+                f"✅ yt-dlp actualizado a <b>{info['version']}</b>"
                 if ok
-                else f"No se pudo actualizar (cooldown activo o error). Version actual: {info['version']}"
+                else f"⚠️ No se pudo actualizar (cooldown activo o error)\nVersión actual: {info['version']}"
             )
             asyncio.run(_send_telegram(msg))
         threading.Thread(target=_do_update, daemon=True).start()
 
     elif text.startswith("/rotate"):
         if len(_ALL_COOKIES_B64) <= 1:
-            await _send_telegram("Solo hay 1 set de cookies, no hay a donde rotar.")
+            await _send_telegram("⚠️ Solo hay 1 set de cookies, no hay a dónde rotar.")
         else:
             prev = _cookies_index + 1
             _rotate_cookies()
-            await _send_telegram(
-                f"Cookies rotadas: #{prev} -> #{_cookies_index + 1}/{len(_ALL_COOKIES_B64)}"
-            )
+            new = _cookies_index + 1
+            total = len(_ALL_COOKIES_B64)
+            bar = "🟢" * new + "⬜" * (total - new)
+            await _send_telegram(f"🔄 Cookies rotadas\n{bar}\n#{prev} → #{new}/{total}")
 
     elif text.startswith("/maintenance"):
         parts = text.split()
@@ -814,28 +820,29 @@ async def telegram_webhook(req: Request) -> dict[str, str]:
             await _send_telegram("Uso: /maintenance on | /maintenance off")
         elif parts[1] == "on":
             _set_maintenance(True, minutes=5)
-            await _send_telegram("Mantenimiento ACTIVADO (5 min). Descargas pausadas.")
+            await _send_telegram("🔧 Mantenimiento <b>ACTIVADO</b> (5 min)\nDescargas pausadas en la web.")
         else:
             _set_maintenance(False)
-            await _send_telegram("Mantenimiento DESACTIVADO. Descargas reanudadas.")
+            await _send_telegram("✅ Mantenimiento <b>DESACTIVADO</b>\nDescargas reanudadas.")
 
     elif text.startswith("/login"):
         if _is_maintenance():
-            await _send_telegram("Ya hay un mantenimiento activo. Usa /addcookie <base64> para cargar la cookie.")
+            await _send_telegram("🔧 Ya hay un mantenimiento activo.\nUsa /addcookie &lt;base64&gt; para cargar la cookie.")
         else:
             _set_maintenance(True, minutes=10)
             await _send_telegram(
-                "Mantenimiento activado (10 min).\n\n"
-                "Exporta las cookies de YouTube desde tu navegador y envialas con:\n"
-                "/addcookie <base64>\n\n"
-                "Para convertir el archivo a base64 en PC:\n"
-                "python -c \"import base64,sys; print(base64.b64encode(open(sys.argv[1],'rb').read()).decode())\" cookies.txt"
+                "🔧 <b>Mantenimiento activado</b> (10 min)\n"
+                "La web ya muestra el aviso a los usuarios.\n\n"
+                "Exporta las cookies de YouTube y envíalas con:\n"
+                "<code>/addcookie &lt;base64&gt;</code>\n\n"
+                "Para convertir el archivo en PC:\n"
+                "<code>python -c \"import base64,sys; print(base64.b64encode(open(sys.argv[1],'rb').read()).decode())\" cookies.txt</code>"
             )
 
     elif text.startswith("/addcookie"):
         parts = text.split(maxsplit=1)
         if len(parts) < 2:
-            await _send_telegram("Uso: /addcookie <base64>")
+            await _send_telegram("Uso: /addcookie &lt;base64&gt;")
         else:
             b64 = parts[1].strip()
             try:
@@ -843,33 +850,37 @@ async def telegram_webhook(req: Request) -> dict[str, str]:
                 _b64c += "=" * (-len(_b64c) % 4)
                 decoded = base64.b64decode(_b64c)
                 if b"Netscape HTTP Cookie File" not in decoded[:50]:
-                    raise ValueError("No parece un archivo de cookies Netscape valido")
+                    raise ValueError("No parece un archivo de cookies Netscape válido")
                 with _cookies_lock:
                     if _ALL_COOKIES_B64:
                         _ALL_COOKIES_B64[_cookies_index % len(_ALL_COOKIES_B64)] = b64
                     else:
                         _ALL_COOKIES_B64.append(b64)
                 _set_maintenance(False)
+                slot = _cookies_index + 1
+                total = len(_ALL_COOKIES_B64)
+                bar = "🟢" * slot + "⬜" * (total - slot)
                 await _send_telegram(
-                    f"Cookie #{_cookies_index + 1}/{len(_ALL_COOKIES_B64)} actualizada en memoria.\n"
-                    "Mantenimiento desactivado. Descargas reanudadas.\n\n"
-                    "Para hacerla permanente pega este base64 en Railway como YOUTUBE_COOKIES_B64."
+                    f"✅ <b>Cookie #{slot}/{total} actualizada</b>\n{bar}\n\n"
+                    "🌐 Mantenimiento desactivado — descargas reanudadas.\n\n"
+                    "💾 Para hacerla permanente, pega este base64 en Railway como <code>YOUTUBE_COOKIES_B64</code>"
                 )
             except Exception as e:
-                await _send_telegram(f"Error procesando cookie: {e}")
+                await _send_telegram(f"❌ Error procesando cookie: {e}")
 
     elif text.startswith("/help"):
         await _send_telegram(
-            "<b>Comandos disponibles:</b>\n"
-            "/status — estado del servicio\n"
-            "/ping — latencia del servidor\n"
-            "/logs — ultimos errores registrados\n"
-            "/update — forzar actualizacion de yt-dlp\n"
-            "/rotate — rotar set de cookies\n"
-            "/login — activar mantenimiento para renovar cookies\n"
-            "/addcookie base64 — cargar nueva cookie y reanudar\n"
-            "/maintenance on|off — control manual del mantenimiento\n"
-            "/help — esta ayuda"
+            "🎵 <b>MHL Bot — Comandos</b>\n\n"
+            "📊 /status — estado del servicio\n"
+            "🏓 /ping — latencia del servidor\n"
+            "🚨 /logs — últimos errores\n"
+            "⬆️ /update — actualizar yt-dlp\n"
+            "🔄 /rotate — rotar set de cookies\n\n"
+            "🔑 <b>Gestión de cookies</b>\n"
+            "🔐 /login — activar mantenimiento y renovar cookies\n"
+            "📎 /addcookie &lt;base64&gt; — cargar nueva cookie\n"
+            "🔧 /maintenance on|off — mantenimiento manual\n\n"
+            "❓ /help — esta ayuda"
         )
 
     return {"ok": "handled"}
@@ -1121,7 +1132,9 @@ async def download(token: str = Query(...)) -> FileResponse:
                     threading.Thread(
                         target=lambda p=prev_idx, n=new_idx: asyncio.run(
                             _send_telegram(
-                                f"Cookies rotadas en produccion: #{p} -> #{n}/{len(_ALL_COOKIES_B64)}"
+                                f"🔄 Cookies rotadas en producción\n"
+                                f"#{p} → #{n}/{len(_ALL_COOKIES_B64)}\n"
+                                f"{'🟢' * n + '⬜' * (len(_ALL_COOKIES_B64) - n)}"
                             )
                         ),
                         daemon=True,
