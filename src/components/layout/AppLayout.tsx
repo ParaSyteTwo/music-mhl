@@ -1,15 +1,34 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { useEffect, useRef } from 'react';
 import { BottomPlayer } from './BottomPlayer';
 import { Search, Download, Settings } from 'lucide-react';
 import { t } from '@/lib/i18n';
 import { useMusicStore } from '@/store/musicStore';
+
+const RAILWAY_URL = (import.meta as { env: Record<string, string> }).env.VITE_RAILWAY_URL;
 
 export function AppLayout() {
   const downloadCount = useMusicStore((s) => s.downloads.filter((d) => d.status === 'downloading').length);
   const dominantColor = useMusicStore((s) => s.dominantColor);
   const currentTrack = useMusicStore((s) => s.currentTrack);
   const isMaintenanceMode = useMusicStore((s) => s.isMaintenanceMode);
+  const setMaintenanceMode = useMusicStore((s) => s.setMaintenanceMode);
   const navigate = useNavigate();
+
+  // Poll /health para detectar mantenimiento proactivamente
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => {
+    const check = async () => {
+      try {
+        const res = await fetch(`${RAILWAY_URL}/health`);
+        const data = await res.json() as { maintenance?: boolean };
+        setMaintenanceMode(!!data.maintenance);
+      } catch { /* ignorar errores de red */ }
+    };
+    check();
+    pollRef.current = setInterval(check, 30_000);
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, [setMaintenanceMode]);
 
   return (
     <div className="flex flex-col h-[100dvh] bg-background overflow-hidden">
