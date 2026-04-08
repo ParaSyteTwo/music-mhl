@@ -745,10 +745,66 @@ async def telegram_webhook(req: Request) -> dict[str, str]:
     message = body.get("message", {})
     text = message.get("text", "").strip()
     chat_id = str(message.get("chat", {}).get("id", ""))
+    document = message.get("document")
 
     # Solo responder al chat autorizado
     if chat_id != TELEGRAM_CHAT_ID:
         return {"ok": "ignored"}
+
+    # Recepción de archivo cookies.txt
+    if document:
+        file_name = document.get("file_name", "")
+        if not file_name.endswith(".txt"):
+            await _send_telegram("❌ Solo acepto archivos <b>.txt</b> de cookies en formato Netscape.")
+            return {"ok": "handled"}
+        try:
+            # Obtener file_path desde Telegram
+            file_id = document["file_id"]
+            info_res = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: __import__("urllib.request").request.urlopen(
+                    f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getFile?file_id={file_id}",
+                    timeout=10,
+                ).read(),
+            )
+            info = json.loads(info_res)
+            file_path = info["result"]["file_path"]
+
+            # Descargar el archivo
+            file_bytes = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: __import__("urllib.request").request.urlopen(
+                    f"https://api.telegram.org/file/bot{TELEGRAM_BOT_TOKEN}/{file_path}",
+                    timeout=15,
+                ).read(),
+            )
+
+            # Validar que es un archivo de cookies Netscape
+            if b"Netscape HTTP Cookie File" not in file_bytes[:50]:
+                await _send_telegram("❌ El archivo no parece un archivo de cookies Netscape válido.\nExportalo con Cookie Quick Manager en Firefox.")
+                return {"ok": "handled"}
+
+            # Convertir a base64 y guardar
+            b64 = base64.b64encode(file_bytes).decode("ascii")
+            with _cookies_lock:
+                if _ALL_COOKIES_B64:
+                    _ALL_COOKIES_B64[_cookies_index % len(_ALL_COOKIES_B64)] = b64
+                else:
+                    _ALL_COOKIES_B64.append(b64)
+            _set_maintenance(False)
+
+            slot = _cookies_index + 1
+            total = len(_ALL_COOKIES_B64)
+            bar = "🟢" * slot + "⬜" * (total - slot)
+            await _send_telegram(
+                f"✅ <b>cookies.txt recibido y aplicado</b>\n{bar}  #{slot}/{total}\n\n"
+                "🌐 Mantenimiento desactivado — descargas reanudadas.\n"
+                "💾 Para hacerlo permanente, pega el base64 en Railway como "
+                f"<code>YOUTUBE_COOKIES_B64</code>"
+            )
+        except Exception as e:
+            await _send_telegram(f"❌ Error procesando el archivo: {e}")
+        return {"ok": "handled"}
 
     if text.startswith("/status"):
         ytdlp = _ytdlp_version_info()
