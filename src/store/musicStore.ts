@@ -124,7 +124,8 @@ interface MusicStore {
 
   // ─── Maintenance mode ───
   isMaintenanceMode: boolean;
-  setMaintenanceMode: (active: boolean) => void;
+  maintenanceUntil: number | null;
+  setMaintenanceMode: (active: boolean, until?: number | null) => void;
 
   // ─── Local Library ───
   localLibrary: LocalTrack[];
@@ -469,9 +470,9 @@ export const useMusicStore = create<MusicStore>()(
                 const poll = setInterval(async () => {
                   try {
                     const res = await fetch(`${(import.meta as { env: Record<string, string> }).env.VITE_RAILWAY_URL}/health`);
-                    const data = await res.json() as { maintenance?: boolean };
+                    const data = await res.json() as { maintenance?: boolean; maintenance_until?: number };
                     if (!data.maintenance) {
-                      get().setMaintenanceMode(false);
+                      get().setMaintenanceMode(false, null);
                       clearInterval(poll);
                     }
                   } catch { /* ignorar errores de red */ }
@@ -574,7 +575,8 @@ export const useMusicStore = create<MusicStore>()(
 
         // ─── Maintenance mode ───
         isMaintenanceMode: false,
-        setMaintenanceMode: (active) => set({ isMaintenanceMode: active }),
+        maintenanceUntil: null,
+        setMaintenanceMode: (active, until = null) => set({ isMaintenanceMode: active, maintenanceUntil: until ?? null }),
 
         // ─── Local Library ───
         localLibrary: [],

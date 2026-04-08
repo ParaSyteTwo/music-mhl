@@ -1,5 +1,5 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { BottomPlayer } from './BottomPlayer';
 import { Search, Download, Settings } from 'lucide-react';
 import { t } from '@/lib/i18n';
@@ -7,13 +7,32 @@ import { useMusicStore } from '@/store/musicStore';
 
 const RAILWAY_URL = (import.meta as { env: Record<string, string> }).env.VITE_RAILWAY_URL;
 
+function useCountdown(until: number | null): string {
+  const [display, setDisplay] = useState('');
+  useEffect(() => {
+    if (!until) { setDisplay(''); return; }
+    const update = () => {
+      const secs = Math.max(0, Math.round(until - Date.now() / 1000));
+      const m = Math.floor(secs / 60);
+      const s = secs % 60;
+      setDisplay(secs === 0 ? '¡listo!' : `${m}:${String(s).padStart(2, '0')}`);
+    };
+    update();
+    const id = setInterval(update, 1000);
+    return () => clearInterval(id);
+  }, [until]);
+  return display;
+}
+
 export function AppLayout() {
   const downloadCount = useMusicStore((s) => s.downloads.filter((d) => d.status === 'downloading').length);
   const dominantColor = useMusicStore((s) => s.dominantColor);
   const currentTrack = useMusicStore((s) => s.currentTrack);
   const isMaintenanceMode = useMusicStore((s) => s.isMaintenanceMode);
+  const maintenanceUntil = useMusicStore((s) => s.maintenanceUntil);
   const setMaintenanceMode = useMusicStore((s) => s.setMaintenanceMode);
   const navigate = useNavigate();
+  const countdown = useCountdown(maintenanceUntil);
 
   // Poll /health para detectar mantenimiento proactivamente
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -21,8 +40,8 @@ export function AppLayout() {
     const check = async () => {
       try {
         const res = await fetch(`${RAILWAY_URL}/health`);
-        const data = await res.json() as { maintenance?: boolean };
-        setMaintenanceMode(!!data.maintenance);
+        const data = await res.json() as { maintenance?: boolean; maintenance_until?: number };
+        setMaintenanceMode(!!data.maintenance, data.maintenance_until ?? null);
       } catch { /* ignorar errores de red */ }
     };
     check();
@@ -45,17 +64,39 @@ export function AppLayout() {
 
       {/* Banner de mantenimiento */}
       {isMaintenanceMode && (
-        <div className="relative z-50 flex items-center justify-center gap-2.5 px-4 py-3 text-sm bg-amber-500/10 border-b border-amber-500/20 text-amber-200 flex-shrink-0 select-none">
-          <span className="text-base animate-bounce">🔧</span>
-          <span className="font-medium tracking-wide">
-            Mantenimiento en curso
-            <span className="text-amber-400/70 font-normal ml-1.5">— descargas disponibles en ≈5 min</span>
-          </span>
-          <span className="ml-1 flex gap-0.5">
-            <span className="w-1 h-1 rounded-full bg-amber-400 animate-bounce" style={{ animationDelay: '0ms' }} />
-            <span className="w-1 h-1 rounded-full bg-amber-400 animate-bounce" style={{ animationDelay: '150ms' }} />
-            <span className="w-1 h-1 rounded-full bg-amber-400 animate-bounce" style={{ animationDelay: '300ms' }} />
-          </span>
+        <div className="relative z-50 flex-shrink-0 overflow-hidden">
+          {/* fondo con shimmer */}
+          <div className="absolute inset-0 bg-gradient-to-r from-amber-900/30 via-amber-700/20 to-amber-900/30 animate-pulse" />
+          <div className="relative flex items-center justify-center gap-3 px-4 py-2.5 border-b border-amber-500/30 select-none">
+            {/* icono giratorio */}
+            <span className="text-lg" style={{ display: 'inline-block', animation: 'spin 2s linear infinite' }}>⚙️</span>
+            <div className="flex flex-col items-center sm:flex-row sm:gap-2 leading-tight">
+              <span className="text-amber-200 font-semibold text-sm tracking-wide">
+                🔧 Mantenimiento en curso
+              </span>
+              {countdown && countdown !== '¡listo!' && (
+                <span className="text-amber-400/80 text-xs sm:text-sm font-mono">
+                  — vuelve en <span className="text-amber-300 font-bold tabular-nums">{countdown}</span>
+                </span>
+              )}
+              {countdown === '¡listo!' && (
+                <span className="text-green-400 text-xs sm:text-sm font-semibold animate-pulse">
+                  ✅ ¡listo! recargando...
+                </span>
+              )}
+            </div>
+            {/* puntos animados */}
+            <span className="flex gap-0.5 ml-1">
+              {[0, 150, 300].map((delay) => (
+                <span
+                  key={delay}
+                  className="w-1.5 h-1.5 rounded-full bg-amber-400"
+                  style={{ animation: `bounce 1s infinite`, animationDelay: `${delay}ms` }}
+                />
+              ))}
+            </span>
+          </div>
+          <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
         </div>
       )}
 
