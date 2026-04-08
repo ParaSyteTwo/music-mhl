@@ -8,6 +8,7 @@ export function AppLayout() {
   const downloadCount = useMusicStore((s) => s.downloads.filter((d) => d.status === 'downloading').length);
   const dominantColor = useMusicStore((s) => s.dominantColor);
   const currentTrack = useMusicStore((s) => s.currentTrack);
+  const isMaintenanceMode = useMusicStore((s) => s.isMaintenanceMode);
   const navigate = useNavigate();
 
   return (
@@ -21,6 +22,14 @@ export function AppLayout() {
             transition: 'background 800ms ease',
           }}
         />
+      )}
+
+      {/* Banner de mantenimiento */}
+      {isMaintenanceMode && (
+        <div className="relative z-50 flex items-center justify-center gap-2 px-4 py-2.5 text-sm bg-amber-500/10 border-b border-amber-500/20 text-amber-300 flex-shrink-0">
+          <span className="animate-pulse">●</span>
+          <span>Mantenimiento en curso — las descargas estarán disponibles en ≈5 min</span>
+        </div>
       )}
 
       {/* Mobile top bar — only visible on mobile, shows app name + settings icon */}

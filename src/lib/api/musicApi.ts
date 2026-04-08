@@ -374,7 +374,10 @@ export async function downloadTrackAudio(
   });
 
   if (!ticketRes.ok) {
-    const err = await ticketRes.json().catch(() => ({ error: 'Error desconocido' }));
+    const text = await ticketRes.text().catch(() => '');
+    let err: { error?: string; maintenance?: boolean } = {};
+    try { err = JSON.parse(text); } catch { /* ignore */ }
+    if (err.maintenance) throw new Error('__MAINTENANCE__');
     throw new Error(err.error || 'Error descargando audio');
   }
 
@@ -386,7 +389,10 @@ export async function downloadTrackAudio(
   onProgress?.(45);
   const audioRes = await fetch(ticket.downloadUrl);
   if (!audioRes.ok) {
-    const err = await audioRes.json().catch(() => ({ error: 'Error descargando audio' }));
+    const text = await audioRes.text().catch(() => '');
+    let err: { error?: string; maintenance?: boolean } = {};
+    try { err = JSON.parse(text); } catch { /* ignore */ }
+    if (err.maintenance) throw new Error('__MAINTENANCE__');
     throw new Error(err.error || 'Error descargando audio');
   }
 

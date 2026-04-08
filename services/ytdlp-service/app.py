@@ -61,6 +61,32 @@ _ytdlp_update_lock = Lock()
 _ytdlp_last_update_ts: float = 0.0
 _YTDLP_UPDATE_COOLDOWN = 3600  # máximo un intento de actualización por hora
 
+# ── Modo mantenimiento ───────────────────────────────────────────────────────
+_maintenance_lock = Lock()
+_maintenance_mode = False
+_maintenance_until: float = 0.0
+
+
+def _set_maintenance(active: bool, minutes: int = 5) -> None:
+    global _maintenance_mode, _maintenance_until
+    with _maintenance_lock:
+        _maintenance_mode = active
+        _maintenance_until = (
+            datetime.now(timezone.utc).timestamp() + minutes * 60
+        ) if active else 0.0
+
+
+def _is_maintenance() -> bool:
+    global _maintenance_mode
+    with _maintenance_lock:
+        if not _maintenance_mode:
+            return False
+        if datetime.now(timezone.utc).timestamp() > _maintenance_until:
+            _maintenance_mode = False
+            return False
+        return True
+
+
 # ── Estadísticas de descargas ────────────────────────────────────────────────
 _stats_lock = Lock()
 _stats: dict[str, Any] = {"total": 0, "today": 0, "day_key": "", "errors": 0}
@@ -592,13 +618,16 @@ async def health() -> dict[str, Any]:
         get_ffmpeg_exe()
     except Exception:
         issues.append("ffmpeg no disponible")
+    in_maintenance = _is_maintenance()
     return {
-        "ok": len(issues) == 0,
+        "ok": len(issues) == 0 and not in_maintenance,
         "service": "ytdlp-service",
         "issues": issues,
         "cookies_configured": bool(YOUTUBE_COOKIES_B64 or YOUTUBE_COOKIES.strip()),
         "resolve_cache_entries": len(_resolve_cache),
         "resolve_cache_max": _RESOLVE_CACHE_MAX,
+        "maintenance": in_maintenance,
+        "maintenance_until": int(_maintenance_until) if in_maintenance else None,
     }
 
 
@@ -779,6 +808,56 @@ async def telegram_webhook(req: Request) -> dict[str, str]:
                 f"Cookies rotadas: #{prev} -> #{_cookies_index + 1}/{len(_ALL_COOKIES_B64)}"
             )
 
+    elif text.startswith("/maintenance"):
+        parts = text.split()
+        if len(parts) < 2 or parts[1] not in ("on", "off"):
+            await _send_telegram("Uso: /maintenance on | /maintenance off")
+        elif parts[1] == "on":
+            _set_maintenance(True, minutes=5)
+            await _send_telegram("Mantenimiento ACTIVADO (5 min). Descargas pausadas.")
+        else:
+            _set_maintenance(False)
+            await _send_telegram("Mantenimiento DESACTIVADO. Descargas reanudadas.")
+
+    elif text.startswith("/login"):
+        if _is_maintenance():
+            await _send_telegram("Ya hay un mantenimiento activo. Usa /addcookie <base64> para cargar la cookie.")
+        else:
+            _set_maintenance(True, minutes=10)
+            await _send_telegram(
+                "Mantenimiento activado (10 min).\n\n"
+                "Exporta las cookies de YouTube desde tu navegador y envialas con:\n"
+                "/addcookie <base64>\n\n"
+                "Para convertir el archivo a base64 en PC:\n"
+                "python -c \"import base64,sys; print(base64.b64encode(open(sys.argv[1],'rb').read()).decode())\" cookies.txt"
+            )
+
+    elif text.startswith("/addcookie"):
+        parts = text.split(maxsplit=1)
+        if len(parts) < 2:
+            await _send_telegram("Uso: /addcookie <base64>")
+        else:
+            b64 = parts[1].strip()
+            try:
+                _b64c = b64.rstrip("=")
+                _b64c += "=" * (-len(_b64c) % 4)
+                decoded = base64.b64decode(_b64c)
+                if b"Netscape HTTP Cookie File" not in decoded[:50]:
+                    raise ValueError("No parece un archivo de cookies Netscape valido")
+                with _cookies_lock:
+                    if _ALL_COOKIES_B64:
+                        _ALL_COOKIES_B64[_cookies_index % len(_ALL_COOKIES_B64)] = b64
+                    else:
+                        _ALL_COOKIES_B64.append(b64)
+                _set_maintenance(False)
+                await _send_telegram(
+                    f"Cookie #{_cookies_index + 1}/{len(_ALL_COOKIES_B64)} actualizada en memoria.\n"
+                    "Mantenimiento desactivado. Descargas reanudadas.\n\n"
+                    "Para hacerla permanente pega este base64 en Railway como YOUTUBE_COOKIES_B64."
+                )
+            except Exception as e:
+                await _send_telegram(f"Error procesando cookie: {e}")
+
     elif text.startswith("/help"):
         await _send_telegram(
             "<b>Comandos disponibles:</b>\n"
@@ -787,6 +866,9 @@ async def telegram_webhook(req: Request) -> dict[str, str]:
             "/logs — ultimos errores registrados\n"
             "/update — forzar actualizacion de yt-dlp\n"
             "/rotate — rotar set de cookies\n"
+            "/login — activar mantenimiento para renovar cookies\n"
+            "/addcookie base64 — cargar nueva cookie y reanudar\n"
+            "/maintenance on|off — control manual del mantenimiento\n"
             "/help — esta ayuda"
         )
 
@@ -971,6 +1053,11 @@ async def download(token: str = Query(...)) -> FileResponse:
     file_name = str(payload.get("fileName") or "download.mp3")
     format_name = str(payload.get("format") or "mp3").strip().lower()
 
+    if _is_maintenance():
+        raise HTTPException(
+            status_code=503,
+            detail=json.dumps({"maintenance": True, "message": "Servicio en mantenimiento (~5 min), vuelve pronto"}),
+        )
     if not video_id:
         raise HTTPException(
             status_code=400, detail="Token inválido: falta el identificador de video"
@@ -1350,6 +1437,12 @@ async def download_ticket(
     authorization: str | None = Header(default=None),
 ) -> dict[str, Any]:
     require_service_key(authorization)
+
+    if _is_maintenance():
+        raise HTTPException(
+            status_code=503,
+            detail=json.dumps({"maintenance": True, "message": "Servicio en mantenimiento (~5 min), vuelve pronto"}),
+        )
 
     title = str(payload.get("title") or "").strip()
     artist = str(payload.get("artist") or "").strip()

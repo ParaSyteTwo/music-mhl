@@ -122,6 +122,10 @@ interface MusicStore {
   setYtDlpUpdateAvailable: (v: boolean) => void;
   setYtDlpUpdating: (v: boolean) => void;
 
+  // ─── Maintenance mode ───
+  isMaintenanceMode: boolean;
+  setMaintenanceMode: (active: boolean) => void;
+
   // ─── Local Library ───
   localLibrary: LocalTrack[];
   localFileRefs: Map<string, File>;
@@ -457,6 +461,24 @@ export const useMusicStore = create<MusicStore>()(
               return;
             } catch (error) {
               const msg = error instanceof Error ? error.message : 'Download failed';
+
+              if (msg === '__MAINTENANCE__') {
+                get().setMaintenanceMode(true);
+                updateDl({ status: 'error', error: 'Servicio en mantenimiento (~5 min). Reintenta en breve.' });
+                // Polling hasta que el servidor salga de mantenimiento
+                const poll = setInterval(async () => {
+                  try {
+                    const res = await fetch(`${(import.meta as { env: Record<string, string> }).env.VITE_RAILWAY_URL}/health`);
+                    const data = await res.json() as { maintenance?: boolean };
+                    if (!data.maintenance) {
+                      get().setMaintenanceMode(false);
+                      clearInterval(poll);
+                    }
+                  } catch { /* ignorar errores de red */ }
+                }, 30_000);
+                return;
+              }
+
               console.error(`Download attempt ${attempt}/${maxAttempts} failed:`, msg);
 
               if (attempt === maxAttempts) {
@@ -549,6 +571,10 @@ export const useMusicStore = create<MusicStore>()(
         setYtDlpVersion: (version) => set({ ytDlpVersion: version }),
         setYtDlpUpdateAvailable: (v) => set({ ytDlpUpdateAvailable: v }),
         setYtDlpUpdating: (v) => set({ ytDlpUpdating: v }),
+
+        // ─── Maintenance mode ───
+        isMaintenanceMode: false,
+        setMaintenanceMode: (active) => set({ isMaintenanceMode: active }),
 
         // ─── Local Library ───
         localLibrary: [],
