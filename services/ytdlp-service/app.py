@@ -1103,22 +1103,58 @@ async def telegram_webhook(req: Request) -> dict[str, str]:
 
     elif text.startswith("/login"):
         if _is_maintenance():
-            await _send_telegram("🔧 Ya hay un mantenimiento activo.\nUsa /addcookie &lt;base64&gt; para cargar la cookie.")
+            await _send_telegram("🔧 Ya hay un mantenimiento activo.\nUsa /addcookie o envía el archivo cookies.txt directamente.")
         else:
             _set_maintenance(True, minutes=10)
             await _send_telegram(
-                "🔧 <b>Mantenimiento activado</b> (10 min)\n"
-                "La web ya muestra el aviso a los usuarios.\n\n"
-                "Exporta las cookies de YouTube y envíalas con:\n"
-                "<code>/addcookie &lt;base64&gt;</code>\n\n"
-                "Para convertir el archivo en PC:\n"
-                "<code>python -c \"import base64,sys; print(base64.b64encode(open(sys.argv[1],'rb').read()).decode())\" cookies.txt</code>"
+                "<b>━━━━━━━━━━━━━━━━</b>\n"
+                "🔧 <b>Modo Renovación de Cookies</b>\n"
+                "<b>━━━━━━━━━━━━━━━━</b>\n\n"
+                "<b>📱 Opción 1: Archivo Directo (RECOMENDADO)</b>\n"
+                "  1️⃣ Abre Firefox y ve a youtube.com\n"
+                "  2️⃣ Click derecho → Inspeccionar (DevTools)\n"
+                "  3️⃣ Tab <code>Storage</code> → <code>Cookies</code> → youtube.com\n"
+                "  4️⃣ Click derecho en una cookie → <code>Cookie Quick Manager</code> → Exportar\n"
+                "  5️⃣ Envía el archivo <b>cookies.txt</b> aquí (sin conversión)\n\n"
+                "<b>💻 Opción 2: Base64 desde Texto</b>\n"
+                "  • Exporta cookies.txt (pasos 1-4 arriba)\n"
+                "  • En Windows CMD (con el archivo cookies.txt en la carpeta actual):\n"
+                "    <code>python -c \"import base64; print(base64.b64encode(open('cookies.txt','rb').read()).decode())\" &gt; b64.txt</code>\n"
+                "  • O en Mac/Linux:\n"
+                "    <code>cat cookies.txt | base64</code>\n"
+                "  • Copia el resultado y envía: <code>/addcookie &lt;base64&gt;</code>\n\n"
+                "⏱️ <b>El bot testea todas las cookies en paralelo (~30s)</b>\n"
+                "✅ Descargas reanudadas al terminar\n\n"
+                "<b>━━━━━━━━━━━━━━━━</b>"
             )
 
     elif text.startswith("/addcookie"):
         parts = text.split(maxsplit=1)
         if len(parts) < 2:
-            await _send_telegram("Uso: /addcookie &lt;base64&gt;\n\nO envía el archivo <b>cookies.txt</b> directamente al chat.")
+            await _send_telegram(
+                "<b>━━━━━━━━━━━━━━━━</b>\n"
+                "🍪 <b>Cómo Cargar Cookies</b>\n"
+                "<b>━━━━━━━━━━━━━━━━</b>\n\n"
+                "<b>✅ Mejor Opción: Archivo Directo</b>\n"
+                "  → Simplemente envía <b>cookies.txt</b> al chat\n"
+                "  → El bot lo convierte automáticamente\n"
+                "  → No necesitas hacer nada más\n\n"
+                "<b>📝 Alternativa: Usando Base64</b>\n"
+                "  <code>/addcookie &lt;base64&gt;</code>\n\n"
+                "<b>🔄 Qué Pasa Después</b>\n"
+                "  1️⃣ El bot testa TODAS tus cookies existentes (en paralelo)\n"
+                "  2️⃣ Testa la nueva cookie\n"
+                "  3️⃣ Lugar inteligente:\n"
+                "     • Si hay alguna rota → reemplaza esa (🔄)\n"
+                "     • Si todas OK y hay espacio (max 4) → añade nueva (➕)\n"
+                "     • Si todas OK y slots llenos → reemplaza la actual (♻️)\n"
+                "  4️⃣ Te avisa del resultado con detalles\n\n"
+                "<b>⚠️ Qué es una Cookie \"Rota\"</b>\n"
+                "  • YouTube ha expirado (cambió tu contraseña, cerró sesión, etc)\n"
+                "  • El bot lo detecta automáticamente\n"
+                "  • Chequeo automático cada 6 horas\n\n"
+                "<b>━━━━━━━━━━━━━━━━</b>"
+            )
         else:
             b64 = parts[1].strip()
             try:
@@ -1190,14 +1226,17 @@ async def telegram_webhook(req: Request) -> dict[str, str]:
             "  ⬆️ /update — actualizar yt-dlp\n"
             "  🔄 /rotate — rotar cookies\n"
             "  🍪 /checkall — chequear todas ahora\n\n"
-            "<b>🔑 Cookies</b>\n"
-            "  🔐 /login — renovar cookies\n"
-            "  📎 /addcookie &lt;base64&gt; — cargar por texto\n"
-            "  📄 <b>Envía cookies.txt directamente</b>\n"
+            "<b>🔑 Renovar Cookies (cuando expiren)</b>\n"
+            "  🔐 /login — activar modo renovación + guía\n"
+            "  📄 <b>Envía cookies.txt directamente</b> (recomendado)\n"
+            "  📎 /addcookie &lt;base64&gt; — si prefieres usar base64\n"
             "  🔧 /maintenance on|off — modo manual\n\n"
             "<b>━━━━━━━━━━━━━━━━</b>\n"
-            "💡 <i>El bot testa cada cookie antes de guardar</i>\n"
-            "<i>Chequeo automático cada 6 horas</i>\n"
+            "<b>💡 Detalles Importantes</b>\n"
+            "  • El bot testa cada cookie antes de guardar\n"
+            "  • Chequeo automático cada 6 horas\n"
+            "  • Máximo 4 slots de cookies\n"
+            "  • Descargas pausadas durante renovación\n"
             "<b>━━━━━━━━━━━━━━━━</b>"
         )
 
