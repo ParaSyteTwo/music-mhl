@@ -60,6 +60,8 @@ download_slots = BoundedSemaphore(value=max(1, MAX_CONCURRENT_DOWNLOADS))
 _ytdlp_update_lock = Lock()
 _ytdlp_last_update_ts: float = 0.0
 _YTDLP_UPDATE_COOLDOWN = 3600  # máximo un intento de actualización por hora
+_MAX_COOKIE_SLOTS = 4
+_COOKIE_CHECK_INTERVAL = 6 * 3600  # chequeo completo cada 6 horas
 
 # ── Modo mantenimiento ───────────────────────────────────────────────────────
 _maintenance_lock = Lock()
@@ -162,6 +164,157 @@ def _rotate_cookies() -> None:
     with _cookies_lock:
         _cookies_index = (_cookies_index + 1) % len(_ALL_COOKIES_B64)
         print(f"[cookies] Rotando a cookies #{_cookies_index + 1}/{len(_ALL_COOKIES_B64)}", flush=True)
+
+
+def _test_single_cookie(b64: str) -> bool:
+    """Testa un set de cookies haciendo una petición silenciosa a YouTube."""
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            cookies_path = Path(tmp) / "cookies.txt"
+            _decode_cookies_to_file(b64, cookies_path)
+            result = subprocess.run(
+                [
+                    "yt-dlp", "--cookies", str(cookies_path),
+                    "--skip-download", "--quiet", "--no-warnings",
+                    "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                ],
+                capture_output=True,
+                timeout=30,
+            )
+            return result.returncode == 0
+    except Exception:
+        return False
+
+
+def _check_all_cookies() -> dict[str, int]:
+    """
+    Testa todos los slots en paralelo.
+    Elimina los que fallan y ajusta el índice activo.
+    Retorna informe {total, ok, removed}.
+    """
+    global _cookies_index
+    with _cookies_lock:
+        slots = list(enumerate(_ALL_COOKIES_B64))
+
+    if not slots:
+        return {"total": 0, "ok": 0, "removed": 0}
+
+    # Testar en paralelo usando threads
+    results: list[tuple[int, bool]] = []
+    threads = []
+
+    def _test(idx: int, b64: str) -> None:
+        ok = _test_single_cookie(b64)
+        results.append((idx, ok))
+        print(f"[cookie-check] slot #{idx + 1} ok={ok}", flush=True)
+
+    for i, b64 in slots:
+        t = threading.Thread(target=_test, args=(i, b64), daemon=True)
+        threads.append(t)
+        t.start()
+    for t in threads:
+        t.join(timeout=40)
+
+    bad_indices = {i for i, ok in results if not ok}
+
+    if bad_indices:
+        with _cookies_lock:
+            # Eliminar en orden inverso para no alterar índices
+            for i in sorted(bad_indices, reverse=True):
+                if i < len(_ALL_COOKIES_B64):
+                    _ALL_COOKIES_B64.pop(i)
+            _cookies_index = _cookies_index % max(1, len(_ALL_COOKIES_B64))
+
+    return {
+        "total": len(slots),
+        "ok": len(slots) - len(bad_indices),
+        "removed": len(bad_indices),
+    }
+
+
+def _add_cookie_smart(b64: str) -> dict[str, Any]:
+    """
+    Añade una cookie de forma inteligente:
+    - Si hay slots rotos → reemplaza el primero roto
+    - Si todos OK y hay espacio (< _MAX_COOKIE_SLOTS) → añade nuevo slot
+    - Si todos OK y slots llenos → reemplaza el más antiguo (índice 0)
+    Retorna informe con la acción tomada.
+    """
+    global _cookies_index
+    with _cookies_lock:
+        slots = list(enumerate(_ALL_COOKIES_B64))
+
+    if not slots:
+        with _cookies_lock:
+            _ALL_COOKIES_B64.append(b64)
+        return {"action": "added", "slot": 1, "total": 1}
+
+    # Testar todos en paralelo
+    results: list[tuple[int, bool]] = []
+    threads = []
+
+    def _test(idx: int, b64_slot: str) -> None:
+        ok = _test_single_cookie(b64_slot)
+        results.append((idx, ok))
+
+    for i, b64_slot in slots:
+        t = threading.Thread(target=_test, args=(i, b64_slot), daemon=True)
+        threads.append(t)
+        t.start()
+    for t in threads:
+        t.join(timeout=40)
+
+    bad = [i for i, ok in sorted(results) if not ok]
+    total_ok = len(slots) - len(bad)
+
+    with _cookies_lock:
+        if bad:
+            # Reemplazar primer slot roto
+            target = bad[0]
+            _ALL_COOKIES_B64[target] = b64
+            _cookies_index = target
+            action = "replaced_broken"
+            slot = target + 1
+        elif len(_ALL_COOKIES_B64) < _MAX_COOKIE_SLOTS:
+            # Añadir nuevo slot
+            _ALL_COOKIES_B64.append(b64)
+            slot = len(_ALL_COOKIES_B64)
+            _cookies_index = slot - 1
+            action = "added"
+        else:
+            # Slots llenos y todos OK → reemplazar el slot activo actual
+            target = _cookies_index % len(_ALL_COOKIES_B64)
+            _ALL_COOKIES_B64[target] = b64
+            slot = target + 1
+            action = "replaced_active"
+
+    return {
+        "action": action,
+        "slot": slot,
+        "total": len(_ALL_COOKIES_B64),
+        "previously_ok": total_ok,
+        "previously_broken": len(bad),
+    }
+
+
+def _cookie_checker_loop() -> None:
+    """Thread de fondo que chequea todas las cookies cada 6 horas."""
+    import time as _time
+    _time.sleep(60)  # esperar arranque completo
+    while True:
+        _time.sleep(_COOKIE_CHECK_INTERVAL)
+        if not _ALL_COOKIES_B64:
+            continue
+        print("[cookie-check] Iniciando chequeo periódico...", flush=True)
+        report = _check_all_cookies()
+        total, ok, removed = report["total"], report["ok"], report["removed"]
+        bar = "🟢" * ok + "❌" * removed
+        msg = f"🍪 Chequeo periódico de cookies\n{bar}\n✅ {ok}/{total} activas"
+        if removed:
+            msg += f"\n❌ {removed} eliminadas por inválidas"
+            if ok == 0:
+                msg += "\n\n⚠️ ¡Sin cookies válidas! Usa /login para renovarlas."
+        threading.Thread(target=lambda m=msg: asyncio.run(_send_telegram(m)), daemon=True).start()
 
 
 def b64url_decode(raw: str) -> bytes:
@@ -593,6 +746,7 @@ def cleanup_job(workdir: Path) -> None:
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     TEMP_DIR.mkdir(parents=True, exist_ok=True)
+    threading.Thread(target=_cookie_checker_loop, daemon=True).start()
     yield
 
 
@@ -758,7 +912,7 @@ async def telegram_webhook(req: Request) -> dict[str, str]:
             await _send_telegram("❌ Solo acepto archivos <b>.txt</b> de cookies en formato Netscape.")
             return {"ok": "handled"}
         try:
-            # Obtener file_path desde Telegram
+            await _send_telegram("⏳ Recibiendo archivo y comprobando cookies existentes...")
             file_id = document["file_id"]
             info_res = await asyncio.get_event_loop().run_in_executor(
                 None,
@@ -768,39 +922,39 @@ async def telegram_webhook(req: Request) -> dict[str, str]:
                 ).read(),
             )
             info = json.loads(info_res)
-            file_path = info["result"]["file_path"]
+            file_path_tg = info["result"]["file_path"]
 
-            # Descargar el archivo
             file_bytes = await asyncio.get_event_loop().run_in_executor(
                 None,
                 lambda: __import__("urllib.request").request.urlopen(
-                    f"https://api.telegram.org/file/bot{TELEGRAM_BOT_TOKEN}/{file_path}",
+                    f"https://api.telegram.org/file/bot{TELEGRAM_BOT_TOKEN}/{file_path_tg}",
                     timeout=15,
                 ).read(),
             )
 
-            # Validar que es un archivo de cookies Netscape
             if b"Netscape HTTP Cookie File" not in file_bytes[:50]:
                 await _send_telegram("❌ El archivo no parece un archivo de cookies Netscape válido.\nExportalo con Cookie Quick Manager en Firefox.")
                 return {"ok": "handled"}
 
-            # Convertir a base64 y guardar
             b64 = base64.b64encode(file_bytes).decode("ascii")
-            with _cookies_lock:
-                if _ALL_COOKIES_B64:
-                    _ALL_COOKIES_B64[_cookies_index % len(_ALL_COOKIES_B64)] = b64
-                else:
-                    _ALL_COOKIES_B64.append(b64)
+            report = await asyncio.get_event_loop().run_in_executor(None, lambda: _add_cookie_smart(b64))
             _set_maintenance(False)
 
-            slot = _cookies_index + 1
-            total = len(_ALL_COOKIES_B64)
-            bar = "🟢" * slot + "⬜" * (total - slot)
+            total = report["total"]
+            slot = report["slot"]
+            action_labels = {
+                "added": f"➕ Nueva cookie añadida como slot #{slot}",
+                "replaced_broken": f"🔄 Reemplazó slot roto #{slot}",
+                "replaced_active": f"♻️ Reemplazó slot activo #{slot} (todos estaban llenos)",
+            }
+            action_text = action_labels.get(report["action"], "✅ Cookie aplicada")
+            bar = "🟢" * total
             await _send_telegram(
-                f"✅ <b>cookies.txt recibido y aplicado</b>\n{bar}  #{slot}/{total}\n\n"
-                "🌐 Mantenimiento desactivado — descargas reanudadas.\n"
-                "💾 Para hacerlo permanente, pega el base64 en Railway como "
-                f"<code>YOUTUBE_COOKIES_B64</code>"
+                f"✅ <b>cookies.txt procesado</b>\n\n"
+                f"{action_text}\n"
+                f"{bar}  {total} slots activos\n\n"
+                f"🌐 Mantenimiento desactivado — descargas reanudadas.\n"
+                f"💾 Para hacerlo permanente añádela en Railway como <code>YOUTUBE_COOKIES_B64_{slot}</code>"
             )
         except Exception as e:
             await _send_telegram(f"❌ Error procesando el archivo: {e}")
@@ -898,7 +1052,7 @@ async def telegram_webhook(req: Request) -> dict[str, str]:
     elif text.startswith("/addcookie"):
         parts = text.split(maxsplit=1)
         if len(parts) < 2:
-            await _send_telegram("Uso: /addcookie &lt;base64&gt;")
+            await _send_telegram("Uso: /addcookie &lt;base64&gt;\n\nO envía el archivo <b>cookies.txt</b> directamente al chat.")
         else:
             b64 = parts[1].strip()
             try:
@@ -907,22 +1061,43 @@ async def telegram_webhook(req: Request) -> dict[str, str]:
                 decoded = base64.b64decode(_b64c)
                 if b"Netscape HTTP Cookie File" not in decoded[:50]:
                     raise ValueError("No parece un archivo de cookies Netscape válido")
-                with _cookies_lock:
-                    if _ALL_COOKIES_B64:
-                        _ALL_COOKIES_B64[_cookies_index % len(_ALL_COOKIES_B64)] = b64
-                    else:
-                        _ALL_COOKIES_B64.append(b64)
+                await _send_telegram("⏳ Comprobando cookies existentes antes de añadir...")
+                report = await asyncio.get_event_loop().run_in_executor(None, lambda: _add_cookie_smart(b64))
                 _set_maintenance(False)
-                slot = _cookies_index + 1
-                total = len(_ALL_COOKIES_B64)
-                bar = "🟢" * slot + "⬜" * (total - slot)
+                total = report["total"]
+                slot = report["slot"]
+                action_labels = {
+                    "added": f"➕ Nueva cookie añadida como slot #{slot}",
+                    "replaced_broken": f"🔄 Reemplazó slot roto #{slot}",
+                    "replaced_active": f"♻️ Reemplazó slot activo #{slot}",
+                }
+                action_text = action_labels.get(report["action"], "✅ Cookie aplicada")
+                bar = "🟢" * total
                 await _send_telegram(
-                    f"✅ <b>Cookie #{slot}/{total} actualizada</b>\n{bar}\n\n"
-                    "🌐 Mantenimiento desactivado — descargas reanudadas.\n\n"
-                    "💾 Para hacerla permanente, pega este base64 en Railway como <code>YOUTUBE_COOKIES_B64</code>"
+                    f"✅ <b>Cookie aplicada</b>\n\n"
+                    f"{action_text}\n"
+                    f"{bar}  {total} slots activos\n\n"
+                    "🌐 Mantenimiento desactivado — descargas reanudadas."
                 )
             except Exception as e:
                 await _send_telegram(f"❌ Error procesando cookie: {e}")
+
+    elif text.startswith("/checkall"):
+        if not _ALL_COOKIES_B64:
+            await _send_telegram("⚠️ No hay cookies configuradas.")
+        else:
+            await _send_telegram(f"⏳ Comprobando {len(_ALL_COOKIES_B64)} slots en paralelo...")
+            def _do_check() -> None:
+                report = _check_all_cookies()
+                total, ok, removed = report["total"], report["ok"], report["removed"]
+                bar = "🟢" * ok + ("❌" * removed if removed else "")
+                msg = f"🍪 <b>Chequeo manual de cookies</b>\n{bar}\n✅ {ok}/{total} válidas"
+                if removed:
+                    msg += f"\n❌ {removed} eliminadas automáticamente"
+                    if ok == 0:
+                        msg += "\n\n⚠️ ¡Sin cookies válidas! Usa /login para renovar."
+                asyncio.run(_send_telegram(msg))
+            threading.Thread(target=_do_check, daemon=True).start()
 
     elif text.startswith("/help"):
         await _send_telegram(
@@ -931,10 +1106,12 @@ async def telegram_webhook(req: Request) -> dict[str, str]:
             "🏓 /ping — latencia del servidor\n"
             "🚨 /logs — últimos errores\n"
             "⬆️ /update — actualizar yt-dlp\n"
-            "🔄 /rotate — rotar set de cookies\n\n"
+            "🔄 /rotate — rotar set de cookies\n"
+            "🍪 /checkall — comprobar todas las cookies ahora\n\n"
             "🔑 <b>Gestión de cookies</b>\n"
             "🔐 /login — activar mantenimiento y renovar cookies\n"
             "📎 /addcookie &lt;base64&gt; — cargar nueva cookie\n"
+            "📄 Envía un <b>cookies.txt</b> directamente al chat\n"
             "🔧 /maintenance on|off — mantenimiento manual\n\n"
             "❓ /help — esta ayuda"
         )
