@@ -932,8 +932,15 @@ async def telegram_webhook(req: Request) -> dict[str, str]:
                 ).read(),
             )
 
-            if b"Netscape HTTP Cookie File" not in file_bytes[:50]:
-                await _send_telegram("❌ El archivo no parece un archivo de cookies Netscape válido.\nExportalo con Cookie Quick Manager en Firefox.")
+            # Validar que sea un archivo de cookies Netscape (más flexible)
+            header = file_bytes[:100].decode("utf-8", errors="ignore").lower()
+            is_valid_netscape = "netscape" in header and "cookie" in header
+
+            if not is_valid_netscape:
+                # Log detallado para debugging
+                first_line = file_bytes[:100].decode("utf-8", errors="ignore")
+                print(f"[cookie-upload] Validación fallida. Primeros 100 chars: {repr(first_line)}", flush=True)
+                await _send_telegram(f"❌ El archivo no parece un archivo de cookies Netscape válido.\nExportalo con Cookie Quick Manager en Firefox.\n\n<i>Debug: {repr(first_line[:50])}</i>")
                 return {"ok": "handled"}
 
             b64 = base64.b64encode(file_bytes).decode("ascii")
@@ -964,7 +971,8 @@ async def telegram_webhook(req: Request) -> dict[str, str]:
                 f"<b>━━━━━━━━━━━━━━━━</b>"
             )
         except Exception as e:
-            await _send_telegram(f"❌ Error procesando el archivo: {e}")
+            print(f"[cookie-upload] Excepción: {type(e).__name__}: {e}", flush=True)
+            await _send_telegram(f"❌ Error procesando el archivo:\n<code>{str(e)[:100]}</code>")
         return {"ok": "handled"}
 
     if text.startswith("/status"):
@@ -1161,8 +1169,11 @@ async def telegram_webhook(req: Request) -> dict[str, str]:
                 _b64c = b64.rstrip("=")
                 _b64c += "=" * (-len(_b64c) % 4)
                 decoded = base64.b64decode(_b64c)
-                if b"Netscape HTTP Cookie File" not in decoded[:50]:
-                    raise ValueError("No parece un archivo de cookies Netscape válido")
+                # Validación más flexible
+                header = decoded[:100].decode("utf-8", errors="ignore").lower()
+                is_valid = "netscape" in header and "cookie" in header
+                if not is_valid:
+                    raise ValueError(f"No parece un archivo de cookies Netscape válido. Header: {repr(decoded[:50].decode('utf-8', errors='ignore'))}")
                 await _send_telegram("⏳ Comprobando cookies existentes antes de añadir...")
                 report = await asyncio.get_event_loop().run_in_executor(None, lambda: _add_cookie_smart(b64))
                 _set_maintenance(False)
@@ -1182,7 +1193,8 @@ async def telegram_webhook(req: Request) -> dict[str, str]:
                     "🌐 Mantenimiento desactivado — descargas reanudadas."
                 )
             except Exception as e:
-                await _send_telegram(f"❌ Error procesando cookie: {e}")
+                print(f"[addcookie-base64] Excepción: {type(e).__name__}: {e}", flush=True)
+                await _send_telegram(f"❌ Error procesando cookie:\n<code>{str(e)[:100]}</code>")
 
     elif text.startswith("/checkall"):
         if not _ALL_COOKIES_B64:
