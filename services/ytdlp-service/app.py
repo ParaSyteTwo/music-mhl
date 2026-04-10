@@ -948,13 +948,20 @@ async def telegram_webhook(req: Request) -> dict[str, str]:
                 "replaced_active": f"♻️ Reemplazó slot activo #{slot} (todos estaban llenos)",
             }
             action_text = action_labels.get(report["action"], "✅ Cookie aplicada")
-            bar = "🟢" * total
+            bar = "".join("🟢" if i < slot else "⬜" for i in range(total))
+            status_icon = "✅" if report["action"] == "added" else "🔄" if "roto" in report["action"] else "♻️"
             await _send_telegram(
-                f"✅ <b>cookies.txt procesado</b>\n\n"
+                f"<b>━━━━━━━━━━━━━━━━</b>\n"
+                f"{status_icon} <b>cookies.txt Procesado</b>\n"
+                f"<b>━━━━━━━━━━━━━━━━</b>\n\n"
                 f"{action_text}\n"
-                f"{bar}  {total} slots activos\n\n"
-                f"🌐 Mantenimiento desactivado — descargas reanudadas.\n"
-                f"💾 Para hacerlo permanente añádela en Railway como <code>YOUTUBE_COOKIES_B64_{slot}</code>"
+                f"{bar}\n"
+                f"<b>{total}</b> slots activos\n\n"
+                f"🌐 Mantenimiento desactivado\n"
+                f"✅ Descargas reanudadas\n\n"
+                f"💾 <i>Para hacerlo permanente en Railway:</i>\n"
+                f"<code>YOUTUBE_COOKIES_B64_{slot}</code>\n\n"
+                f"<b>━━━━━━━━━━━━━━━━</b>"
             )
         except Exception as e:
             await _send_telegram(f"❌ Error procesando el archivo: {e}")
@@ -968,19 +975,37 @@ async def telegram_webhook(req: Request) -> dict[str, str]:
             dl_total = _stats["total"]
             dl_errors = _stats["errors"]
         slots_free = download_slots._value  # type: ignore[attr-defined]
-        maint = " 🔧 EN MANTENIMIENTO" if _is_maintenance() else ""
-        cookie_bar = "🟢" * (_cookies_index + 1) + "⬜" * (cookies_total - _cookies_index - 1)
-        ytdlp_status = "⚠️ DESACTUALIZADO" if ytdlp["age_days"] > 30 else "✅"
+
+        maint_status = "🔴 MANTENIMIENTO" if _is_maintenance() else "🟢 OPERATIVO"
+        cookie_bar = "".join("🟢" if i < _cookies_index + 1 else "⬜" for i in range(cookies_total)) or "❌ sin cookies"
+        ytdlp_emoji = "✅" if ytdlp["age_days"] <= 30 else "⚠️"
+
         lines = [
-            f"<b>📊 Estado MHL{maint}</b>",
+            f"<b>━━━━━━━━━━━━━━━━</b>",
+            f"<b>🎵 MHL Music Status</b>",
+            f"<b>━━━━━━━━━━━━━━━━</b>",
             "",
-            f"🍪 <b>Cookies</b>  {cookie_bar}  #{_cookies_index + 1}/{cookies_total}",
-            f"🔧 <b>yt-dlp</b>  {ytdlp['version']}  ({ytdlp['age_days']}d)  {ytdlp_status}",
-            f"📥 <b>Descargas</b>  hoy: {dl_today}  |  total: {dl_total}  |  errores: {dl_errors}",
-            f"⚡ <b>Slots libres</b>  {slots_free}/{MAX_CONCURRENT_DOWNLOADS}",
+            f"{maint_status}",
+            "",
+            f"<b>🍪 Cookies activas</b>",
+            f"{cookie_bar}",
+            f"#{_cookies_index + 1} de {cookies_total} en uso",
+            "",
+            f"<b>🔧 yt-dlp {ytdlp['version']}</b>",
+            f"{ytdlp_emoji} {ytdlp['age_days']} días desde release",
+            "",
+            f"<b>📥 Descargas</b>",
+            f"🌅 Hoy: <b>{dl_today}</b>  |  📊 Total: <b>{dl_total}</b>",
+            f"❌ Errores: <b>{dl_errors}</b>",
+            "",
+            f"<b>⚡ Descargas simultáneas</b>",
+            f"{slots_free}/{MAX_CONCURRENT_DOWNLOADS} slots libres",
+            f"<b>━━━━━━━━━━━━━━━━</b>",
         ]
         if ytdlp["age_days"] > 30:
-            lines.append("\n⚠️ yt-dlp tiene más de 30 días — usa /update")
+            lines.append("\n⚠️ <b>yt-dlp desactualizado</b> — usa /update para actualizar")
+        if _is_maintenance():
+            lines.append("\n🔧 El servicio está en mantenimiento — /status en 1 min")
         await _send_telegram("\n".join(lines))
 
     elif text.startswith("/ping"):
@@ -988,16 +1013,37 @@ async def telegram_webhook(req: Request) -> dict[str, str]:
         t0 = time.monotonic()
         _ytdlp_version_info()
         ms = int((time.monotonic() - t0) * 1000)
-        emoji = "🟢" if ms < 500 else "🟡" if ms < 1500 else "🔴"
-        await _send_telegram(f"🏓 Pong! {emoji} Servidor respondió en <b>{ms}ms</b>")
+        if ms < 500:
+            emoji, status = "🟢", "Excelente"
+        elif ms < 1000:
+            emoji, status = "🟡", "Normal"
+        else:
+            emoji, status = "🔴", "Lento"
+        await _send_telegram(
+            f"<b>━━━━━━━━━━━━━━━━</b>\n"
+            f"🏓 <b>Ping del servidor</b>\n"
+            f"<b>━━━━━━━━━━━━━━━━</b>\n\n"
+            f"{emoji} <b>{ms}ms</b> — {status}\n\n"
+            f"<b>━━━━━━━━━━━━━━━━</b>"
+        )
 
     elif text.startswith("/logs"):
         with _error_log_lock:
             recent = list(_error_log)
         if not recent:
-            await _send_telegram("✅ Sin errores recientes registrados.")
+            await _send_telegram(
+                "<b>━━━━━━━━━━━━━━━━</b>\n"
+                "✅ <b>Sin errores recientes</b>\n"
+                "<b>━━━━━━━━━━━━━━━━</b>\n\n"
+                "El sistema está funcionando correctamente."
+            )
         else:
-            lines = ["🚨 <b>Últimos errores:</b>", ""] + recent[-10:]
+            lines = [
+                "<b>━━━━━━━━━━━━━━━━</b>",
+                f"🚨 <b>Últimos {len(recent[-10:])} errores</b>",
+                "<b>━━━━━━━━━━━━━━━━</b>",
+                "",
+            ] + recent[-10:] + ["", "<b>━━━━━━━━━━━━━━━━</b>"]
             await _send_telegram("\n".join(lines))
 
     elif text.startswith("/update"):
@@ -1021,8 +1067,15 @@ async def telegram_webhook(req: Request) -> dict[str, str]:
             _rotate_cookies()
             new = _cookies_index + 1
             total = len(_ALL_COOKIES_B64)
-            bar = "🟢" * new + "⬜" * (total - new)
-            await _send_telegram(f"🔄 Cookies rotadas\n{bar}\n#{prev} → #{new}/{total}")
+            bar = "".join("🟢" if i < new else "⬜" for i in range(total))
+            await _send_telegram(
+                f"<b>━━━━━━━━━━━━━━━━</b>\n"
+                f"🔄 <b>Cookies rotadas</b>\n"
+                f"<b>━━━━━━━━━━━━━━━━</b>\n\n"
+                f"{bar}\n"
+                f"#{prev} ➜ #{new}/{total}\n\n"
+                f"<b>━━━━━━━━━━━━━━━━</b>"
+            )
 
     elif text.startswith("/maintenance"):
         parts = text.split()
@@ -1030,10 +1083,23 @@ async def telegram_webhook(req: Request) -> dict[str, str]:
             await _send_telegram("Uso: /maintenance on | /maintenance off")
         elif parts[1] == "on":
             _set_maintenance(True, minutes=5)
-            await _send_telegram("🔧 Mantenimiento <b>ACTIVADO</b> (5 min)\nDescargas pausadas en la web.")
+            await _send_telegram(
+                "<b>━━━━━━━━━━━━━━━━</b>\n"
+                "🔧 <b>Mantenimiento ACTIVADO</b>\n"
+                "<b>━━━━━━━━━━━━━━━━</b>\n\n"
+                "⏱️ Duración: 5 minutos\n"
+                "🌐 Descargas: pausadas en la web\n\n"
+                "<b>━━━━━━━━━━━━━━━━</b>"
+            )
         else:
             _set_maintenance(False)
-            await _send_telegram("✅ Mantenimiento <b>DESACTIVADO</b>\nDescargas reanudadas.")
+            await _send_telegram(
+                "<b>━━━━━━━━━━━━━━━━</b>\n"
+                "✅ <b>Mantenimiento DESACTIVADO</b>\n"
+                "<b>━━━━━━━━━━━━━━━━</b>\n\n"
+                "🌐 Descargas: reanudadas\n\n"
+                "<b>━━━━━━━━━━━━━━━━</b>"
+            )
 
     elif text.startswith("/login"):
         if _is_maintenance():
@@ -1086,34 +1152,53 @@ async def telegram_webhook(req: Request) -> dict[str, str]:
         if not _ALL_COOKIES_B64:
             await _send_telegram("⚠️ No hay cookies configuradas.")
         else:
-            await _send_telegram(f"⏳ Comprobando {len(_ALL_COOKIES_B64)} slots en paralelo...")
+            await _send_telegram(f"⏳ Comprobando <b>{len(_ALL_COOKIES_B64)} slots</b> en paralelo...")
             def _do_check() -> None:
                 report = _check_all_cookies()
                 total, ok, removed = report["total"], report["ok"], report["removed"]
-                bar = "🟢" * ok + ("❌" * removed if removed else "")
-                msg = f"🍪 <b>Chequeo manual de cookies</b>\n{bar}\n✅ {ok}/{total} válidas"
+                bar = "".join("🟢" if i < ok else "❌" for i in range(total))
+                lines = [
+                    "<b>━━━━━━━━━━━━━━━━</b>",
+                    "🍪 <b>Chequeo de cookies</b>",
+                    "<b>━━━━━━━━━━━━━━━━</b>",
+                    "",
+                    bar,
+                    f"<b>{ok}/{total}</b> válidas",
+                ]
                 if removed:
-                    msg += f"\n❌ {removed} eliminadas automáticamente"
+                    lines.append("")
+                    lines.append(f"❌ <b>{removed} eliminadas</b> automáticamente (inválidas)")
                     if ok == 0:
-                        msg += "\n\n⚠️ ¡Sin cookies válidas! Usa /login para renovar."
-                asyncio.run(_send_telegram(msg))
+                        lines.append("")
+                        lines.append("⚠️ <b>¡Sin cookies válidas!</b>")
+                        lines.append("Usa /login para renovar.")
+                lines.append("")
+                lines.append("<b>━━━━━━━━━━━━━━━━</b>")
+                asyncio.run(_send_telegram("\n".join(lines)))
             threading.Thread(target=_do_check, daemon=True).start()
 
     elif text.startswith("/help"):
         await _send_telegram(
-            "🎵 <b>MHL Bot — Comandos</b>\n\n"
-            "📊 /status — estado del servicio\n"
-            "🏓 /ping — latencia del servidor\n"
-            "🚨 /logs — últimos errores\n"
-            "⬆️ /update — actualizar yt-dlp\n"
-            "🔄 /rotate — rotar set de cookies\n"
-            "🍪 /checkall — comprobar todas las cookies ahora\n\n"
-            "🔑 <b>Gestión de cookies</b>\n"
-            "🔐 /login — activar mantenimiento y renovar cookies\n"
-            "📎 /addcookie &lt;base64&gt; — cargar nueva cookie\n"
-            "📄 Envía un <b>cookies.txt</b> directamente al chat\n"
-            "🔧 /maintenance on|off — mantenimiento manual\n\n"
-            "❓ /help — esta ayuda"
+            "<b>━━━━━━━━━━━━━━━━</b>\n"
+            "🎵 <b>MHL Bot — Guía Completa</b>\n"
+            "<b>━━━━━━━━━━━━━━━━</b>\n\n"
+            "<b>📊 Monitoreo</b>\n"
+            "  /status — estado del servicio\n"
+            "  🏓 /ping — latencia del servidor\n"
+            "  🚨 /logs — últimos errores\n\n"
+            "<b>🔧 Mantenimiento</b>\n"
+            "  ⬆️ /update — actualizar yt-dlp\n"
+            "  🔄 /rotate — rotar cookies\n"
+            "  🍪 /checkall — chequear todas ahora\n\n"
+            "<b>🔑 Cookies</b>\n"
+            "  🔐 /login — renovar cookies\n"
+            "  📎 /addcookie &lt;base64&gt; — cargar por texto\n"
+            "  📄 <b>Envía cookies.txt directamente</b>\n"
+            "  🔧 /maintenance on|off — modo manual\n\n"
+            "<b>━━━━━━━━━━━━━━━━</b>\n"
+            "💡 <i>El bot testa cada cookie antes de guardar</i>\n"
+            "<i>Chequeo automático cada 6 horas</i>\n"
+            "<b>━━━━━━━━━━━━━━━━</b>"
         )
 
     return {"ok": "handled"}
