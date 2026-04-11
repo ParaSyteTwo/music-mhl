@@ -198,4 +198,11 @@ Disponible en: [music-mhl.onrender.com](https://music-mhl.onrender.com)
 
 ---
 
+## 👨‍💻 Creado por
+
+**Paul Antonio Díaz Talica**
+Portfolio: [paul-dev.vercel.app](https://paul-dev.vercel.app)
+
+---
+
 ¿Encontraste un bug? Abre un [issue](../../issues) en este repositorio.
