@@ -265,13 +265,13 @@ export default function SettingsPage() {
               <p className="text-sm text-[#F5F5F0] font-medium">MHL Music</p>
               <p className="text-xs text-[#666660] mt-0.5">Tu música. Sin límites.</p>
               <a
-                href="https://pauldev.es"
+                href="https://paul-dev.vercel.app"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-xs mt-2 block"
                 style={{ color: "rgba(102,102,96,0.6)" }}
               >
-                Desarrollado por Paul · pauldev.es
+                Desarrollado por Paul · paul-dev.vercel.app
               </a>
             </div>
           </div>
