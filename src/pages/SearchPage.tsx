@@ -8,6 +8,7 @@ import { Capacitor } from '@capacitor/core';
 import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
 import { useNetworkStatus } from '@/hooks/useOfflineSearch';
+import { getArtistColor } from '@/lib/artistColors';
 
 function formatDuration(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -194,15 +195,26 @@ export default function SearchPage() {
         <div className="mb-6">
           <p className="text-[10px] uppercase tracking-widest text-[#555] mb-2 text-center">Para ti:</p>
           <div className="flex justify-center flex-wrap gap-2">
-            {suggestedSearches.map((term) => (
-              <button
-                key={term}
-                onClick={() => handleSuggestionClick(term)}
-                className="px-4 py-1.5 rounded-full text-xs font-medium border border-[rgba(255,255,255,0.1)] text-[#999] hover:text-[#C8F04B] hover:border-[#C8F04B]/30 hover:bg-[rgba(200,240,75,0.05)] transition-all"
-              >
-                {term}
-              </button>
-            ))}
+            {suggestedSearches.map((term) => {
+              const color = getArtistColor(term);
+              return (
+                <button
+                  key={term}
+                  onClick={() => handleSuggestionClick(term)}
+                  style={{
+                    borderColor: color.border,
+                    boxShadow: `0 0 8px ${color.glow}`,
+                  }}
+                  className="group relative flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-[#999] hover:text-white transition-all"
+                >
+                  <span
+                    className="w-2 h-2 rounded-full flex-shrink-0 transition-all"
+                    style={{ backgroundColor: color.hex, boxShadow: `0 0 4px ${color.hex}` }}
+                  />
+                  {term}
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
@@ -253,6 +265,7 @@ export default function SearchPage() {
                 const downloading = isDownloading(track.id);
                 const downloaded = isDownloaded(track.id);
                 const isFeatured = i === 0 && searchResults.length >= 4;
+                const artistColor = getArtistColor(track.artist, track.genre);
 
                 return (
                   <motion.div
@@ -263,14 +276,18 @@ export default function SearchPage() {
                     className={`group cursor-pointer rounded-xl overflow-hidden bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] hover:border-[rgba(255,255,255,0.12)] hover:bg-[rgba(255,255,255,0.05)] transition-all ${
                       isFeatured ? 'col-span-2 row-span-2' : ''
                     }`}
+                    style={{ borderTopColor: artistColor.border, borderTopWidth: 2 }}
                     onClick={() => playTrack(track)}
                   >
                     <div className="relative aspect-square overflow-hidden">
                       {track.cover ? (
                         <img src={track.cover} alt="" className="w-full h-full object-cover" />
                       ) : (
-                        <div className="w-full h-full bg-gradient-to-br from-[#C8F04B]/20 to-[#8BC34A]/10 flex items-center justify-center">
-                          <Music className={`text-[#666660] ${isFeatured ? 'w-12 h-12' : 'w-8 h-8'}`} />
+                        <div
+                          className="w-full h-full flex items-center justify-center"
+                          style={{ background: `linear-gradient(135deg, hsl(${artistColor.hue}, 70%, 25%) 0%, hsl(${artistColor.hue}, 50%, 15%) 100%)` }}
+                        >
+                          <Music className={`text-white/40 ${isFeatured ? 'w-12 h-12' : 'w-8 h-8'}`} />
                         </div>
                       )}
                       <div className={`absolute inset-0 bg-black/50 flex items-center justify-center transition-opacity ${
@@ -307,7 +324,13 @@ export default function SearchPage() {
                       <p className={`text-sm font-medium truncate ${isCurrent ? 'text-[#C8F04B]' : 'text-[#F5F5F0]'}`}>
                         {track.title}
                       </p>
-                      <p className="text-xs text-[#666660] truncate">{track.artist}</p>
+                      <p className="flex items-center gap-1 text-xs text-[#666660] truncate">
+                        <span
+                          className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: artistColor.hex }}
+                        />
+                        {track.artist}
+                      </p>
                       {isFeatured && <p className="text-xs text-[#555] mt-1 truncate">{track.album}</p>}
                     </div>
                   </motion.div>
@@ -326,6 +349,7 @@ export default function SearchPage() {
                 const isCurrent = currentTrack?.id === track.id;
                 const downloading = isDownloading(track.id);
                 const downloaded = isDownloaded(track.id);
+                const artistColor = getArtistColor(track.artist, track.genre);
 
                 return (
                   <motion.div
@@ -336,14 +360,18 @@ export default function SearchPage() {
                     className={`flex items-center gap-2.5 px-2 py-2 rounded-lg transition-colors group ${
                       isCurrent ? 'bg-[rgba(200,240,75,0.08)]' : 'hover:bg-[rgba(255,255,255,0.04)] active:bg-[rgba(255,255,255,0.06)]'
                     }`}
+                    style={{ borderLeftColor: artistColor.border, borderLeftWidth: 2 }}
                     onClick={() => playTrack(track)}
                   >
                     <div className="relative w-14 h-14 rounded-md overflow-hidden flex-shrink-0">
                       {track.cover ? (
                         <img src={track.cover} alt="" className="w-full h-full object-cover" />
                       ) : (
-                        <div className="w-full h-full bg-gradient-to-br from-[#C8F04B]/20 to-[#8BC34A]/10 flex items-center justify-center">
-                          <Music className="w-5 h-5 text-[#666660]" />
+                        <div
+                          className="w-full h-full flex items-center justify-center"
+                          style={{ background: `linear-gradient(135deg, hsl(${artistColor.hue}, 70%, 30%) 0%, hsl(${artistColor.hue}, 50%, 18%) 100%)` }}
+                        >
+                          <Music className="w-5 h-5 text-white/40" />
                         </div>
                       )}
                       <div className={`absolute inset-0 bg-black/40 flex items-center justify-center transition-opacity ${
@@ -365,7 +393,13 @@ export default function SearchPage() {
                       <p className={`text-[13px] font-medium truncate ${isCurrent ? 'text-[#C8F04B]' : 'text-[#F5F5F0]'}`}>
                         {track.title}
                       </p>
-                      <p className="text-[11px] text-[#666660] truncate">{track.artist}</p>
+                      <p className="flex items-center gap-1 text-[11px] text-[#666660] truncate">
+                        <span
+                          className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: artistColor.hex }}
+                        />
+                        {track.artist}
+                      </p>
                     </div>
                     <span className="text-[10px] text-[#444] tabular-nums flex-shrink-0">
                       {formatDuration(track.duration)}
