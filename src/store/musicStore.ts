@@ -607,13 +607,40 @@ export const useMusicStore = create<MusicStore>()(
         buildSuggestedSearches: () => {
           const { downloads, localLibrary, lastSuggestedSearches: last } = get();
 
-          // Global fallback artists (offline-safe)
+          // Global pool of 80 diverse popular artists (offline-safe)
           const GLOBAL_POOL = [
-            'Bad Bunny', 'Taylor Swift', 'The Weeknd', 'Dua Lipa',
-            'Harry Styles', 'Shakira', 'Rauw Alejandro', 'Feid',
-            'Metro Boomin', 'Stray Kids', 'SEVENTEEN', 'NewJeans',
-            'Peso Pluma', 'Junior H', 'Blessd', 'Sasha', 'Karol G',
+            'Bad Bunny', 'Taylor Swift', 'The Weeknd', 'Dua Lipa', 'Harry Styles',
+            'Shakira', 'Rauw Alejandro', 'Feid', 'Metro Boomin', 'Stray Kids',
+            'SEVENTEEN', 'NewJeans', 'Peso Pluma', 'Junior H', 'Blessd', 'Sasha',
+            'Karol G', 'SZA', 'BTS', 'BLACKPINK', 'Ariana Grande', 'Drake',
+            'Billie Eilish', 'Ed Sheeran', 'Post Malone', 'Travis Scott',
+            'Kendrick Lamar', 'Doja Cat', 'Miley Cyrus', 'Beyonce', 'Olivia Rodrigo',
+            'Megan Thee Stallion', 'J Balvin', 'Anuel AA', 'Daddy Yankee',
+            'Jhay Cortez', 'Ozuna', 'Farruko', 'Nicky Jam', 'Sech', 'Maluma',
+            'Alesso', 'Marshmello', 'David Guetta', 'Calvin Harris', 'Rita Ora',
+            'NCT 127', 'ITZY', '(G)I-DLE', 'LE SSERAFIM', 'IVE', 'RIIZE',
+            'TOMORROW X TOGETHER', 'ENHYPEN', 'aespa', 'Red Velvet',
+            'EXO', 'Monsta X', 'ATBO', 'ZERO+1', 'NCT DOJAEJUNG',
+            'Gorillaz', 'Coldplay', 'Arctic Monkeys', 'The 1975',
+            'Daft Punk', 'Linkin Park', 'Imagine Dragons', 'OneRepublic',
+            'The Chainsmokers', 'Twenty One Pilots', 'Eminem', 'Lil Uzi Vert',
+            'Lil Baby', 'Gunna', 'Future', 'Megan Thee Stallion',
+            'ROSALIA', 'Chencho Corleone', 'Yandel', 'Wisin Y Yandel',
+            'Justin Bieber', 'Shawn Mendes', 'Camila Cabello', 'CNCO',
+            'Becky G', 'Sebastian Yatra', 'Manuel Turizo', 'Sebastian Full',
+            'Ryan Castro', 'Peso Pluma', 'Grupo Frontera', 'Junior H',
+            'Oscar Maydon', 'Gera MX', 'NATTI NATASHA', 'Don Omar',
           ];
+
+          // Fisher-Yates shuffle for uniform randomness
+          function shuffle<T>(arr: T[]): T[] {
+            const a = [...arr];
+            for (let i = a.length - 1; i > 0; i--) {
+              const j = Math.floor(Math.random() * (i + 1));
+              [a[i], a[j]] = [a[j], a[i]];
+            }
+            return a;
+          }
 
           // Collect artists from completed downloads and local library
           const artistCount = new Map<string, number>();
@@ -623,41 +650,29 @@ export const useMusicStore = create<MusicStore>()(
             if (dl.status !== 'completed') return;
             const artist = dl.track.artist?.trim();
             if (!artist || artist === 'Unknown') return;
-            const prev = artistCount.get(artist) ?? 0;
-            artistCount.set(artist, prev + 1);
-            // More recent = higher weight (max 3x for most recent)
-            const age = Date.now() - new Date(dl.fileName ? 0 : 0).getTime();
-            const prevRecency = artistRecency.get(artist) ?? 0;
-            artistRecency.set(artist, Math.max(prevRecency, Math.max(1, 3 - Math.floor(age / (7 * 24 * 60 * 60 * 1000)))));
+            const count = artistCount.get(artist) ?? 0;
+            artistCount.set(artist, count + 1);
           });
 
           localLibrary.forEach((track) => {
             const artist = track.artist?.trim();
             if (!artist || artist === 'Unknown') return;
-            const prev = artistCount.get(artist) ?? 0;
-            artistCount.set(artist, prev + (track.playCount ?? 0) + 0.5);
-            const prevRecency = artistRecency.get(artist) ?? 0;
-            artistRecency.set(artist, Math.max(prevRecency, 1));
+            artistCount.set(artist, (artistCount.get(artist) ?? 0) + (track.playCount ?? 0) + 0.5);
           });
 
-          // Build weighted pool from user history
+          // Build user pool (weighted by frequency), shuffle and exclude last session
           const userArtists = [...artistCount.entries()]
-            .map(([artist, count]) => ({
-              artist,
-              weight: count * (artistRecency.get(artist) ?? 1),
-            }))
-            .sort((a, b) => b.weight - a.weight)
-            .map((e) => e.artist);
+            .sort((a, b) => b[1] - a[1])
+            .map((e) => e[0]);
 
-          // Shuffle user artists, excluding last session's picks
-          const shuffled = [...userArtists].sort(() => Math.random() - 0.5);
-          const candidates = shuffled.filter((a) => !last.includes(a));
+          const shuffledUser = shuffle(userArtists).filter((a) => !last.includes(a));
+          const shuffledGlobal = shuffle(GLOBAL_POOL).filter((a) => !last.includes(a));
 
-          // Build final list: user artists first, then global pool (avoiding repeats)
-          const used = new Set<string>();
+          // Interleave: 2-3 from user history, rest from global pool (no repeats ever)
           const suggestions: string[] = [];
+          const used = new Set<string>();
 
-          for (const artist of candidates) {
+          for (const artist of shuffledUser) {
             if (suggestions.length >= 5) break;
             if (!used.has(artist)) {
               used.add(artist);
@@ -665,9 +680,9 @@ export const useMusicStore = create<MusicStore>()(
             }
           }
 
-          for (const artist of GLOBAL_POOL) {
+          for (const artist of shuffledGlobal) {
             if (suggestions.length >= 5) break;
-            if (!used.has(artist) && !last.includes(artist)) {
+            if (!used.has(artist)) {
               used.add(artist);
               suggestions.push(artist);
             }
