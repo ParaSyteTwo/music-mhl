@@ -129,6 +129,11 @@ interface MusicStore {
   maintenanceUntil: number | null;
   setMaintenanceMode: (active: boolean, until?: number | null) => void;
 
+  // ─── Personalized suggestions ───
+  suggestedSearches: string[];
+  lastSuggestedSearches: string[];
+  buildSuggestedSearches: () => void;
+
   // ─── Local Library ───
   localLibrary: LocalTrack[];
   localFileRefs: Map<string, File>;
@@ -472,8 +477,9 @@ export const useMusicStore = create<MusicStore>()(
               }
 
               updateDl({ progress: 100, status: 'completed', error: undefined, fileName: resolvedFileName });
-              // Index downloaded track for offline search
+              // Index downloaded track for offline search + refresh suggestions
               get().indexDownloadedTrack(track, resolvedFileName);
+              get().buildSuggestedSearches();
               toast.success(`✓ Descargado: ${track.title} - ${track.artist}`, { duration: 4000 });
               return;
             } catch (error) {
@@ -593,6 +599,85 @@ export const useMusicStore = create<MusicStore>()(
         isMaintenanceMode: false,
         maintenanceUntil: null,
         setMaintenanceMode: (active, until = null) => set({ isMaintenanceMode: active, maintenanceUntil: until ?? null }),
+
+        // ─── Personalized suggestions ───
+        suggestedSearches: [],
+        lastSuggestedSearches: [],
+
+        buildSuggestedSearches: () => {
+          const { downloads, localLibrary, lastSuggestedSearches: last } = get();
+
+          // Global fallback artists (offline-safe)
+          const GLOBAL_POOL = [
+            'Bad Bunny', 'Taylor Swift', 'The Weeknd', 'Dua Lipa',
+            'Harry Styles', 'Shakira', 'Rauw Alejandro', 'Feid',
+            'Metro Boomin', 'Stray Kids', 'SEVENTEEN', 'NewJeans',
+            'Peso Pluma', 'Junior H', 'Blessd', 'Sasha', 'Karol G',
+          ];
+
+          // Collect artists from completed downloads and local library
+          const artistCount = new Map<string, number>();
+          const artistRecency = new Map<string, number>();
+
+          downloads.forEach((dl) => {
+            if (dl.status !== 'completed') return;
+            const artist = dl.track.artist?.trim();
+            if (!artist || artist === 'Unknown') return;
+            const prev = artistCount.get(artist) ?? 0;
+            artistCount.set(artist, prev + 1);
+            // More recent = higher weight (max 3x for most recent)
+            const age = Date.now() - new Date(dl.fileName ? 0 : 0).getTime();
+            const prevRecency = artistRecency.get(artist) ?? 0;
+            artistRecency.set(artist, Math.max(prevRecency, Math.max(1, 3 - Math.floor(age / (7 * 24 * 60 * 60 * 1000)))));
+          });
+
+          localLibrary.forEach((track) => {
+            const artist = track.artist?.trim();
+            if (!artist || artist === 'Unknown') return;
+            const prev = artistCount.get(artist) ?? 0;
+            artistCount.set(artist, prev + (track.playCount ?? 0) + 0.5);
+            const prevRecency = artistRecency.get(artist) ?? 0;
+            artistRecency.set(artist, Math.max(prevRecency, 1));
+          });
+
+          // Build weighted pool from user history
+          const userArtists = [...artistCount.entries()]
+            .map(([artist, count]) => ({
+              artist,
+              weight: count * (artistRecency.get(artist) ?? 1),
+            }))
+            .sort((a, b) => b.weight - a.weight)
+            .map((e) => e.artist);
+
+          // Shuffle user artists, excluding last session's picks
+          const shuffled = [...userArtists].sort(() => Math.random() - 0.5);
+          const candidates = shuffled.filter((a) => !last.includes(a));
+
+          // Build final list: user artists first, then global pool (avoiding repeats)
+          const used = new Set<string>();
+          const suggestions: string[] = [];
+
+          for (const artist of candidates) {
+            if (suggestions.length >= 5) break;
+            if (!used.has(artist)) {
+              used.add(artist);
+              suggestions.push(artist);
+            }
+          }
+
+          for (const artist of GLOBAL_POOL) {
+            if (suggestions.length >= 5) break;
+            if (!used.has(artist) && !last.includes(artist)) {
+              used.add(artist);
+              suggestions.push(artist);
+            }
+          }
+
+          set({
+            suggestedSearches: suggestions,
+            lastSuggestedSearches: suggestions,
+          });
+        },
 
         // ─── Local Library ───
         localLibrary: [],
@@ -893,6 +978,8 @@ export const useMusicStore = create<MusicStore>()(
         mp3Quality: state.mp3Quality,
         downloadWifiOnly: state.downloadWifiOnly,
         appLanguage: state.appLanguage,
+        suggestedSearches: state.suggestedSearches,
+        lastSuggestedSearches: state.lastSuggestedSearches,
         // localFileRefs excluded — File objects cannot be serialized
       }),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -907,8 +994,14 @@ export const useMusicStore = create<MusicStore>()(
         mp3Quality: persisted?.mp3Quality ?? 'alta',
         downloadWifiOnly: persisted?.downloadWifiOnly ?? false,
         appLanguage: persisted?.appLanguage ?? 'es',
+        suggestedSearches: persisted?.suggestedSearches || [],
+        lastSuggestedSearches: persisted?.lastSuggestedSearches || [],
         localFileRefs: new Map(),
       }),
+      onRehydrateStorage: () => (state) => {
+        // Build fresh suggestions when app rehydrates (new session)
+        state?.buildSuggestedSearches();
+      },
     }
   )
 );

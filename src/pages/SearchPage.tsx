@@ -15,8 +15,6 @@ function formatDuration(seconds: number) {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-const SUGGESTED_SEARCHES = ['Bad Bunny', 'Daft Punk', 'Taylor Swift', 'Peso Pluma', 'The Weeknd'];
-
 function useRecentSearches() {
   const [recent, setRecent] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem('mhl-recent-searches') || '[]'); } catch { return []; }
@@ -43,6 +41,7 @@ export default function SearchPage() {
     isLoadingMore,
     searchSources,
     hasLocalResults,
+    suggestedSearches,
     playTrack,
     currentTrack,
     isPlaying,
@@ -191,11 +190,11 @@ export default function SearchPage() {
         </div>
       )}
 
-      {showEmpty && (
+      {showEmpty && suggestedSearches.length > 0 && (
         <div className="mb-6">
-          <p className="text-[10px] uppercase tracking-widest text-[#555] mb-2 text-center">Prueba con:</p>
+          <p className="text-[10px] uppercase tracking-widest text-[#555] mb-2 text-center">Para ti:</p>
           <div className="flex justify-center flex-wrap gap-2">
-            {SUGGESTED_SEARCHES.map((term) => (
+            {suggestedSearches.map((term) => (
               <button
                 key={term}
                 onClick={() => handleSuggestionClick(term)}
