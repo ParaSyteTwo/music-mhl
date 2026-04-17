@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Download, Play, Pause, Search, Loader2, Music, CheckCircle, X, Clock } from 'lucide-react';
+import { Download, Play, Pause, Search, Loader2, Music, CheckCircle, X, Clock, Wifi, WifiOff, Globe, Folder } from 'lucide-react';
 import { useMusicStore } from '@/store/musicStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getDownloadCandidates, type DownloadCandidate } from '@/lib/api/musicApi';
@@ -7,6 +7,7 @@ import type { Track } from '@/types/music';
 import { Capacitor } from '@capacitor/core';
 import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
+import { useNetworkStatus } from '@/hooks/useOfflineSearch';
 
 function formatDuration(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -40,12 +41,16 @@ export default function SearchPage() {
     loadMoreResults,
     hasMoreResults,
     isLoadingMore,
+    searchSources,
+    hasLocalResults,
     playTrack,
     currentTrack,
     isPlaying,
     startDownloadWithVideoId,
     downloads,
   } = useMusicStore();
+
+  const isOnline = useNetworkStatus();
 
   const [query, setQuery] = useState(searchQuery);
   const [pickerTrack, setPickerTrack] = useState<Track | null>(null);
@@ -204,9 +209,33 @@ export default function SearchPage() {
       )}
 
       {searchResults.length > 0 && !isSearching && (
-        <p className="text-[11px] text-[#555] mb-3">
-          {searchResults.length} canciones encontradas para &apos;{searchQuery}&apos;
-        </p>
+        <div className="flex items-center gap-2 mb-3 flex-wrap">
+          <p className="text-[11px] text-[#555]">
+            {searchResults.length} canciones para &apos;{searchQuery}&apos;
+          </p>
+          <div className="flex gap-1.5">
+            {searchSources.includes('local') && (
+              <span className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded-full bg-[rgba(200,240,75,0.12)] text-[#C8F04B] border border-[rgba(200,240,75,0.2)]">
+                <Folder className="w-3 h-3" /> Local
+              </span>
+            )}
+            {searchSources.includes('deezer') && (
+              <span className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded-full bg-[rgba(255,255,255,0.06)] text-[#888] border border-[rgba(255,255,255,0.1)]">
+                <Globe className="w-3 h-3" /> Deezer
+              </span>
+            )}
+            {searchSources.includes('youtube') && (
+              <span className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded-full bg-[rgba(255,60,60,0.12)] text-[#FF4444] border border-[rgba(255,60,60,0.2)]">
+                <Play className="w-3 h-3" /> YouTube
+              </span>
+            )}
+            {!isOnline && (
+              <span className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                <WifiOff className="w-3 h-3" /> Offline
+              </span>
+            )}
+          </div>
+        </div>
       )}
 
       <AnimatePresence mode="wait">

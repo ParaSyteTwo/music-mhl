@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { Track, Download, LocalTrack } from '@/types/music';
 import { audioEngine } from '@/lib/audioEngine';
-import { searchDeezer, downloadTrackAudio, getDeezerTrackMeta, getLyrics } from '@/lib/api/musicApi';
+import { searchDeezer, searchWithFallback, downloadTrackAudio, getDeezerTrackMeta, getLyrics, type SearchSource } from '@/lib/api/musicApi';
 import { writeID3Tags } from '@/lib/id3Writer';
 import {
   type ImportedAudioFile,
@@ -81,6 +81,8 @@ interface MusicStore {
   searchOffset: number;
   hasMoreResults: boolean;
   isLoadingMore: boolean;
+  searchSources: SearchSource[];
+  hasLocalResults: boolean;
   performSearch: (query: string) => Promise<void>;
   loadMoreResults: () => Promise<void>;
 
@@ -136,6 +138,7 @@ interface MusicStore {
   importLocalFiles: (files: FileList | File[], options?: { silent?: boolean }) => Promise<void>;
   importScannedTracks: (tracks: LocalTrack[], options?: { silent?: boolean }) => void;
   rescanLocalLibrary: () => Promise<void>;
+  indexDownloadedTrack: (track: Track, fileName: string) => void;
   playLocalTrack: (id: string) => Promise<void>;
   removeLocalTrack: (id: string) => void;
   clearLocalLibrary: () => void;
@@ -268,17 +271,26 @@ export const useMusicStore = create<MusicStore>()(
         searchOffset: 0,
         hasMoreResults: true,
         isLoadingMore: false,
+        searchSources: [],
+        hasLocalResults: false,
 
         performSearch: async (query) => {
           if (!query.trim()) {
-            set({ searchResults: [], isSearching: false, searchQuery: '', searchOffset: 0, hasMoreResults: true });
+            set({ searchResults: [], isSearching: false, searchQuery: '', searchOffset: 0, hasMoreResults: true, searchSources: [], hasLocalResults: false });
             document.title = 'MHL Music';
             return;
           }
-          set({ isSearching: true, searchQuery: query, searchOffset: 0, hasMoreResults: true });
+          set({ isSearching: true, searchQuery: query, searchOffset: 0, hasMoreResults: true, searchSources: [], hasLocalResults: false });
           try {
-            const tracks = await searchDeezer(query, 0, 25);
-            set({ searchResults: tracks, isSearching: false, hasMoreResults: tracks.length >= 25 });
+            const { tracks, sources, hasLocal } = await searchWithFallback(query, get().localLibrary);
+            const hasDeezer = sources.includes('deezer');
+            set({
+              searchResults: tracks,
+              isSearching: false,
+              hasMoreResults: hasDeezer && tracks.length >= 25,
+              searchSources: sources,
+              hasLocalResults: hasLocal,
+            });
             try {
               const stored = JSON.parse(localStorage.getItem('mhl-recent-searches') || '[]') as string[];
               const updated = [query, ...stored.filter((s) => s.toLowerCase() !== query.toLowerCase())].slice(0, 5);
@@ -286,13 +298,15 @@ export const useMusicStore = create<MusicStore>()(
             } catch { /* ignore */ }
           } catch (error) {
             console.error('Search error:', error);
-            set({ isSearching: false });
+            set({ isSearching: false, searchSources: [], hasLocalResults: false });
           }
         },
 
         loadMoreResults: async () => {
-          const { isLoadingMore, hasMoreResults, searchQuery, searchOffset, searchResults } = get();
+          const { isLoadingMore, hasMoreResults, searchQuery, searchOffset, searchResults, searchSources } = get();
           if (isLoadingMore || !hasMoreResults || !searchQuery.trim()) return;
+          // Only paginate Deezer results
+          if (!searchSources.includes('deezer')) return;
           set({ isLoadingMore: true });
           try {
             const newOffset = searchOffset + 25;
@@ -458,6 +472,8 @@ export const useMusicStore = create<MusicStore>()(
               }
 
               updateDl({ progress: 100, status: 'completed', error: undefined, fileName: resolvedFileName });
+              // Index downloaded track for offline search
+              get().indexDownloadedTrack(track, resolvedFileName);
               toast.success(`✓ Descargado: ${track.title} - ${track.artist}`, { duration: 4000 });
               return;
             } catch (error) {
@@ -666,6 +682,24 @@ export const useMusicStore = create<MusicStore>()(
             const plural = nextTracks.length === 1 ? '' : 's';
             toast.success(`${nextTracks.length} pista${plural} sincronizada${plural}`, { duration: 3500 });
           }
+        },
+
+        indexDownloadedTrack: (track, fileName) => {
+          const alreadyIndexed = get().localLibrary.some(
+            (t) => t.localPath === `MHL Music/${fileName}`,
+          );
+          if (alreadyIndexed) return;
+          const localTrack: LocalTrack = {
+            ...track,
+            id: track.id,
+            isLocal: true,
+            localPath: `MHL Music/${fileName}`,
+            localSource: 'documents',
+            genre: '',
+            playCount: 0,
+            importedAt: Date.now(),
+          };
+          set((s) => ({ localLibrary: [...s.localLibrary, localTrack] }));
         },
 
         rescanLocalLibrary: async () => {

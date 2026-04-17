@@ -1,4 +1,5 @@
 import { registerPlugin, Capacitor } from '@capacitor/core';
+import type { Track } from '@/types/music';
 
 export interface YtDlpSearchResult {
   videoId: string;
@@ -99,3 +100,23 @@ export async function getYtDlpVersion(): Promise<string> {
 }
 
 export default YtDlp;
+
+export async function searchYouTubeDirect(query: string): Promise<Track[]> {
+  if (!Capacitor.isNativePlatform()) return [];
+  try {
+    const results = await searchYouTubeNative(query);
+    return results.map((r) => ({
+      id: `yt-${r.videoId}`,
+      title: r.title,
+      canonicalTitle: r.title,
+      artist: r.channel,
+      album: '',
+      duration: r.duration,
+      cover: '',
+      preview: '',
+      youtubeId: r.videoId,
+    }));
+  } catch {
+    return [];
+  }
+}

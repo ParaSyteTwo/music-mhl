@@ -62,6 +62,88 @@ export async function searchDeezer(query: string, offset = 0, limit = 25): Promi
   }
 }
 
+// ─── YouTube Direct Search (offline-capable via yt-dlp) ───
+export async function searchYouTubeDirect(query: string): Promise<Track[]> {
+  if (!Capacitor.isNativePlatform()) return [];
+  try {
+    const { searchYouTubeDirect: searchYT } = await import('@/lib/ytdlpBridge');
+    return searchYT(query);
+  } catch {
+    return [];
+  }
+}
+
+export type SearchSource = 'local' | 'deezer' | 'youtube';
+
+export interface SearchResult {
+  tracks: Track[];
+  source: SearchSource;
+  total: number;
+}
+
+// ─── Parallel multi-source search (all at once for maximum speed) ───
+export async function searchWithFallback(
+  query: string,
+  localLibrary: Track[],
+): Promise<{ tracks: Track[]; sources: SearchSource[]; hasLocal: boolean }> {
+  if (!query.trim()) return { tracks: [], sources: [], hasLocal: false };
+
+  // Always search local library instantly (~0ms)
+  const { searchLocalTracks } = await import('@/lib/searchEngine');
+  const localResults = searchLocalTracks(localLibrary, query);
+
+  const sources: SearchSource[] = ['local'];
+  const allTracks: Track[] = [...localResults];
+
+  // Deduplicate by title+artist
+  const seen = new Set<string>();
+  allTracks.forEach((t) => seen.add(`${t.title.toLowerCase()}|${t.artist.toLowerCase()}`));
+
+  // Launch all remote searches in parallel
+  const [deezerResults, youtubeResults] = await Promise.allSettled([
+    navigator.onLine ? searchDeezer(query) : Promise.reject('offline'),
+    Capacitor.isNativePlatform() ? searchYouTubeDirect(query) : Promise.reject('not native'),
+  ]);
+
+  if (deezerResults.status === 'fulfilled' && deezerResults.value.length > 0) {
+    sources.push('deezer');
+    deezerResults.value.forEach((t) => {
+      const key = `${t.title.toLowerCase()}|${t.artist.toLowerCase()}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        allTracks.push(t);
+      }
+    });
+  }
+
+  if (youtubeResults.status === 'fulfilled' && youtubeResults.value.length > 0) {
+    sources.push('youtube');
+    youtubeResults.value.forEach((t) => {
+      const key = `${t.title.toLowerCase()}|${t.artist.toLowerCase()}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        allTracks.push(t);
+      }
+    });
+  }
+
+  return { tracks: allTracks, sources, hasLocal: localResults.length > 0 };
+}
+
+// ─── Enrich a YouTube track with Deezer metadata when available ───
+export async function enrichWithDeezerMeta(track: Track): Promise<Track> {
+  if (!track.deezerId || !navigator.onLine) return track;
+  try {
+    const meta = await getDeezerTrackMeta(track.deezerId);
+    return {
+      ...track,
+      genre: meta.genre ?? track.genre,
+    };
+  } catch {
+    return track;
+  }
+}
+
 // ─── Deezer Artist Data ───
 export async function getDeezerArtist(artistId: string) {
   return callDeezerProxy({ action: 'artist', artistId });
