@@ -17,6 +17,11 @@ function hueToGradient(hue: number): string {
   return `from-[hsl(${h1},75%,65%)]/20 to-[hsl(${h2},60%,45%)]/10`;
 }
 
+/** Get the hue for external use (e.g. borders/rings) */
+export function getArtistHue(str: string): number {
+  return artistHueHash(str);
+}
+
 function getColorGradient(str: string): string {
   return hueToGradient(artistHueHash(str));
 }

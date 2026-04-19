@@ -6,6 +6,7 @@ import {
   deriveArtists,
   deriveGenres,
   deriveTopPlayed,
+  getArtistHue,
 } from '@/lib/localLibrarySelectors';
 import {
   Library,
@@ -700,7 +701,9 @@ function ArtistsGrid({
 }) {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-      {artists.map((artist, i) => (
+      {artists.map((artist, i) => {
+        const hue = getArtistHue(artist.name);
+        return (
         <motion.div
           key={artist.id}
           initial={{ opacity: 0, scale: 0.95 }}
@@ -709,7 +712,8 @@ function ArtistsGrid({
           className="group"
         >
           <div
-            className="aspect-square rounded-xl overflow-hidden bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.06)] group-hover:border-[rgba(255,255,255,0.12)] transition-all relative cursor-pointer"
+            className="aspect-square rounded-xl overflow-hidden border-2 group-hover:border-[rgba(255,255,255,0.12)] transition-all relative cursor-pointer"
+            style={{ borderColor: `hsl(${hue}, 75%, 65%)` }}
             onClick={() => onOpenCollection({
               type: 'artist',
               name: artist.name,
@@ -721,8 +725,11 @@ function ArtistsGrid({
             {artist.cover ? (
               <img src={artist.cover} alt={artist.name} className="w-full h-full object-cover" />
             ) : (
-              <div className="w-full h-full bg-gradient-to-br from-[#C8F04B]/10 to-[#8BC34A]/05 flex items-center justify-center">
-                <Music className="w-8 h-8 text-[#333]" />
+              <div
+                className="w-full h-full flex items-center justify-center"
+                style={{ background: `linear-gradient(135deg, hsl(${hue}, 75%, 65%) 0%, hsl(${(hue + 40) % 360}, 60%, 45%) 100%)` }}
+              >
+                <Music className="w-8 h-8 text-white/60" />
               </div>
             )}
 
@@ -751,7 +758,8 @@ function ArtistsGrid({
             {artist.trackCount} pista{artist.trackCount > 1 ? 's' : ''} • {artist.albumCount} álbum{artist.albumCount > 1 ? 'es' : ''}
           </p>
         </motion.div>
-      ))}
+        );
+      })}
     </div>
   );
 }
