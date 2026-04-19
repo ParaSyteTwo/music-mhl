@@ -1,0 +1,18 @@
+export const GLOBAL_ARTISTS_POOL: string[] = [
+  'Bad Bunny', 'Taylor Swift', 'The Weeknd', 'Dua Lipa', 'Ed Sheeran',
+  'Daft Punk', 'Shakira', 'Peso Pluma', 'Feid', 'Karol G',
+  'Harry Styles', 'BTS', 'Billie Eilish', 'Drake', 'Kendrick Lamar',
+  'Rauw Alejandro', 'Rosalía', 'Ariana Grande', 'Post Malone', 'Travis Scott',
+  'Quevedo', 'Metro Boomin', 'SZA', 'Beyoncé', 'Dua Lipa',
+  'Kanye West', 'J Balvin', 'Coldplay', 'Arctic Monkeys', 'Gorillaz',
+  'Kill Bill', 'Miley Cyrus', 'Olivia Rodrigo', 'Justin Bieber', 'Shawn Mendes',
+  'Camilo', 'Daddy Yankee', 'Anuel AA', 'Myke Towers', 'Jhay Cortez',
+  'Duki', 'Kizz Daniel', 'Burna Boy', 'Wizkid', 'Tems',
+  'Rita Ora', 'Calvin Harris', 'David Guetta', 'Marshmello', 'Tiësto',
+  'Lana Del Rey', 'Adele', 'Sam Smith', 'Lizzo', 'Doja Cat',
+  'Megan Thee Stallion', 'Lil Uzi Vert', 'Lil Nas X', 'Playboi Carti', 'Future',
+  'The Beatles', 'Queen', 'Pink Floyd', 'Led Zeppelin', 'Nirvana',
+  'Michael Jackson', 'Prince', 'Whitney Houston', 'Marvin Gaye', 'Stevie Wonder',
+  'BTS', 'BLACKPINK', 'Stray Kids', 'NewJeans', 'IVE',
+  'NCT', 'EXO', 'TWICE', 'ITZY', 'aespa',
+];

@@ -21,11 +21,14 @@ import com.yausername.ffmpeg.FFmpeg;
 
 import org.json.JSONObject;
 
+import android.content.ContentResolver;
+import android.content.ContentValues;
+import android.provider.MediaStore;
+import java.io.OutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import android.util.Base64;
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -341,5 +344,78 @@ public class YtDlpPlugin extends Plugin {
         downloadAudio(call);
     }
 
-    
+    @PluginMethod
+    public void saveAudioToMusicMediaStore(PluginCall call) {
+        String videoId = call.getString("videoId");
+        String fileNameHint = call.getString("fileName");
+        if (videoId == null || videoId.isEmpty()) {
+            call.reject("Missing videoId");
+            return;
+        }
+
+        executor.execute(() -> {
+            File cacheDir = new File(getContext().getCacheDir(), "ytdlp");
+            cacheDir.mkdirs();
+            for (File f : cacheDir.listFiles()) { f.delete(); }
+
+            try {
+                ensureInitialized();
+
+                String url = "https://www.youtube.com/watch?v=" + videoId;
+                String outputPath = new File(cacheDir, "temp_audio.mp3").getAbsolutePath();
+
+                YoutubeDLRequest request = new YoutubeDLRequest(url);
+                request.addOption("-x");
+                request.addOption("--audio-format", "mp3");
+                request.addOption("-o", outputPath);
+                request.addOption("--no-playlist");
+
+                YoutubeDL.getInstance().execute(request);
+
+                File audioFile = new File(outputPath);
+                if (!audioFile.exists() || audioFile.length() == 0) {
+                    bridge.getActivity().runOnUiThread(() -> call.reject("No audio file produced"));
+                    return;
+                }
+
+                ContentValues values = new ContentValues();
+                values.put(MediaStore.Audio.Media.DISPLAY_NAME, fileNameHint != null ? fileNameHint : "audio.mp3");
+                values.put(MediaStore.Audio.Media.MIME_TYPE, "audio/mpeg");
+                values.put(MediaStore.Audio.Media.RELATIVE_PATH, "Music/MHL Music");
+                values.put(MediaStore.Audio.Media.IS_PENDING, 1);
+
+                ContentResolver resolver = getContext().getContentResolver();
+                Uri itemUri = resolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values);
+
+                if (itemUri == null) {
+                    bridge.getActivity().runOnUiThread(() -> call.reject("MediaStore insert failed"));
+                    return;
+                }
+
+                try (OutputStream os = resolver.openOutputStream(itemUri);
+                     FileInputStream fis = new FileInputStream(audioFile)) {
+                    byte[] buffer = new byte[8192];
+                    int bytesRead;
+                    while ((bytesRead = fis.read(buffer)) != -1) {
+                        os.write(buffer, 0, bytesRead);
+                    }
+                }
+
+                values.clear();
+                values.put(MediaStore.Audio.Media.IS_PENDING, 0);
+                resolver.update(itemUri, values, null, null);
+                audioFile.delete();
+
+                JSObject result = new JSObject();
+                result.put("success", true);
+                result.put("uri", itemUri.toString());
+                bridge.getActivity().runOnUiThread(() -> call.resolve(result));
+
+            } catch (Exception e) {
+                Log.e(TAG, "saveAudioToMusicMediaStore failed", e);
+                bridge.getActivity().runOnUiThread(() -> call.reject(e.getMessage()));
+            }
+        });
+    }
+
 }

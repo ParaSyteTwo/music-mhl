@@ -1,19 +1,24 @@
 import type { LocalTrack, LocalAlbum, LocalArtist, LocalGenre } from '@/types/music';
 
-// Generate a unique color gradient based on a string
+/** FNV-1a hash → integer in [0, 360) for deterministic hue mapping */
+function artistHueHash(str: string): number {
+  let hash = 2166136261;
+  for (let i = 0; i < str.length; i++) {
+    hash ^= str.charCodeAt(i);
+    hash = (hash * 16777619) >>> 0;
+  }
+  return hash % 360;
+}
+
+/** Map a hue (0-359) to a gradient CSS class spanning the full color wheel */
+function hueToGradient(hue: number): string {
+  const h1 = hue;
+  const h2 = (hue + 40) % 360;
+  return `from-[hsl(${h1},75%,65%)]/20 to-[hsl(${h2},60%,45%)]/10`;
+}
+
 function getColorGradient(str: string): string {
-  const colors = [
-    'from-[#C8F04B]/20 to-[#8BC34A]/10',
-    'from-[#FF6B9D]/20 to-[#C44569]/10',
-    'from-[#4ECDC4]/20 to-[#44A08D]/10',
-    'from-[#FFE66D]/20 to-[#FFA502]/10',
-    'from-[#95E1D3]/20 to-[#38A169]/10',
-    'from-[#A8EDEA]/20 to-[#FED6E3]/10',
-    'from-[#FF9A56]/20 to-[#FF6348]/10',
-    'from-[#667eea]/20 to-[#764ba2]/10',
-  ];
-  const hash = str.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  return colors[hash % colors.length];
+  return hueToGradient(artistHueHash(str));
 }
 
 export function deriveAlbums(tracks: LocalTrack[]): LocalAlbum[] {

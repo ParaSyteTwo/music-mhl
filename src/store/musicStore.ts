@@ -140,6 +140,10 @@ interface MusicStore {
   removeLocalTrack: (id: string) => void;
   clearLocalLibrary: () => void;
   incrementPlayCount: (id: string) => void;
+
+  // ─── Download history for suggestions ───
+  mostDownloadedArtists: string[];
+  addMostDownloadedArtist: (artist: string) => void;
 }
 
 // WiFi-only detection (web Network Information API)
@@ -458,6 +462,7 @@ export const useMusicStore = create<MusicStore>()(
               }
 
               updateDl({ progress: 100, status: 'completed', error: undefined, fileName: resolvedFileName });
+              get().addMostDownloadedArtist(track.artist);
               toast.success(`✓ Descargado: ${track.title} - ${track.artist}`, { duration: 4000 });
               return;
             } catch (error) {
@@ -845,6 +850,17 @@ export const useMusicStore = create<MusicStore>()(
               t.id === id ? { ...t, playCount: (t.playCount ?? 0) + 1 } : t
             ),
           })),
+
+        // ─── Download history for suggestions ───
+        mostDownloadedArtists: [],
+        addMostDownloadedArtist: (artist) =>
+          set((s) => {
+            const exists = s.mostDownloadedArtists.includes(artist);
+            const updated = exists
+              ? s.mostDownloadedArtists
+              : [artist, ...s.mostDownloadedArtists].slice(0, 20);
+            return { mostDownloadedArtists: updated };
+          }),
       };
     },
     {
@@ -859,6 +875,7 @@ export const useMusicStore = create<MusicStore>()(
         mp3Quality: state.mp3Quality,
         downloadWifiOnly: state.downloadWifiOnly,
         appLanguage: state.appLanguage,
+        mostDownloadedArtists: state.mostDownloadedArtists,
         // localFileRefs excluded — File objects cannot be serialized
       }),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -873,6 +890,7 @@ export const useMusicStore = create<MusicStore>()(
         mp3Quality: persisted?.mp3Quality ?? 'alta',
         downloadWifiOnly: persisted?.downloadWifiOnly ?? false,
         appLanguage: persisted?.appLanguage ?? 'es',
+        mostDownloadedArtists: persisted?.mostDownloadedArtists ?? [],
         localFileRefs: new Map(),
       }),
     }

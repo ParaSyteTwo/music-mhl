@@ -15,6 +15,7 @@ interface YtDlpPluginInterface {
   getStreamUrl(options: { videoId: string }): Promise<{ success: boolean; url: string }>;
   downloadAsMp3?: (options: { videoId: string }) => Promise<{ success: boolean; data: string; size: number }>;
   downloadAudio?: (options: { videoId: string; format?: string; quality?: string }) => Promise<{ success: boolean; data: string; size: number; fileName?: string }>;
+  saveAudioToMusicMediaStore?: (options: { videoId: string; fileName: string }) => Promise<{ success: boolean; uri: string }>;
 }
 
 const YtDlp = registerPlugin<YtDlpPluginInterface>('YtDlp');
@@ -96,6 +97,14 @@ export async function getYtDlpVersion(): Promise<string> {
   if (!initialized) await initYtDlp();
   const r = await YtDlp.getVersion();
   return r.version;
+}
+
+export async function saveAudioToMediaStore(videoId: string, fileName: string): Promise<string> {
+  if (!Capacitor.isNativePlatform()) throw new Error('Not on native platform');
+  if (!initialized) await initYtDlp();
+  const result = await YtDlp.saveAudioToMusicMediaStore!({ videoId, fileName });
+  if (!result?.success) throw new Error('MediaStore save failed');
+  return result.uri;
 }
 
 export default YtDlp;

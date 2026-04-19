@@ -4,6 +4,7 @@ import { useMusicStore } from '@/store/musicStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getDownloadCandidates, type DownloadCandidate } from '@/lib/api/musicApi';
 import type { Track } from '@/types/music';
+import { GLOBAL_ARTISTS_POOL } from '@/data/globalArtists';
 import { Capacitor } from '@capacitor/core';
 import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
@@ -45,6 +46,7 @@ export default function SearchPage() {
     isPlaying,
     startDownloadWithVideoId,
     downloads,
+    mostDownloadedArtists,
   } = useMusicStore();
 
   const [query, setQuery] = useState(searchQuery);
@@ -62,6 +64,12 @@ export default function SearchPage() {
   const [inputFocused, setInputFocused] = useState(false);
   const { recent, remove: removeRecent, refresh: refreshRecent } = useRecentSearches();
   const loadMoreRef = useRef<HTMLDivElement>(null);
+
+  const personalSuggestions = mostDownloadedArtists.slice(0, 5);
+  const poolSuggestions = GLOBAL_ARTISTS_POOL.filter(
+    (a) => !mostDownloadedArtists.includes(a)
+  ).slice(0, 10);
+  const suggestedSearches = [...personalSuggestions, ...poolSuggestions];
 
   const handleSearch = () => {
     if (query.trim()) {
@@ -190,7 +198,7 @@ export default function SearchPage() {
         <div className="mb-6">
           <p className="text-[10px] uppercase tracking-widest text-[#555] mb-2 text-center">Prueba con:</p>
           <div className="flex justify-center flex-wrap gap-2">
-            {SUGGESTED_SEARCHES.map((term) => (
+            {suggestedSearches.map((term) => (
               <button
                 key={term}
                 onClick={() => handleSuggestionClick(term)}
