@@ -1,0 +1,49 @@
+- generic [ref=e2]:
+  - region "Notifications alt+T"
+  - generic [ref=e3]:
+    - navigation [ref=e4]:
+      - link "Buscar" [ref=e5] [cursor=pointer]:
+        - /url: /
+        - img [ref=e6]
+        - text: Buscar
+      - link "Descargas" [ref=e9] [cursor=pointer]:
+        - /url: /downloads
+        - img [ref=e10]
+        - text: Descargas
+      - link "Ajustes" [ref=e13] [cursor=pointer]:
+        - /url: /settings
+        - img [ref=e14]
+        - text: Ajustes
+    - main [ref=e17]:
+      - generic [ref=e51]:
+        - heading "Descargas" [level=1] [ref=e52]
+        - paragraph [ref=e53]: 2 total · 0 activas · 0 en cola
+        - generic [ref=e54]:
+          - heading "Completadas" [level=2] [ref=e55]
+          - generic [ref=e56]:
+            - generic [ref=e57]:
+              - img [ref=e58]
+              - generic [ref=e62]:
+                - paragraph [ref=e63]: DtMF
+                - paragraph [ref=e64]: Bad Bunny · DeBÍ TiRAR MáS FOToS
+              - generic [ref=e65]: 3:57
+              - button [ref=e66] [cursor=pointer]:
+                - img [ref=e67]
+            - generic [ref=e70]:
+              - img [ref=e71]
+              - generic [ref=e75]:
+                - paragraph [ref=e76]: Blinding Lights
+                - paragraph [ref=e77]: The Weeknd · After Hours
+              - generic [ref=e78]: 3:20
+              - button [ref=e79] [cursor=pointer]:
+                - img [ref=e80]
+    - generic [ref=e86]:
+      - generic [ref=e89]:
+        - paragraph [ref=e90]: Blinding Lights
+        - paragraph [ref=e91]: The Weeknd
+      - button [ref=e92] [cursor=pointer]:
+        - img [ref=e105]
+      - generic [ref=e96]:
+        - generic [ref=e97]: 0:00 / 0:29
+        - button [ref=e98] [cursor=pointer]:
+          - img [ref=e99]

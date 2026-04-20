@@ -1,0 +1,44 @@
+- generic [ref=e2]:
+  - region "Notifications alt+T"
+  - generic [ref=e3]:
+    - navigation [ref=e4]:
+      - link "Buscar" [ref=e5] [cursor=pointer]:
+        - /url: /
+        - img [ref=e6]
+        - text: Buscar
+      - link "Descargas" [ref=e9] [cursor=pointer]:
+        - /url: /downloads
+        - img [ref=e10]
+        - text: Descargas
+      - link "Ajustes" [ref=e13] [cursor=pointer]:
+        - /url: /settings
+        - img [ref=e14]
+        - text: Ajustes
+    - main [ref=e17]:
+      - generic [ref=e18]:
+        - generic [ref=e19]:
+          - heading "MHL Music" [level=1] [ref=e20]
+          - paragraph [ref=e21]: Tu musica. Sin limites.
+        - generic [ref=e22]:
+          - img [ref=e23]
+          - textbox "Buscar canciones, artistas..." [ref=e26]
+          - button "Buscar" [ref=e27] [cursor=pointer]:
+            - img [ref=e28]
+        - generic [ref=e31]:
+          - paragraph [ref=e32]: "Prueba con:"
+          - generic [ref=e33]:
+            - button "The Weeknd" [ref=e34] [cursor=pointer]
+            - button "Bad Bunny" [ref=e35] [cursor=pointer]
+            - button "Taylor Swift" [ref=e36] [cursor=pointer]
+            - button "Dua Lipa" [ref=e37] [cursor=pointer]
+            - button "Ed Sheeran" [ref=e38] [cursor=pointer]
+            - button "Daft Punk" [ref=e39] [cursor=pointer]
+            - button "Shakira" [ref=e40] [cursor=pointer]
+            - button "Peso Pluma" [ref=e41] [cursor=pointer]
+            - button "Feid" [ref=e42] [cursor=pointer]
+            - button "Karol G" [ref=e43] [cursor=pointer]
+            - button "Harry Styles" [ref=e44] [cursor=pointer]
+            - button "BTS" [ref=e45] [cursor=pointer]
+        - generic [ref=e46]:
+          - img [ref=e47]
+          - paragraph [ref=e51]: Escribe el nombre de una cancion o artista

@@ -1,0 +1,280 @@
+- generic [ref=e2]:
+  - region "Notifications alt+T"
+  - generic [ref=e3]:
+    - navigation [ref=e4]:
+      - link "Buscar" [ref=e5] [cursor=pointer]:
+        - /url: /
+        - img [ref=e6]
+        - text: Buscar
+      - link "Descargas" [ref=e9] [cursor=pointer]:
+        - /url: /downloads
+        - img [ref=e10]
+        - text: Descargas
+      - link "Ajustes" [ref=e13] [cursor=pointer]:
+        - /url: /settings
+        - img [ref=e14]
+        - text: Ajustes
+    - main [ref=e17]:
+      - generic [ref=e18]:
+        - generic [ref=e19]:
+          - heading "MHL Music" [level=1] [ref=e20]
+          - paragraph [ref=e21]: Tu musica. Sin limites.
+        - generic [ref=e22]:
+          - img [ref=e23]
+          - textbox "Buscar canciones, artistas..." [ref=e26]: The Weeknd
+          - button "Buscar" [ref=e52] [cursor=pointer]:
+            - img [ref=e53]
+        - paragraph [ref=e56]: 25 canciones encontradas para 'The Weeknd'
+        - generic [ref=e57]:
+          - generic [ref=e58] [cursor=pointer]:
+            - generic [ref=e59]:
+              - generic [ref=e60]:
+                - img [ref=e62]
+                - button "Descargar MP3" [ref=e64]:
+                  - img [ref=e65]
+              - generic [ref=e68]: 3:20
+              - img [ref=e70]
+            - generic [ref=e73]:
+              - paragraph [ref=e74]: Blinding Lights
+              - paragraph [ref=e75]: The Weeknd
+              - paragraph [ref=e76]: After Hours
+          - generic [ref=e77] [cursor=pointer]:
+            - generic [ref=e78]:
+              - generic [ref=e79]:
+                - img [ref=e81]
+                - button "Descargar MP3" [ref=e83]:
+                  - img [ref=e84]
+              - generic [ref=e87]: 3:35
+            - generic [ref=e88]:
+              - paragraph [ref=e89]: Save Your Tears
+              - paragraph [ref=e90]: The Weeknd
+          - generic [ref=e91] [cursor=pointer]:
+            - generic [ref=e92]:
+              - generic [ref=e93]:
+                - img [ref=e95]
+                - button "Descargar MP3" [ref=e97]:
+                  - img [ref=e98]
+              - generic [ref=e101]: 4:16
+            - generic [ref=e102]:
+              - paragraph [ref=e103]: Timeless
+              - paragraph [ref=e104]: The Weeknd
+          - generic [ref=e105] [cursor=pointer]:
+            - generic [ref=e106]:
+              - generic [ref=e107]:
+                - img [ref=e109]
+                - button "Descargar MP3" [ref=e111]:
+                  - img [ref=e112]
+              - generic [ref=e115]: 3:40
+            - generic [ref=e116]:
+              - paragraph [ref=e117]: Dancing In The Flames
+              - paragraph [ref=e118]: The Weeknd
+          - generic [ref=e119] [cursor=pointer]:
+            - generic [ref=e120]:
+              - generic [ref=e121]:
+                - img [ref=e123]
+                - button "Descargar MP3" [ref=e125]:
+                  - img [ref=e126]
+              - generic [ref=e129]: 3:50
+            - generic [ref=e130]:
+              - paragraph [ref=e131]: Starboy
+              - paragraph [ref=e132]: The Weeknd
+          - generic [ref=e133] [cursor=pointer]:
+            - generic [ref=e134]:
+              - generic [ref=e135]:
+                - img [ref=e137]
+                - button "Descargar MP3" [ref=e139]:
+                  - img [ref=e140]
+              - generic [ref=e143]: 3:54
+            - generic [ref=e144]:
+              - paragraph [ref=e145]: Moth To A Flame
+              - paragraph [ref=e146]: Swedish House Mafia
+          - generic [ref=e147] [cursor=pointer]:
+            - generic [ref=e148]:
+              - generic [ref=e149]:
+                - img [ref=e151]
+                - button "Descargar MP3" [ref=e153]:
+                  - img [ref=e154]
+              - generic [ref=e157]: 5:02
+            - generic [ref=e158]:
+              - paragraph [ref=e159]: São Paulo
+              - paragraph [ref=e160]: The Weeknd
+          - generic [ref=e161] [cursor=pointer]:
+            - generic [ref=e162]:
+              - generic [ref=e163]:
+                - img [ref=e165]
+                - button "Descargar MP3" [ref=e167]:
+                  - img [ref=e168]
+              - generic [ref=e171]: 4:05
+            - generic [ref=e172]:
+              - paragraph [ref=e173]: One Of The Girls
+              - paragraph [ref=e174]: The Weeknd
+          - generic [ref=e175] [cursor=pointer]:
+            - generic [ref=e176]:
+              - generic [ref=e177]:
+                - img [ref=e179]
+                - button "Descargar MP3" [ref=e181]:
+                  - img [ref=e182]
+              - generic [ref=e185]: 4:02
+            - generic [ref=e186]:
+              - paragraph [ref=e187]: The Hills
+              - paragraph [ref=e188]: The Weeknd
+          - generic [ref=e189] [cursor=pointer]:
+            - generic [ref=e190]:
+              - generic [ref=e191]:
+                - img [ref=e193]
+                - button "Descargar MP3" [ref=e195]:
+                  - img [ref=e196]
+              - generic [ref=e199]: 3:11
+            - generic [ref=e200]:
+              - paragraph [ref=e201]: Save Your Tears (Remix)
+              - paragraph [ref=e202]: The Weeknd
+          - generic [ref=e203] [cursor=pointer]:
+            - generic [ref=e204]:
+              - generic [ref=e205]:
+                - img [ref=e207]
+                - button "Descargar MP3" [ref=e209]:
+                  - img [ref=e210]
+              - generic [ref=e213]: 3:35
+            - generic [ref=e214]:
+              - paragraph [ref=e215]: Popular (From The Idol Vol. 1 Music from the HBO Original Series)
+              - paragraph [ref=e216]: The Weeknd
+          - generic [ref=e217] [cursor=pointer]:
+            - generic [ref=e218]:
+              - generic [ref=e219]:
+                - img [ref=e221]
+                - button "Descargar MP3" [ref=e223]:
+                  - img [ref=e224]
+              - generic [ref=e227]: 4:29
+            - generic [ref=e228]:
+              - paragraph [ref=e229]: I Feel It Coming
+              - paragraph [ref=e230]: The Weeknd
+          - generic [ref=e231] [cursor=pointer]:
+            - generic [ref=e232]:
+              - generic [ref=e233]:
+                - img [ref=e235]
+                - button "Descargar MP3" [ref=e237]:
+                  - img [ref=e238]
+              - generic [ref=e241]: 3:44
+            - generic [ref=e242]:
+              - paragraph [ref=e243]: Cry For Me
+              - paragraph [ref=e244]: The Weeknd
+          - generic [ref=e245] [cursor=pointer]:
+            - generic [ref=e246]:
+              - generic [ref=e247]:
+                - img [ref=e249]
+                - button "Descargar MP3" [ref=e251]:
+                  - img [ref=e252]
+              - generic [ref=e255]: 3:41
+            - generic [ref=e256]:
+              - paragraph [ref=e257]: Creepin'
+              - paragraph [ref=e258]: Metro Boomin
+          - generic [ref=e259] [cursor=pointer]:
+            - generic [ref=e260]:
+              - generic [ref=e261]:
+                - img [ref=e263]
+                - button "Descargar MP3" [ref=e265]:
+                  - img [ref=e266]
+              - generic [ref=e269]: 3:56
+            - generic [ref=e270]:
+              - paragraph [ref=e271]: Love Me Harder
+              - paragraph [ref=e272]: Ariana Grande
+          - generic [ref=e273] [cursor=pointer]:
+            - generic [ref=e274]:
+              - generic [ref=e275]:
+                - img [ref=e277]
+                - button "Descargar MP3" [ref=e279]:
+                  - img [ref=e280]
+              - generic [ref=e283]: 3:22
+            - generic [ref=e284]:
+              - paragraph [ref=e285]: Lost in the Fire
+              - paragraph [ref=e286]: Gesaffelstein
+          - generic [ref=e287] [cursor=pointer]:
+            - generic [ref=e288]:
+              - generic [ref=e289]:
+                - img [ref=e291]
+                - button "Descargar MP3" [ref=e293]:
+                  - img [ref=e294]
+              - generic [ref=e297]: 3:48
+            - generic [ref=e298]:
+              - paragraph [ref=e299]: Call Out My Name
+              - paragraph [ref=e300]: The Weeknd
+          - generic [ref=e301] [cursor=pointer]:
+            - generic [ref=e302]:
+              - generic [ref=e303]:
+                - img [ref=e305]
+                - button "Descargar MP3" [ref=e307]:
+                  - img [ref=e308]
+              - generic [ref=e311]: 4:20
+            - generic [ref=e312]:
+              - paragraph [ref=e313]: Die For You
+              - paragraph [ref=e314]: The Weeknd
+          - generic [ref=e315] [cursor=pointer]:
+            - generic [ref=e316]:
+              - generic [ref=e317]:
+                - img [ref=e319]
+                - button "Descargar MP3" [ref=e321]:
+                  - img [ref=e322]
+              - generic [ref=e325]: 3:35
+            - generic [ref=e326]:
+              - paragraph [ref=e327]: Can't Feel My Face
+              - paragraph [ref=e328]: The Weeknd
+          - generic [ref=e329] [cursor=pointer]:
+            - generic [ref=e330]:
+              - generic [ref=e331]:
+                - img [ref=e333]
+                - button "Descargar MP3" [ref=e335]:
+                  - img [ref=e336]
+              - generic [ref=e339]: 6:47
+            - generic [ref=e340]:
+              - paragraph [ref=e341]: House Of Balloons / Glass Table Girls
+              - paragraph [ref=e342]: The Weeknd
+          - generic [ref=e343] [cursor=pointer]:
+            - generic [ref=e344]:
+              - generic [ref=e345]:
+                - img [ref=e347]
+                - button "Descargar MP3" [ref=e349]:
+                  - img [ref=e350]
+              - generic [ref=e353]: 3:08
+            - generic [ref=e354]:
+              - paragraph [ref=e355]: LA FAMA
+              - paragraph [ref=e356]: ROSALÍA
+          - generic [ref=e357] [cursor=pointer]:
+            - generic [ref=e358]:
+              - generic [ref=e359]:
+                - img [ref=e361]
+                - button "Descargar MP3" [ref=e363]:
+                  - img [ref=e364]
+              - generic [ref=e367]: 4:10
+            - generic [ref=e368]:
+              - paragraph [ref=e369]: Often
+              - paragraph [ref=e370]: The Weeknd
+          - generic [ref=e371] [cursor=pointer]:
+            - generic [ref=e372]:
+              - generic [ref=e373]:
+                - img [ref=e375]
+                - button "Descargar MP3" [ref=e377]:
+                  - img [ref=e378]
+              - generic [ref=e381]: 5:15
+            - generic [ref=e382]:
+              - paragraph [ref=e383]: Low Life (feat. The Weeknd)
+              - paragraph [ref=e384]: Future
+          - generic [ref=e385] [cursor=pointer]:
+            - generic [ref=e386]:
+              - generic [ref=e387]:
+                - img [ref=e389]
+                - button "Descargar MP3" [ref=e391]:
+                  - img [ref=e392]
+              - generic [ref=e395]: 4:12
+            - generic [ref=e396]:
+              - paragraph [ref=e397]: Earned It (Fifty Shades Of Grey) (From The "Fifty Shades Of Grey" Soundtrack)
+              - paragraph [ref=e398]: The Weeknd
+          - generic [ref=e399] [cursor=pointer]:
+            - generic [ref=e400]:
+              - generic [ref=e401]:
+                - img [ref=e403]
+                - button "Descargar MP3" [ref=e405]:
+                  - img [ref=e406]
+              - generic [ref=e409]: 3:31
+            - generic [ref=e410]:
+              - paragraph [ref=e411]: Pray For Me
+              - paragraph [ref=e412]: The Weeknd

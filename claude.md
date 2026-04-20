@@ -7,12 +7,12 @@ Resumen operativo para agentes.
 App web + Android para buscar, reproducir y descargar música.
 
 - **Web:** React + Vite, static site en Render
-- **Backend:** `services/ytdlp-service` en Railway (FastAPI + Python)
+- **Backend:** `services/ytdlp-service` en Fly.io (FastAPI + Python)
 - **Android:** Capacitor + plugin nativo `yt-dlp`
 
 ## Arquitectura
 
-**No hay Supabase.** Todo el backend es un solo servicio FastAPI en Railway.
+**No hay Supabase.** Todo el backend es un solo servicio FastAPI en Fly.io.
 
 Endpoints del backend:
 - `POST /deezer` — proxy Deezer (search, artist, album, trackMeta, home, genre)
@@ -25,7 +25,7 @@ Endpoints del backend:
 ## Variables de entorno del frontend
 
 ```
-VITE_RAILWAY_URL=https://ytdlp-service-production-1b4b.up.railway.app
+VITE_RAILWAY_URL=https://ytdlp-service-little-sea-7784.fly.dev
 VITE_SERVICE_API_KEY=...
 ```
 
