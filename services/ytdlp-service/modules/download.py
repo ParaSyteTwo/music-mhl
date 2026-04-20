@@ -47,22 +47,24 @@ def ytdlp_version_info() -> dict[str, Any]:
 
 
 def build_download_options(
-    video_id: str, format_name: str, workdir: Path, client: str = "android_music"
+    video_id: str, format_name: str, workdir: Path, client: str = "android_music", use_cookies: bool = True
 ) -> dict[str, Any]:
-    """Construye opciones para yt-dlp con cookies y configuración de FFmpeg."""
+    """Construye opciones para yt-dlp con cookies y configuración de FFmpeg.
+    use_cookies=False intenta descargar sin autenticación (fallback para cookies expiradas)."""
     ext = "m4a" if format_name == "aac" else "mp3"
     ffmpeg_location = shutil.which("ffmpeg") or get_ffmpeg_exe()
 
     cookies_path = None
-    active_b64 = get_active_cookies_b64()
-    if active_b64:
-        from .cookies import _decode_cookies_to_file
+    if use_cookies:
+        active_b64 = get_active_cookies_b64()
+        if active_b64:
+            from .cookies import _decode_cookies_to_file
 
-        cookies_path = workdir / "youtube-cookies.txt"
-        _decode_cookies_to_file(active_b64, cookies_path)
-    elif YOUTUBE_COOKIES.strip():
-        cookies_path = workdir / "youtube-cookies.txt"
-        cookies_path.write_text(YOUTUBE_COOKIES, encoding="utf-8")
+            cookies_path = workdir / "youtube-cookies.txt"
+            _decode_cookies_to_file(active_b64, cookies_path)
+        elif YOUTUBE_COOKIES.strip():
+            cookies_path = workdir / "youtube-cookies.txt"
+            cookies_path.write_text(YOUTUBE_COOKIES, encoding="utf-8")
 
     return {
         "quiet": True,

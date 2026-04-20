@@ -164,6 +164,10 @@ def register_download_routes(app: FastAPI) -> None:
 
             last_ytdlp_err: Exception | None = None
             updated_once = False
+            auth_retry_count = 0
+            max_auth_retries = len(_ALL_COOKIES_B64)
+            tried_without_cookies = False
+
             for client in YTDLP_CLIENTS:
                 try:
                     output = _run_ytdlp(client)
@@ -171,11 +175,13 @@ def register_download_routes(app: FastAPI) -> None:
                     break
                 except Exception as ytdlp_err:
                     last_ytdlp_err = ytdlp_err
+                    err_type = classify_ytdlp_error(ytdlp_err)
                     print(
-                        f"[ytdlp] client={client} error={type(ytdlp_err).__name__}: {ytdlp_err}",
+                        f"[ytdlp] client={client} type={err_type} error={str(ytdlp_err)[:80]}",
                         flush=True,
                     )
-                    err_type = classify_ytdlp_error(ytdlp_err)
+
+                    # Auto-update yt-dlp una vez si error de extractor
                     if not updated_once and err_type in (
                         "ytdlp_extractor",
                         "ytdlp_unknown",
@@ -192,19 +198,17 @@ def register_download_routes(app: FastAPI) -> None:
                                 break
                             except Exception as retry_err:
                                 last_ytdlp_err = retry_err
-                    if (
-                        err_type == "ytdlp_auth"
-                        and len(_ALL_COOKIES_B64) > 1
-                    ):
+
+                    # Retry con cookies rotadas si error de auth
+                    if err_type == "ytdlp_auth" and auth_retry_count < max_auth_retries:
+                        auth_retry_count += 1
                         prev_idx = get_cookies_index() + 1
                         rotate_cookies()
                         new_idx = get_cookies_index() + 1
                         threading.Thread(
-                            target=lambda p=prev_idx, n=new_idx: asyncio.run(
+                            target=lambda p=prev_idx, n=new_idx, t=len(_ALL_COOKIES_B64): asyncio.run(
                                 send_telegram(
-                                    f"🔄 Cookies rotadas en producción\n"
-                                    f"#{p} → #{n}/{len(_ALL_COOKIES_B64)}\n"
-                                    f"{'🟢' * n + '⬜' * (len(_ALL_COOKIES_B64) - n)}"
+                                    f"🔄 Auth fallido, rotando cookies #{p}→#{n}/{t}"
                                 )
                             ),
                             daemon=True,
@@ -215,7 +219,33 @@ def register_download_routes(app: FastAPI) -> None:
                             break
                         except Exception as retry_err:
                             last_ytdlp_err = retry_err
-                        break
+                            # Continue to next cookie/client
+
+                    # Fallback: Retry sin cookies si persiste error de auth
+                    if err_type == "ytdlp_auth" and not tried_without_cookies:
+                        tried_without_cookies = True
+                        print("[ytdlp] Auth falló con todas las cookies, intentando sin cookies...", flush=True)
+                        try:
+                            # Rebuild options sin cookies
+                            opts_no_cookies = build_download_options(
+                                video_id, format_name, workdir, client, use_cookies=False
+                            )
+                            with YoutubeDL(opts_no_cookies) as ydl:
+                                ydl.download([f"https://www.youtube.com/watch?v={video_id}"])
+                            ext = "m4a" if format_name == "aac" else "mp3"
+                            output = next(workdir.glob(f"audio*.{ext}"), None)
+                            if output:
+                                ytdlp_ok = True
+                                threading.Thread(
+                                    target=lambda: asyncio.run(
+                                        send_telegram("✅ Descarga exitosa SIN cookies (fallback)")
+                                    ),
+                                    daemon=True,
+                                ).start()
+                                break
+                        except Exception as no_cookie_err:
+                            last_ytdlp_err = no_cookie_err
+                            print(f"[ytdlp] También falló sin cookies: {str(no_cookie_err)[:80]}", flush=True)
 
             if not ytdlp_ok and last_ytdlp_err is not None:
                 err_type = classify_ytdlp_error(last_ytdlp_err)
