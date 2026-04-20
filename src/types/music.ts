@@ -60,4 +60,7 @@ export interface Download {
   status: 'queued' | 'downloading' | 'completed' | 'error';
   error?: string;
   fileName?: string;
+  speed?: string;    // e.g. "1.2 MB/s" — solo durante descarga nativa
+  eta?: number;      // segundos restantes — solo durante descarga nativa
+  mediaUri?: string; // content:// URI de MediaStore para abrir en reproductores externos
 }

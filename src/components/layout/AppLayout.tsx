@@ -1,4 +1,4 @@
-import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { Outlet, NavLink } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
 import { BottomPlayer } from './BottomPlayer';
 import { Search, Download, Settings } from 'lucide-react';
@@ -31,7 +31,6 @@ export function AppLayout() {
   const isMaintenanceMode = useMusicStore((s) => s.isMaintenanceMode);
   const maintenanceUntil = useMusicStore((s) => s.maintenanceUntil);
   const setMaintenanceMode = useMusicStore((s) => s.setMaintenanceMode);
-  const navigate = useNavigate();
   const countdown = useCountdown(maintenanceUntil);
 
   // Poll /health para detectar mantenimiento proactivamente
@@ -111,13 +110,6 @@ export function AppLayout() {
         }}
       >
         <span className="text-sm font-semibold tracking-tight text-[#F5F5F0]">MHL Music</span>
-        <button
-          onClick={() => navigate('/settings')}
-          className="w-9 h-9 flex items-center justify-center rounded-xl text-[#999] active:text-[#C8F04B] active:bg-[rgba(200,240,75,0.1)] transition-colors"
-          aria-label="Ajustes"
-        >
-          <Settings className="w-5 h-5" />
-        </button>
       </header>
 
       {/* Desktop top nav */}

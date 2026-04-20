@@ -2,6 +2,7 @@ import asyncio
 import json
 import tempfile
 import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -44,7 +45,7 @@ def register_download_routes(app: FastAPI) -> None:
         request: Request,
         authorization: str | None = Header(default=None),
     ) -> dict[str, Any]:
-        """Genera un ticket firmado para descargar audio."""
+        """OPCIÓN B2: Devuelve URL directa de YouTube en lugar de archivo procesado."""
         require_service_key(authorization)
 
         if is_maintenance():
@@ -104,18 +105,43 @@ def register_download_routes(app: FastAPI) -> None:
                 resolved_video_id = chosen["videoId"]
 
         safe_name = sanitize_filename(f"{title} - {artist}.{format_name}")
-        token_info = build_token(resolved_video_id, safe_name, format_name)
 
-        service_url = RAILWAY_PUBLIC_DOMAIN
-        if service_url and not service_url.startswith("http"):
-            service_url = f"https://{service_url}"
+        # OPCIÓN B2: Obtener URL directa de YouTube en lugar de procesar
+        print(f"[download-ticket B2] Obteniendo URL directa para video {resolved_video_id}", flush=True)
+        direct_audio_url = None
+        try:
+            # Usar yt-dlp para obtener metadatos y URL directa sin descargar
+            with YoutubeDL({
+                "quiet": True,
+                "noplaylist": True,
+                "skip_download": True,  # CRÍTICO: solo metadatos, no descarga
+                "format": "bestaudio/best",
+                "extractor_args": {"youtube": {"player_client": ["android_music"]}},
+            }) as ydl:
+                info = ydl.extract_info(f"https://www.youtube.com/watch?v={resolved_video_id}", download=False)
+                # info['url'] contiene la URL directa del audio
+                direct_audio_url = info.get("url")
+                print(f"[download-ticket B2] URL obtenida: {direct_audio_url[:80] if direct_audio_url else 'NONE'}...", flush=True)
+        except Exception as e:
+            print(f"[download-ticket B2] Error obteniendo URL: {e}", flush=True)
+            raise HTTPException(
+                status_code=502,
+                detail=f"No se pudo obtener URL de audio: {str(e)[:100]}"
+            )
 
-        download_url = f"{service_url}/download?token={token_info['token']}"
+        if not direct_audio_url:
+            raise HTTPException(
+                status_code=502,
+                detail="No se encontró URL de audio en YouTube"
+            )
+
+        # Devolver URL directa (sin necesidad de token firmado para esta URL)
+        # La URL de YouTube incluye token y expira naturalmente
         return {
             "success": True,
             "fileName": safe_name,
-            "expiresAt": token_info["expiresAt"],
-            "downloadUrl": download_url,
+            "audioUrl": direct_audio_url,  # URL directa que el navegador usará
+            "expiresAt": int(time.time()) + 3600,  # URL vive 1 hora (límite de YouTube)
         }
 
     @app.get("/download")
@@ -125,6 +151,7 @@ def register_download_routes(app: FastAPI) -> None:
         video_id = str(payload.get("videoId") or "").strip()
         file_name = str(payload.get("fileName") or "download.mp3")
         format_name = str(payload.get("format") or "mp3").strip().lower()
+        quality = str(payload.get("quality") or "alta").strip().lower()
 
         if is_maintenance():
             raise HTTPException(
@@ -156,7 +183,7 @@ def register_download_routes(app: FastAPI) -> None:
 
             def _run_ytdlp(client: str) -> Path | None:
                 with YoutubeDL(
-                    build_download_options(video_id, format_name, workdir, client)
+                    build_download_options(video_id, format_name, workdir, client, quality=quality)
                 ) as ydl:
                     ydl.download([f"https://www.youtube.com/watch?v={video_id}"])
                 ext = "m4a" if format_name == "aac" else "mp3"
@@ -228,7 +255,7 @@ def register_download_routes(app: FastAPI) -> None:
                         try:
                             # Rebuild options sin cookies
                             opts_no_cookies = build_download_options(
-                                video_id, format_name, workdir, client, use_cookies=False
+                                video_id, format_name, workdir, client, use_cookies=False, quality=quality
                             )
                             with YoutubeDL(opts_no_cookies) as ydl:
                                 ydl.download([f"https://www.youtube.com/watch?v={video_id}"])

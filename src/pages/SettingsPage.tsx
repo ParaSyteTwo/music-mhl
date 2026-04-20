@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Settings, Folder, AlertTriangle, Wifi, RefreshCw, CheckCircle2, FolderOpen, X } from 'lucide-react';
+import { Settings, Folder, Wifi, RefreshCw, CheckCircle2, FolderOpen, X, Music2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useMusicStore } from '@/store/musicStore';
 import { t } from '@/lib/i18n';
 import { Capacitor } from '@capacitor/core';
+import type { AudioPlayer } from '@/lib/openFileBridge';
 
 const isAndroid = Capacitor.getPlatform() === 'android';
 
@@ -13,12 +14,14 @@ export default function SettingsPage() {
     downloadFormat, setDownloadFormat,
     mp3Quality, setMp3Quality,
     downloadWifiOnly, setDownloadWifiOnly,
-    appLanguage, setAppLanguage,
     ytDlpVersion, ytDlpUpdateAvailable, ytDlpUpdating,
     setYtDlpVersion, setYtDlpUpdateAvailable, setYtDlpUpdating,
+    preferredPlayerPackage, setPreferredPlayerPackage,
   } = useMusicStore();
 
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'done' | 'skipped' | 'error'>('idle');
+  const [audioPlayers, setAudioPlayers] = useState<AudioPlayer[]>([]);
+  const [loadingPlayers, setLoadingPlayers] = useState(false);
 
   useEffect(() => {
     if (!isAndroid) return;
@@ -37,6 +40,14 @@ export default function SettingsPage() {
       } catch { /* silencioso */ }
     })();
   }, [setYtDlpVersion, setYtDlpUpdateAvailable]);
+
+  useEffect(() => {
+    if (!isAndroid) return;
+    setLoadingPlayers(true);
+    import('@/lib/openFileBridge').then(({ getAudioPlayers }) =>
+      getAudioPlayers().then((list) => setAudioPlayers(list)).catch(() => {})
+    ).catch(() => {}).finally(() => setLoadingPlayers(false));
+  }, []);
 
   const handleUpdate = async () => {
     if (ytDlpUpdating) return;
@@ -99,15 +110,15 @@ export default function SettingsPage() {
           <div className="flex gap-4 items-center p-4 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)]">
               <label className="flex items-center gap-2 cursor-pointer">
               <input type="radio" name="mp3q" value="alta" checked={mp3Quality === 'alta'} onChange={() => setMp3Quality('alta')} />
-              <span className="text-sm">Alta (192kbps)</span>
+              <span className="text-sm">Alta (320kbps)</span>
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="radio" name="mp3q" value="media" checked={mp3Quality === 'media'} onChange={() => setMp3Quality('media')} />
-              <span className="text-sm">Media (128kbps)</span>
+              <span className="text-sm">Media (192kbps)</span>
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="radio" name="mp3q" value="baja" checked={mp3Quality === 'baja'} onChange={() => setMp3Quality('baja')} />
-              <span className="text-sm">Baja (96kbps)</span>
+              <span className="text-sm">Baja (128kbps)</span>
             </label>
           </div>
         </section>
@@ -125,21 +136,6 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      {/* Selector de idioma */}
-      <section className="mb-8">
-        <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">{t('appLanguage')}</h2>
-        <div className="flex gap-4 items-center p-4 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)]">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="radio" name="lang" value="es" checked={appLanguage === 'es'} onChange={() => setAppLanguage('es')} />
-            <span className="text-sm">Español</span>
-          </label>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="radio" name="lang" value="en" checked={appLanguage === 'en'} onChange={() => setAppLanguage('en')} />
-            <span className="text-sm">Inglés</span>
-          </label>
-        </div>
-      </section>
-
       <section className="mb-8">
         <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">Carpeta de descargas</h2>
 
@@ -148,9 +144,9 @@ export default function SettingsPage() {
             <div className="flex items-center gap-3">
               <Folder className="w-5 h-5 text-[#C8F04B] flex-shrink-0" />
               <div className="flex-1 min-w-0">
-                <p className="text-sm text-[#F5F5F0] font-medium">MHL Music/</p>
+                <p className="text-sm text-[#F5F5F0] font-medium">Music / MHL Music</p>
                 <p className="text-xs text-[#666660] mt-0.5">
-                  Las descargas se guardan automáticamente en la carpeta Descargas/MHL Music del dispositivo.
+                  Las canciones se guardan directamente en la carpeta <span className="text-[#C8F04B] font-medium">Música → MHL Music</span> del dispositivo, visible en cualquier reproductor de audio.
                 </p>
               </div>
             </div>
@@ -198,6 +194,62 @@ export default function SettingsPage() {
           )}
         </div>
       </section>
+
+      {/* Reproductor predeterminado — solo Android */}
+      {isAndroid && (
+        <section className="mb-8">
+          <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">Reproductor predeterminado</h2>
+          <div className="p-4 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] space-y-3">
+            <p className="text-xs text-[#666660]">
+              Elige qué app abre las canciones descargadas. Si dejas "Preguntar siempre" verás el selector cada vez.
+            </p>
+
+            {loadingPlayers ? (
+              <p className="text-xs text-[#444]">Cargando reproductores…</p>
+            ) : audioPlayers.length === 0 ? (
+              <p className="text-xs text-[#444]">No se detectaron reproductores de audio.</p>
+            ) : (
+              <div className="space-y-2">
+                {/* Opción "Preguntar siempre" */}
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="defaultPlayer"
+                    checked={preferredPlayerPackage === null}
+                    onChange={() => setPreferredPlayerPackage(null)}
+                    className="accent-[#C8F04B]"
+                  />
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-[rgba(255,255,255,0.06)] flex items-center justify-center flex-shrink-0">
+                      <Music2 className="w-4 h-4 text-[#666660]" />
+                    </div>
+                    <span className="text-sm text-[#F5F5F0]">Preguntar siempre</span>
+                  </div>
+                </label>
+
+                {/* Lista de reproductores instalados */}
+                {audioPlayers.map((player) => (
+                  <label key={player.packageName} className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="defaultPlayer"
+                      checked={preferredPlayerPackage === player.packageName}
+                      onChange={() => setPreferredPlayerPackage(player.packageName)}
+                      className="accent-[#C8F04B]"
+                    />
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-[rgba(200,240,75,0.08)] flex items-center justify-center flex-shrink-0">
+                        <Music2 className="w-4 h-4 text-[#C8F04B]" />
+                      </div>
+                      <span className="text-sm text-[#F5F5F0]">{player.label}</span>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
       {/* yt-dlp — solo visible en Android, con diseño coherente */}
       {isAndroid && (

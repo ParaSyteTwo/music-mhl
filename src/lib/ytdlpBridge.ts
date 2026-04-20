@@ -1,10 +1,17 @@
 import { registerPlugin, Capacitor } from '@capacitor/core';
+import type { PluginListenerHandle } from '@capacitor/core';
 
 export interface YtDlpSearchResult {
   videoId: string;
   title: string;
   duration: number;
   channel: string;
+}
+
+export interface YtDlpProgressEvent {
+  progress: number;  // 0-100
+  eta: number;       // segundos restantes
+  speed: string;     // e.g. "1.2 MB/s"
 }
 
 interface YtDlpPluginInterface {
@@ -16,6 +23,8 @@ interface YtDlpPluginInterface {
   downloadAsMp3?: (options: { videoId: string }) => Promise<{ success: boolean; data: string; size: number }>;
   downloadAudio?: (options: { videoId: string; format?: string; quality?: string }) => Promise<{ success: boolean; data: string; size: number; fileName?: string }>;
   saveAudioToMusicMediaStore?: (options: { videoId: string; fileName: string }) => Promise<{ success: boolean; uri: string }>;
+  saveTaggedAudioToMusic?: (options: { fileName: string; data: string }) => Promise<{ success: boolean; uri: string }>;
+  addListener(eventName: 'downloadProgress', listenerFunc: (event: YtDlpProgressEvent) => void): Promise<PluginListenerHandle>;
 }
 
 const YtDlp = registerPlugin<YtDlpPluginInterface>('YtDlp');
@@ -105,6 +114,48 @@ export async function saveAudioToMediaStore(videoId: string, fileName: string): 
   const result = await YtDlp.saveAudioToMusicMediaStore!({ videoId, fileName });
   if (!result?.success) throw new Error('MediaStore save failed');
   return result.uri;
+}
+
+export async function saveTaggedAudioToMusic(fileName: string, base64Data: string): Promise<string> {
+  if (!Capacitor.isNativePlatform()) throw new Error('Not on native platform');
+  if (!initialized) await initYtDlp();
+  const result = await YtDlp.saveTaggedAudioToMusic!({ fileName, data: base64Data });
+  if (!result?.success) throw new Error('MediaStore save failed');
+  return result.uri;
+}
+
+export async function searchYouTubeNativeMulti(queries: string[]): Promise<YtDlpSearchResult[]> {
+  if (!initialized) await initYtDlp();
+  // Lanza todas las búsquedas en paralelo y combina, deduplicando por videoId
+  const results = await Promise.allSettled(queries.map((q) => YtDlp.search({ query: q })));
+  const seen = new Set<string>();
+  const combined: YtDlpSearchResult[] = [];
+  for (const r of results) {
+    if (r.status === 'fulfilled') {
+      for (const item of r.value.results ?? []) {
+        if (!seen.has(item.videoId)) {
+          seen.add(item.videoId);
+          combined.push(item);
+        }
+      }
+    }
+  }
+  return combined;
+}
+
+/**
+ * Escucha eventos de progreso de yt-dlp en tiempo real (solo Android).
+ * Retorna un handle con `.remove()` para limpiar cuando termine la descarga.
+ */
+export async function addDownloadProgressListener(
+  callback: (event: YtDlpProgressEvent) => void
+): Promise<PluginListenerHandle | null> {
+  if (!Capacitor.isNativePlatform()) return null;
+  try {
+    return await YtDlp.addListener('downloadProgress', callback);
+  } catch {
+    return null;
+  }
 }
 
 export default YtDlp;

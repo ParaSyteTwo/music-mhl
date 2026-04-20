@@ -12,7 +12,6 @@ const translations: Record<Lang, Record<string, string>> = {
     aac: 'AAC',
     mp3Quality: 'Calidad MP3',
     wifiOnly: 'Descargar solo con WiFi',
-    appLanguage: 'Idioma de la app',
     downloadFolder: 'Carpeta de descargas',
     about: 'Acerca de',
   },
@@ -27,17 +26,23 @@ const translations: Record<Lang, Record<string, string>> = {
     aac: 'AAC',
     mp3Quality: 'MP3 Quality',
     wifiOnly: 'Download on WiFi only',
-    appLanguage: 'App language',
     downloadFolder: 'Download folder',
     about: 'About',
   },
 };
 
-import { useMusicStore } from '@/store/musicStore';
+function detectLang(): Lang {
+  try {
+    const nav = navigator.language ?? navigator.languages?.[0] ?? 'en';
+    return nav.startsWith('es') ? 'es' : 'en';
+  } catch {
+    return 'en';
+  }
+}
 
 export function t(key: string): string {
-  const lang = useMusicStore.getState().appLanguage || 'es';
-  return translations[lang as Lang][key] || key;
+  const lang = detectLang();
+  return translations[lang][key] || key;
 }
 
 export default t;

@@ -24,20 +24,26 @@ import org.json.JSONObject;
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.provider.MediaStore;
+import java.io.DataInputStream;
 import java.io.OutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import android.util.Base64;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @CapacitorPlugin(name = "YtDlp")
 public class YtDlpPlugin extends Plugin {
 
     private static final String TAG = "YtDlpPlugin";
     private static final int MAX_SEARCH_CACHE_ENTRIES = 24;
+    private static final Pattern SPEED_PATTERN =
+        Pattern.compile("at\\s+([\\d.]+)\\s*(KiB|MiB|GiB|KB|MB|GB)/s");
     private boolean isInitialized = false;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final Map<String, JSArray> searchCache = new LinkedHashMap<String, JSArray>(MAX_SEARCH_CACHE_ENTRIES, 0.75f, true) {
@@ -49,17 +55,32 @@ public class YtDlpPlugin extends Plugin {
 
     // (Removed SAF/picker code - using MediaStore-only storage)
 
+    /** Extrae velocidad de una línea de yt-dlp, e.g. "at 1.23MiB/s" → "1.2 MB/s" */
+    private static String parseSpeed(String line) {
+        if (line == null || line.isEmpty()) return "";
+        Matcher m = SPEED_PATTERN.matcher(line);
+        if (m.find()) {
+            String val = m.group(1);
+            String unit = m.group(2);
+            // Normalizar unidades
+            String display = unit.replace("iB", "B"); // KiB→KB, MiB→MB, GiB→GB
+            return val + " " + display + "/s";
+        }
+        return "";
+    }
+
     private synchronized void ensureInitialized() throws Exception {
         if (!isInitialized) {
             try {
                 YoutubeDL.getInstance().init(getContext());
                 Log.i(TAG, "yt-dlp initialized");
                 try {
-                    // For Kotlin-generated sealed/object classes the instance is exposed as INSTANCE
-                    YoutubeDL.getInstance().updateYoutubeDL(getContext(), YoutubeDL.UpdateChannel.STABLE.INSTANCE);
-                    Log.i(TAG, "yt-dlp update triggered (STABLE)");
+                    YoutubeDL.UpdateStatus updateStatus = YoutubeDL.getInstance().updateYoutubeDL(
+                        getContext(), YoutubeDL.UpdateChannel.STABLE.INSTANCE
+                    );
+                    Log.i(TAG, "yt-dlp update on init: " + updateStatus);
                 } catch (Exception e) {
-                    Log.w(TAG, "yt-dlp update failed: " + e.getMessage());
+                    Log.w(TAG, "yt-dlp update on init failed (non-fatal): " + e.getMessage());
                 }
             } catch (Exception e) {
                 Log.e(TAG, "yt-dlp init error: " + e.getMessage());
@@ -102,21 +123,24 @@ public class YtDlpPlugin extends Plugin {
         executor.execute(() -> {
             try {
                 ensureInitialized();
-                // yt-dlp updates are handled by the youtube-dl-android library
-                // which checks for updates automatically on certain operations.
-                // A full update trigger would require library version upgrade.
-                Log.i(TAG, "Update check requested - library auto-updates on demand");
+                Log.i(TAG, "Updating yt-dlp...");
+                YoutubeDL.UpdateStatus status = YoutubeDL.getInstance().updateYoutubeDL(
+                    getContext(), YoutubeDL.UpdateChannel.STABLE.INSTANCE
+                );
+                String statusStr = status != null ? status.toString() : "DONE";
+                Log.i(TAG, "yt-dlp update result: " + statusStr);
+                String version = YoutubeDL.getInstance().version(getContext());
 
                 JSObject result = new JSObject();
                 result.put("success", true);
-                result.put("status", "DONE");
-                result.put("message", "yt-dlp estará actualizado en la próxima descarga");
+                result.put("status", statusStr);
+                result.put("version", version != null ? version : "unknown");
                 bridge.getActivity().runOnUiThread(() -> call.resolve(result));
             } catch (Exception e) {
-                Log.w(TAG, "Update check failed: " + e.getMessage(), e);
+                Log.w(TAG, "yt-dlp update failed: " + e.getMessage(), e);
                 JSObject result = new JSObject();
-                result.put("success", true);
-                result.put("status", "SKIPPED");
+                result.put("success", false);
+                result.put("status", "FAILED");
                 result.put("error", e.getMessage());
                 bridge.getActivity().runOnUiThread(() -> call.resolve(result));
             }
@@ -300,12 +324,38 @@ public class YtDlpPlugin extends Plugin {
                 YoutubeDLRequest request = new YoutubeDLRequest(url);
                 request.addOption("-x");
                 request.addOption("--audio-format", "mp3");
+                request.addOption("--audio-quality", "0");   // mejor calidad (~320kbps VBR)
                 request.addOption("-o", outputPath);
                 request.addOption("--no-playlist");
+                request.addOption("--no-part");               // sin archivos .part (menos I/O)
+                request.addOption("--retries", "5");          // reintentos de red
+                request.addOption("--fragment-retries", "10"); // reintentos por fragmento
+                // Usar cliente Android para evitar SABR streaming forzado por YouTube (403)
+                request.addOption("--extractor-args", "youtube:player_client=android,web");
+                // 8 fragmentos paralelos: máximo seguro sin triggers de rate-limit de YouTube
+                request.addOption("--concurrent-fragments", "8");
 
                 Log.i(TAG, "Downloading audio for: " + videoId + " -> " + outputPath);
-                YoutubeDLResponse response = YoutubeDL.getInstance().execute(request);
-                Log.i(TAG, "Download stdout: " + (response.getOut() != null ? response.getOut().substring(0, Math.min(200, response.getOut().length())) : "null"));
+
+                // Callback de progreso: reporta %, ETA y velocidad en tiempo real al JS bridge
+                YoutubeDLResponse response = YoutubeDL.getInstance().execute(
+                    request,
+                    (String) null,
+                    new kotlin.jvm.functions.Function3<Float, Long, String, kotlin.Unit>() {
+                        @Override
+                        public kotlin.Unit invoke(Float progress, Long etaInSeconds, String line) {
+                            try {
+                                JSObject data = new JSObject();
+                                data.put("progress", Math.round(progress));
+                                data.put("eta", etaInSeconds);
+                                data.put("speed", parseSpeed(line));
+                                notifyListeners("downloadProgress", data);
+                            } catch (Exception ignored) {}
+                            return kotlin.Unit.INSTANCE;
+                        }
+                    }
+                );
+                Log.i(TAG, "Download complete stdout: " + (response.getOut() != null ? response.getOut().substring(0, Math.min(200, response.getOut().length())) : "null"));
                 String errOutput = response.getErr();
                 if (errOutput != null && !errOutput.isEmpty()) {
                     Log.i(TAG, "Download stderr: " + errOutput.substring(0, Math.min(500, errOutput.length())));
@@ -316,10 +366,12 @@ public class YtDlpPlugin extends Plugin {
                     return;
                 }
 
-                // Leer archivo y codificar en base64 para devolver al bridge JS
+                // Leer archivo completo y codificar en base64 para devolver al bridge JS
+                // IMPORTANTE: usar DataInputStream.readFully() para garantizar lectura completa.
+                // FileInputStream.read() puede devolver menos bytes de los pedidos (bug 88KB).
                 byte[] fileBytes = new byte[(int) outputFile.length()];
-                try (FileInputStream fis = new FileInputStream(outputFile)) {
-                    fis.read(fileBytes);
+                try (DataInputStream dis = new DataInputStream(new FileInputStream(outputFile))) {
+                    dis.readFully(fileBytes);
                 } finally {
                     outputFile.delete();
                 }
@@ -344,6 +396,59 @@ public class YtDlpPlugin extends Plugin {
         downloadAudio(call);
     }
 
+    /**
+     * Guarda audio ya procesado (con ID3 tags) en Music/MHL Music via MediaStore.
+     * Recibe: fileName (string), data (base64 string)
+     * Devuelve: uri (string)
+     */
+    @PluginMethod
+    public void saveTaggedAudioToMusic(PluginCall call) {
+        String fileName = call.getString("fileName");
+        String base64Data = call.getString("data");
+        if (fileName == null || fileName.isEmpty() || base64Data == null || base64Data.isEmpty()) {
+            call.reject("fileName and data are required");
+            return;
+        }
+
+        executor.execute(() -> {
+            try {
+                byte[] audioBytes = Base64.decode(base64Data, Base64.NO_WRAP);
+
+                ContentValues values = new ContentValues();
+                values.put(MediaStore.Audio.Media.DISPLAY_NAME, fileName);
+                values.put(MediaStore.Audio.Media.MIME_TYPE, fileName.endsWith(".m4a") ? "audio/mp4" : "audio/mpeg");
+                values.put(MediaStore.Audio.Media.RELATIVE_PATH, "Music/MHL Music");
+                values.put(MediaStore.Audio.Media.IS_PENDING, 1);
+
+                ContentResolver resolver = getContext().getContentResolver();
+                Uri itemUri = resolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values);
+
+                if (itemUri == null) {
+                    bridge.getActivity().runOnUiThread(() -> call.reject("MediaStore insert failed"));
+                    return;
+                }
+
+                try (OutputStream os = resolver.openOutputStream(itemUri)) {
+                    os.write(audioBytes);
+                }
+
+                values.clear();
+                values.put(MediaStore.Audio.Media.IS_PENDING, 0);
+                resolver.update(itemUri, values, null, null);
+
+                Log.i(TAG, "Saved " + fileName + " to Music/MHL Music (" + audioBytes.length + " bytes)");
+
+                JSObject result = new JSObject();
+                result.put("success", true);
+                result.put("uri", itemUri.toString());
+                bridge.getActivity().runOnUiThread(() -> call.resolve(result));
+            } catch (Exception e) {
+                Log.e(TAG, "saveTaggedAudioToMusic failed", e);
+                bridge.getActivity().runOnUiThread(() -> call.reject(e.getMessage()));
+            }
+        });
+    }
+
     @PluginMethod
     public void saveAudioToMusicMediaStore(PluginCall call) {
         String videoId = call.getString("videoId");
@@ -356,7 +461,8 @@ public class YtDlpPlugin extends Plugin {
         executor.execute(() -> {
             File cacheDir = new File(getContext().getCacheDir(), "ytdlp");
             cacheDir.mkdirs();
-            for (File f : cacheDir.listFiles()) { f.delete(); }
+            File[] prevFiles = cacheDir.listFiles();
+            if (prevFiles != null) { for (File f : prevFiles) f.delete(); }
 
             try {
                 ensureInitialized();
@@ -369,6 +475,8 @@ public class YtDlpPlugin extends Plugin {
                 request.addOption("--audio-format", "mp3");
                 request.addOption("-o", outputPath);
                 request.addOption("--no-playlist");
+                // Usar cliente Android para evitar SABR streaming forzado por YouTube (403)
+                request.addOption("--extractor-args", "youtube:player_client=android,web");
 
                 YoutubeDL.getInstance().execute(request);
 

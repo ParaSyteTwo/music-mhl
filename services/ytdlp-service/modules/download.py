@@ -46,8 +46,11 @@ def ytdlp_version_info() -> dict[str, Any]:
         return {"version": "unknown", "age_days": -1}
 
 
+_QUALITY_MAP = {"alta": "320", "media": "192", "baja": "128"}
+
+
 def build_download_options(
-    video_id: str, format_name: str, workdir: Path, client: str = "android_music", use_cookies: bool = True
+    video_id: str, format_name: str, workdir: Path, client: str = "android_music", use_cookies: bool = True, quality: str = "alta"
 ) -> dict[str, Any]:
     """Construye opciones para yt-dlp con cookies y configuración de FFmpeg.
     use_cookies=False intenta descargar sin autenticación (fallback para cookies expiradas)."""
@@ -78,7 +81,7 @@ def build_download_options(
             {
                 "key": "FFmpegExtractAudio",
                 "preferredcodec": ext,
-                "preferredquality": "192",
+                "preferredquality": _QUALITY_MAP.get(quality, "320"),
             }
         ],
         "postprocessor_args": ["-vn"],

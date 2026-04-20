@@ -347,6 +347,17 @@ export const useMusicStore = create<MusicStore>()(
           const fileExtension = downloadFormat === 'aac' ? 'm4a' : 'mp3';
           const resolvedFileName = buildDownloadFileName(track, fileExtension);
 
+          // Listener de progreso real de yt-dlp (Android): conecta 0-100% nativo → 25-80% UI
+          let progressHandle: { remove: () => void } | null = null;
+          if (Capacitor.isNativePlatform()) {
+            import('@/lib/ytdlpBridge').then(({ addDownloadProgressListener }) => {
+              addDownloadProgressListener((evt) => {
+                const mapped = Math.round(25 + (evt.progress / 100) * 55);
+                updateDl({ progress: mapped, speed: evt.speed || undefined, eta: evt.eta > 0 ? evt.eta : undefined });
+              }).then((handle) => { progressHandle = handle; }).catch(() => {});
+            }).catch(() => {});
+          }
+
           try {
           for (let attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
@@ -380,7 +391,10 @@ export const useMusicStore = create<MusicStore>()(
 
                 const arr = await taggedBlob.arrayBuffer();
                 const base64 = btoa(new Uint8Array(arr).reduce((data, byte) => data + String.fromCharCode(byte), ''));
-                await Filesystem.writeFile({ path: `MHL Music/${resolvedFileName}`, data: base64, directory: Directory.Documents, recursive: true });
+                // Guardar en Music/MHL Music (visible en reproductores) via MediaStore
+                const { saveTaggedAudioToMusic } = await import('@/lib/ytdlpBridge');
+                const mediaUri = await saveTaggedAudioToMusic(resolvedFileName, base64);
+                updateDl({ mediaUri });
               } else if (!Capacitor.isNativePlatform()) {
                 // Web: escribir ID3 tags y guardar como .mp3
                 const taggedBlob = await writeID3Tags(audioBuffer, {
@@ -428,7 +442,10 @@ export const useMusicStore = create<MusicStore>()(
 
                 if (Capacitor.isNativePlatform()) {
                   const base64 = btoa(new Uint8Array(audioBuffer).reduce((data, byte) => data + String.fromCharCode(byte), ''));
-                  await Filesystem.writeFile({ path: `MHL Music/${resolvedFileName}`, data: base64, directory: Directory.Documents, recursive: true });
+                  // Guardar en Music/MHL Music via MediaStore
+                  const { saveTaggedAudioToMusic } = await import('@/lib/ytdlpBridge');
+                  const mediaUri = await saveTaggedAudioToMusic(resolvedFileName, base64);
+                  updateDl({ mediaUri });
                 } else {
                   const { downloadFolder } = get();
                   const blob = new Blob([audioBuffer]);
@@ -500,6 +517,7 @@ export const useMusicStore = create<MusicStore>()(
             }
           }
           } finally {
+            progressHandle?.remove();
             set((s) => ({ activeDownloads: Math.max(0, s.activeDownloads - 1) }));
             get().processDownloadQueue();
           }
@@ -569,6 +587,10 @@ export const useMusicStore = create<MusicStore>()(
         setDownloadWifiOnly: (v) => set({ downloadWifiOnly: v }),
         appLanguage: 'es',
         setAppLanguage: (lang) => set({ appLanguage: lang }),
+
+        // ─── Reproductor externo preferido (Android) ───
+        preferredPlayerPackage: null as string | null,
+        setPreferredPlayerPackage: (pkg: string | null) => set({ preferredPlayerPackage: pkg }),
 
         // ─── yt-dlp status ───
         ytDlpVersion: null,
@@ -876,6 +898,7 @@ export const useMusicStore = create<MusicStore>()(
         downloadWifiOnly: state.downloadWifiOnly,
         appLanguage: state.appLanguage,
         mostDownloadedArtists: state.mostDownloadedArtists,
+        preferredPlayerPackage: state.preferredPlayerPackage,
         // localFileRefs excluded — File objects cannot be serialized
       }),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -891,6 +914,7 @@ export const useMusicStore = create<MusicStore>()(
         downloadWifiOnly: persisted?.downloadWifiOnly ?? false,
         appLanguage: persisted?.appLanguage ?? 'es',
         mostDownloadedArtists: persisted?.mostDownloadedArtists ?? [],
+        preferredPlayerPackage: persisted?.preferredPlayerPackage ?? null,
         localFileRefs: new Map(),
       }),
     }

@@ -4,7 +4,7 @@ import { useMusicStore } from '@/store/musicStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getDownloadCandidates, type DownloadCandidate } from '@/lib/api/musicApi';
 import type { Track } from '@/types/music';
-import { GLOBAL_ARTISTS_POOL } from '@/data/globalArtists';
+import { buildAffinityPool, artistColor } from '@/data/globalArtists';
 import { Capacitor } from '@capacitor/core';
 import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
@@ -15,7 +15,6 @@ function formatDuration(seconds: number) {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-const SUGGESTED_SEARCHES = ['Bad Bunny', 'Daft Punk', 'Taylor Swift', 'Peso Pluma', 'The Weeknd'];
 
 function useRecentSearches() {
   const [recent, setRecent] = useState<string[]>(() => {
@@ -65,11 +64,7 @@ export default function SearchPage() {
   const { recent, remove: removeRecent, refresh: refreshRecent } = useRecentSearches();
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
-  const personalSuggestions = mostDownloadedArtists.slice(0, 5);
-  const poolSuggestions = GLOBAL_ARTISTS_POOL.filter(
-    (a) => !mostDownloadedArtists.includes(a)
-  ).slice(0, 10);
-  const suggestedSearches = [...personalSuggestions, ...poolSuggestions];
+  const suggestedSearches = buildAffinityPool(mostDownloadedArtists, 6);
 
   const handleSearch = () => {
     if (query.trim()) {
@@ -156,18 +151,10 @@ export default function SearchPage() {
           onFocus={() => setInputFocused(true)}
           onBlur={() => setTimeout(() => setInputFocused(false), 200)}
           placeholder="Buscar canciones, artistas..."
-          className="w-full pl-10 pr-12 py-3 rounded-xl bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.08)] text-sm text-[#F5F5F0] placeholder:text-[#444] focus:outline-none focus:border-[#C8F04B] focus:shadow-[0_0_0_3px_rgba(200,240,75,0.15)] transition-all"
+          className="w-full pl-10 pr-4 py-3 rounded-xl bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.08)] text-sm text-[#F5F5F0] placeholder:text-[#444] focus:outline-none focus:border-[#C8F04B] focus:shadow-[0_0_0_3px_rgba(200,240,75,0.15)] transition-all"
         />
-        {isSearching ? (
+        {isSearching && (
           <Loader2 className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#C8F04B] animate-spin" />
-        ) : (
-          <button
-            onClick={handleSearch}
-            className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-[#666660] hover:text-[#C8F04B] hover:bg-[rgba(200,240,75,0.1)] transition-colors"
-            aria-label="Buscar"
-          >
-            <Search className="w-4 h-4" />
-          </button>
         )}
       </div>
 
@@ -196,17 +183,25 @@ export default function SearchPage() {
 
       {showEmpty && (
         <div className="mb-6">
-          <p className="text-[10px] uppercase tracking-widest text-[#555] mb-2 text-center">Prueba con:</p>
-          <div className="flex justify-center flex-wrap gap-2">
-            {suggestedSearches.map((term) => (
-              <button
-                key={term}
-                onClick={() => handleSuggestionClick(term)}
-                className="px-4 py-1.5 rounded-full text-xs font-medium border border-[rgba(255,255,255,0.1)] text-[#999] hover:text-[#C8F04B] hover:border-[#C8F04B]/30 hover:bg-[rgba(200,240,75,0.05)] transition-all"
-              >
-                {term}
-              </button>
-            ))}
+          <p className="text-[10px] uppercase tracking-widest text-[#555] mb-3 text-center">Prueba con:</p>
+          <div className="grid grid-cols-3 gap-2 max-w-sm mx-auto">
+            {suggestedSearches.map((term) => {
+              const color = artistColor(term);
+              return (
+                <button
+                  key={term}
+                  onClick={() => handleSuggestionClick(term)}
+                  style={{
+                    color,
+                    borderColor: color.replace('hsl', 'hsla').replace(')', ', 0.35)'),
+                    ['--hover-bg' as string]: color.replace('hsl', 'hsla').replace(')', ', 0.08)'),
+                  }}
+                  className="px-3 py-2 rounded-xl text-xs font-semibold border bg-transparent hover:bg-[var(--hover-bg)] transition-all text-center truncate"
+                >
+                  {term}
+                </button>
+              );
+            })}
           </div>
         </div>
       )}

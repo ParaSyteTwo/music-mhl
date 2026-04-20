@@ -295,7 +295,8 @@ export async function getDownloadCandidates(
 
 interface WebDownloadTicketResponse {
   success: boolean;
-  downloadUrl?: string;
+  downloadUrl?: string;  // Viejo: descarga desde backend
+  audioUrl?: string;     // Nuevo (B2): descarga directo de YouTube
   fileName?: string;
   expiresAt?: string;
   error?: string;
@@ -311,25 +312,35 @@ export async function downloadTrackAudio(
   videoIdOverride?: string,
 ): Promise<ArrayBuffer> {
   if (Capacitor.isNativePlatform()) {
-    const { searchYouTubeNative, downloadMp3Native } = await import('@/lib/ytdlpBridge');
-
-    onProgress?.(25);
+    const { searchYouTubeNativeMulti, downloadMp3Native } = await import('@/lib/ytdlpBridge');
 
     if (videoIdOverride) {
+      onProgress?.(10);
       return downloadMp3Native(videoIdOverride, { format: options.format, quality: options.quality });
     }
 
-    const query = `${getPreferredTrackTitle(track)} ${track.artist}`;
-    onProgress?.(15);
-    const nativeResults = await searchYouTubeNative(`${query} official audio`);
+    const title = getPreferredTrackTitle(track);
+    const artist = track.artist;
+    onProgress?.(10);
+
+    // Búsqueda paralela con 3 queries para encontrar mejores candidatos
+    const nativeResults = await searchYouTubeNativeMulti([
+      `${title} ${artist} official audio`,
+      `${title} ${artist} audio`,
+      `${title} ${artist}`,
+    ]);
     if (!nativeResults.length) throw new Error('No se encontró en YouTube');
 
     onProgress?.(25);
+    // Rankear por cercanía de duración, preferir official audio
     const scored = nativeResults
-      .slice(0, 6)
-      .map((r) => ({ ...r, dScore: track.duration ? Math.abs(r.duration - track.duration) : 999 }))
+      .map((r) => ({
+        ...r,
+        dScore: track.duration ? Math.abs(r.duration - track.duration) : 999,
+      }))
       .sort((a, b) => a.dScore - b.dScore)
       .slice(0, 3);
+
     let lastError = '';
     let autoUpdated = false;
 
@@ -382,8 +393,29 @@ export async function downloadTrackAudio(
   }
 
   const ticket = (await ticketRes.json()) as WebDownloadTicketResponse;
-  if (!ticket.success || !ticket.downloadUrl) {
+  if (!ticket.success) {
     throw new Error(ticket.error || 'No se pudo obtener el ticket de descarga');
+  }
+
+  // OPCIÓN B2: Si tenemos audioUrl (descarga directa de YouTube)
+  if (ticket.audioUrl) {
+    console.log('[B2] Usando descarga directa de YouTube URL');
+    onProgress?.(45);
+    const audioRes = await fetch(ticket.audioUrl);
+    if (!audioRes.ok) {
+      const text = await audioRes.text().catch(() => '');
+      let err: { error?: string; maintenance?: boolean } = {};
+      try { err = JSON.parse(text); } catch { /* ignore */ }
+      if (err.maintenance) throw new Error('__MAINTENANCE__');
+      throw new Error(err.error || 'Error descargando audio');
+    }
+    onProgress?.(85);
+    return audioRes.arrayBuffer();
+  }
+
+  // Fallback: descarga tradicional desde backend (downloadUrl)
+  if (!ticket.downloadUrl) {
+    throw new Error(ticket.error || 'No se pudo obtener URL de descarga');
   }
 
   onProgress?.(45);
