@@ -3,105 +3,140 @@
 ## Tu música. Tu ritmo. Tu espacio.
 
 MHL Music es una app web y Android hecha para algo muy simple y muy bonito:
-**abrir, buscar, escuchar, descargar y disfrutar.**
+**buscar, escuchar, descargar y disfrutar.**
+
+[![Latest Release](https://img.shields.io/github/v/release/ParaSyteTwo/music-mhl?label=versión&color=C8F04B)](../../releases/latest)
+[![Android](https://img.shields.io/badge/Android-7.0%2B-green)](../../releases/latest)
+[![Web](https://img.shields.io/badge/web-music--mhl.onrender.com-blue)](https://music-mhl.onrender.com)
 
 ---
 
 ## ✨ ¿Qué vibe tiene MHL Music?
 
-MHL Music no quiere ser una plataforma gigantesca que te entierre en menús, muros, upsells y pantallas llenas de ruido.
+MHL Music no quiere ser una plataforma gigantesca que te entierre en menús, muros y upsells.
 Quiere ser una app que se siente ligera, útil y musical.
 
-La filosofía del proyecto es esta:
-
-- 🔎 **encuentra música rápido**
+- 🔎 **encuentra música rápido** — 3 fuentes en paralelo (local, Deezer, YouTube)
 - ▶️ **escucha previews al momento**
-- ⬇️ **elige exactamente qué versión bajar**
-- 🌐 **mantiene la web ligera**
-- 📱 **deja Android hacer lo suyo con potencia nativa**
-- 🔐 **no expone secretos al navegador**
+- ⬇️ **descarga directo al dispositivo** — sin pasar por servidores intermedios
+- 🎨 **colores únicos por artista** — identidad visual determinística
+- 📁 **biblioteca local** — importa y gestiona tu propia música
+- 🔐 **sin secretos expuestos** — sin tracking, sin cuentas, sin anuncios
 
 ---
 
-## 🚀 Lo que ya hace
+## 🚀 Funcionalidades actuales
 
-### 🌐 En la web
+### 🌐 En la web (PWA)
 
-- Búsqueda y metadata desde Deezer
-- Reproducción de previews desde la propia app
-- Sistema de descarga por ticket firmado
-- Frontend servido como static site
+- Búsqueda de canciones y metadata desde Deezer
+- Reproducción de previews en la misma app
+- Descarga por ticket firmado — el navegador baja directo del backend sin proxy
+- Instalable como PWA desde Safari (iPhone) o Chrome (Android)
+- Colores únicos por artista con sistema HSL determinístico por nombre + género
 
-### 📱 En Android
+### 📱 En Android (APK nativo)
 
-- Búsqueda en YouTube con múltiples queries en paralelo
-- Selector de candidatos antes de descargar — tú eliges la versión exacta
-- Descarga nativa con yt-dlp directamente en el dispositivo
-- Flujo completamente separado del backend web
+- Búsqueda simultánea en 3 fuentes: **biblioteca local (~0ms)**, **Deezer (~1-3s)**, **YouTube (~2-5s)**
+- Descarga nativa con **yt-dlp** directamente en el dispositivo — sin backend involucrado
+- Barra de descarga con **fases en tiempo real**, velocidad, ETA y animación shimmer
+- Las canciones se guardan en **Music → MHL Music**, visibles en cualquier reproductor
+- **Abrir en reproductor externo**: VLC, RetroMusic, etc. con la canción desde el principio
+- **Reproductor predeterminado**: elige una app en Ajustes y se abre directamente sin chooser
+- **Calidad configurable**: Alta (320kbps) / Media (192kbps) / Baja (128kbps)
+- **Actualización de yt-dlp** desde Ajustes, sin reinstalar la app
+- Solo WiFi: opción para no descargar con datos móviles
 
-### 🍎 En iPhone (PWA)
+### 📚 Biblioteca local
 
-- La web puede instalarse como app desde Safari
-- Los previews y la navegación web funcionan como PWA
-- Los archivos descargados pueden abrirse o guardarse en Archivos
-- La experiencia de descarga no es tan nativa como en Android
-
----
-
-## 🎼 Cómo suena por dentro
-
-### 🌐 Flujo web
-
-1. El usuario busca una canción.
-2. La app obtiene metadata desde Deezer (vía Railway `/deezer`).
-3. Al pulsar descargar, el frontend pide un ticket a Railway `/download-ticket`.
-4. Railway valida, limita, resuelve el video y firma un token.
-5. El navegador baja el archivo directamente desde Railway `/download`.
-
-### 📱 Flujo Android
-
-1. El usuario busca una canción.
-2. La app lanza varias búsquedas en YouTube en paralelo.
-3. Aparece un picker con los 3 mejores candidatos puntuados por relevancia y duración.
-4. El usuario elige la versión exacta que quiere.
-5. La descarga se resuelve en el dispositivo con yt-dlp nativo.
-
-### 🍎 Flujo en iPhone PWA
-
-1. El usuario abre la web en Safari.
-2. Puede añadirla a pantalla de inicio como app web.
-3. La app sigue funcionando sobre Safari/WebKit.
-4. Los audios descargados pueden abrirse o guardarse en Archivos.
+- Importa archivos `.mp3`, `.m4a`, `.aac`, `.ogg`, `.flac` desde el dispositivo
+- Navega por artistas, álbumes, géneros
+- Reproducción integrada con gestión de cola
 
 ---
 
-## 🧭 Arquitectura actual
+## 🎼 Arquitectura
+
+### Flujo web
+
+```
+Usuario → búsqueda Deezer → pide ticket → backend valida + firma token → navegador descarga directo
+```
+
+### Flujo Android
+
+```
+Usuario → búsqueda en paralelo (local + Deezer + YouTube simultáneo)
+        → yt-dlp descarga en el dispositivo (sin backend)
+        → archivo guardado en MediaStore (Music/MHL Music)
+        → accesible desde cualquier reproductor externo
+```
+
+---
+
+## 🧭 Stack técnico
 
 | Capa | Tecnología |
 |---|---|
 | Frontend | React + TypeScript + Vite |
-| Estado | Zustand |
-| Backend | `services/ytdlp-service` en Railway (FastAPI + Python) |
-| Android | Capacitor + plugin nativo yt-dlp |
+| Estado | Zustand (persistido) |
+| Backend | FastAPI + Python en **Fly.io** |
+| Android | Capacitor + plugins nativos Java |
+| Motor descarga | yt-dlp integrado en el APK |
+| Metadata | Deezer API (vía backend proxy) |
 | Hosting web | Render (static site) |
 
-**No hay Supabase.** Todo el backend vive en Railway.
+**No hay Supabase.** Todo el backend es un único servicio FastAPI en Fly.io.
 
 ---
 
-## 🗂️ Estructura relevante
+## 🗂️ Estructura del proyecto
 
-```text
+```
 src/
-  lib/api/musicApi.ts       ← todas las llamadas al backend
-  lib/ytdlpBridge.ts        ← bridge nativo Android
-  store/musicStore.ts
-services/
-  ytdlp-service/
-    app.py                  ← FastAPI: /deezer, /candidates, /resolve,
-    Dockerfile                /download-ticket, /download, /search, /health
-    requirements.txt
-android/                    ← app Capacitor + plugin yt-dlp nativo
+  lib/
+    api/musicApi.ts         ← todas las llamadas al backend
+    ytdlpBridge.ts          ← bridge nativo yt-dlp (descarga, progreso, update)
+    openFileBridge.ts       ← bridge nativo para abrir archivos en reproductores externos
+    searchEngine.ts         ← Fuse.js para búsqueda local ~0ms
+    i18n.ts                 ← detección automática de idioma
+  store/musicStore.ts       ← estado global con persistencia Zustand
+  pages/
+    SearchPage.tsx          ← búsqueda paralela + sugerencias personalizadas
+    DownloadsPage.tsx       ← cola + progreso real + abrir en externo
+    SettingsPage.tsx        ← calidad, reproductor predeterminado, yt-dlp update
+  types/music.ts            ← tipos TypeScript compartidos
+
+services/ytdlp-service/
+  app.py                    ← FastAPI: configuración + registro de routers
+  config.py                 ← variables de entorno centralizadas
+  modules/
+    auth.py                 ← firmas HMAC, tokens, Bearer validation
+    search.py               ← scoring de candidatos YouTube
+    download.py             ← yt-dlp + FFmpeg, calidades, limpieza
+    deezer.py               ← proxy Deezer API
+    cookies.py              ← rotación inteligente de cookies YouTube
+    cache.py                ← LRU cache con TTL
+    rate_limit.py           ← rate limiting en memoria por IP
+    stats.py                ← contadores y errores recientes
+    telegram.py             ← notificaciones via bot
+    utils.py                ← sanitize, normalize, classify
+    errors.py               ← clasificación de errores yt-dlp
+  routes/
+    health.py               ← GET /health
+    search.py               ← GET /search, POST /candidates, POST /resolve
+    download.py             ← POST /download-ticket, GET /download
+    deezer.py               ← POST /deezer
+    internal.py             ← GET /internal/keepalive-yt
+    telegram.py             ← POST /telegram/webhook
+
+android/
+  app/src/main/java/com/mhl/music/
+    YtDlpPlugin.java        ← descarga nativa, progreso real, update
+    OpenFilePlugin.java     ← abrir en reproductor, getAudioPlayers()
+    LocalMusicPlugin.java   ← escaneo biblioteca local
+    TaggingPlugin.java      ← escritura de metadatos ID3 en el archivo
+    MusicSaverPlugin.java   ← guardado en MediaStore (Music/MHL Music)
 ```
 
 ---
@@ -111,21 +146,28 @@ android/                    ← app Capacitor + plugin yt-dlp nativo
 ### Frontend (`.env.local`)
 
 ```env
-VITE_RAILWAY_URL=https://your-ytdlp-service.up.railway.app
-VITE_SERVICE_API_KEY=your_service_api_key
+VITE_RAILWAY_URL=https://ytdlp-service-little-sea-7784.fly.dev
+VITE_SERVICE_API_KEY=tu_api_key
 ```
 
-### Railway (`ytdlp-service`)
+> El nombre de la variable es `VITE_RAILWAY_URL` por razones históricas — apunta a Fly.io.
+
+### Backend (`ytdlp-service` en Fly.io)
 
 ```env
 SERVICE_API_KEY=change-me
 DOWNLOAD_SIGNING_SECRET=change-me
 TOKEN_TTL_SECONDS=120
-MAX_CONCURRENT_DOWNLOADS=3
 RATE_LIMIT_BURST=8
 RATE_LIMIT_WINDOW_SECONDS=60
 RATE_LIMIT_DAILY=250
-PORT=8080
+TEMP_DIR=/tmp
+YOUTUBE_COOKIES_B64=...      # opcional, mejora la tasa de éxito
+YOUTUBE_COOKIES_B64_2=...    # rotación entre múltiples cuentas
+YOUTUBE_COOKIES_B64_3=...
+TELEGRAM_BOT_TOKEN=...       # opcional, notificaciones
+TELEGRAM_CHAT_ID=...
+ALLOWED_ORIGINS=https://music-mhl.onrender.com
 ```
 
 ---
@@ -139,7 +181,7 @@ npm install
 npm run dev
 ```
 
-### ytdlp-service (Railway)
+### Backend (ytdlp-service)
 
 ```bash
 cd services/ytdlp-service
@@ -148,53 +190,60 @@ uvicorn app:app --reload --port 8080
 ```
 
 - Healthcheck: `GET /health`
-- No requiere volumen persistente
 - `ffmpeg` se instala desde el `Dockerfile`
+- No requiere volumen persistente
+
+### Android
+
+```bash
+npm run build
+npx cap sync android
+# Abrir en Android Studio o:
+cd android && ./gradlew assembleRelease
+```
 
 ---
 
-## 📲 Instalar la web como app en iPhone
+## 📱 Instalar en Android
 
-1. Abre MHL Music en Safari
-2. Pulsa el botón de **Compartir**
-3. Baja hasta **Añadir a pantalla de inicio**
-4. Confirma el nombre de la app
-5. Ábrela desde el icono como si fuera una app normal
+Descarga el APK desde la sección [Releases](../../releases/latest) de este repositorio.
 
-**Qué esperar en iPhone:**
-
-- ✅ PWA instalable, previews e interfaz funcionan
-- ✅ iPhone puede reproducir `mp3`, `aac` y `m4a`
-- ⚠️ gestión de descargas más limitada que en Android
-- ⚠️ depende del comportamiento de Safari/WebKit
-
----
-
-## 📱 Instalar la app en Android
-
-Descarga el APK desde la sección [Releases](../../releases) de este repositorio.
-
-1. En tu Android ve a **Ajustes → Seguridad → Fuentes desconocidas**
-2. Actívalo si hace falta
-3. Abre el APK descargado e instala
+1. Descarga `MHL-Music-vX.X.X.apk`
+2. Ábrelo en tu dispositivo
+3. Si aparece aviso de fuentes desconocidas, acéptalo en Ajustes → Seguridad
 
 > ⚠️ Requiere Android 7.0 o superior (API 24+)
 
 ---
 
+## 📲 Instalar en iPhone como PWA
+
+1. Abre [music-mhl.onrender.com](https://music-mhl.onrender.com) en Safari
+2. Pulsa el botón **Compartir**
+3. Selecciona **Añadir a pantalla de inicio**
+4. Confirma el nombre y ábrela desde el icono
+
+**Qué esperar en iPhone:**
+- ✅ Previews, búsqueda e interfaz completa
+- ✅ Instalable y navegable offline
+- ⚠️ Descarga menos nativa que en Android
+- ⚠️ Depende del comportamiento de Safari/WebKit
+
+---
+
 ## 🌐 Versión web
 
-Disponible en: [music-mhl.onrender.com](https://music-mhl.onrender.com)
+**[music-mhl.onrender.com](https://music-mhl.onrender.com)**
 
 ---
 
 ## 🔒 Privacidad
 
-- sin registro obligatorio
-- sin secretos en el navegador
-- sin audio pesado pasando por servidores intermedios
-- arquitectura abierta y auditable desde el repo
-- gratis para siempre — sin ads, sin paywalls
+- Sin registro obligatorio
+- Sin secretos expuestos al navegador
+- Sin audio pesado pasando por servidores intermedios
+- Sin tracking, sin ads, sin paywalls
+- Arquitectura abierta y auditable desde este repositorio
 
 ---
 
