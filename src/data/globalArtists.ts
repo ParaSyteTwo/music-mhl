@@ -127,5 +127,17 @@ export function buildAffinityPool(mostDownloaded: string[], count = 15): string[
     .filter((a) => !mostDownloaded.includes(a))
     .slice(0, count);
 
-  return combined.length >= count ? combined : [...combined, ...seededShuffle(GLOBAL_ARTISTS_POOL)].slice(0, count);
+  // Deduplicate before returning
+  const seen = new Set<string>();
+  const unique = combined.filter((a) => {
+    if (seen.has(a)) return false;
+    seen.add(a);
+    return true;
+  });
+
+  if (unique.length >= count) return unique.slice(0, count);
+
+  // Need more — add from pool excluding already-seen
+  const extras = seededShuffle(GLOBAL_ARTISTS_POOL).filter((a) => !seen.has(a));
+  return [...unique, ...extras].slice(0, count);
 }
