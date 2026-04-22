@@ -175,10 +175,22 @@ def register_download_routes(app: FastAPI) -> None:
             shutil.rmtree(cookie_path, ignore_errors=True)
 
         if not direct_audio_url:
-            raise HTTPException(
-                status_code=502,
-                detail="No se encontró URL de audio (todas las estrategias fallaron)"
-            )
+            # Fallback: el backend descarga y sirve el archivo
+            print(f"[download-ticket B2] Sin URL directa, usando download endpoint", flush=True)
+            from modules.auth import build_token
+            token = build_token({
+                "videoId": resolved_video_id,
+                "fileName": safe_name,
+                "format": format_name,
+                "quality": "alta",
+            })
+            download_url = f"https://ytdlp-service-little-sea-7784.fly.dev/download?token={token}"
+            return {
+                "success": True,
+                "fileName": safe_name,
+                "downloadUrl": download_url,
+                "expiresAt": int(time.time()) + 3600,
+            }
 
         # Devolver URL directa (sin necesidad de token firmado para esta URL)
         # La URL de YouTube incluye token y expira naturalmente
