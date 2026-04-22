@@ -1,13 +1,41 @@
 import re
 from typing import Any
 
-from .youtube_search import search_youtube_no_bot
+from yt_dlp import YoutubeDL
+
 from .utils import classify_candidate, looks_anime_like, normalize_search_term
 
 
 def search_candidates(query: str, limit: int = 5) -> list[dict[str, Any]]:
-    """Busca candidatos en YouTube via Piped/Invidious (sin yt-dlp, sin cookies)."""
-    results = search_youtube_no_bot(query, limit)
+    """Busca candidatos en YouTube para una query."""
+    opts = {
+        "quiet": True,
+        "skip_download": True,
+        "extract_flat": True,
+        "noplaylist": True,
+        "extractor_args": {"youtube": {"player_client": ["web"]}},
+    }
+    with YoutubeDL(opts) as ydl:
+        info = ydl.extract_info(f"ytsearch{limit}:{query}", download=False)
+
+    results: list[dict[str, Any]] = []
+    for entry in info.get("entries") or []:
+        if not entry:
+            continue
+        video_id = entry.get("id")
+        title = entry.get("title") or ""
+        if not video_id or not title:
+            continue
+        results.append(
+            {
+                "videoId": video_id,
+                "title": title,
+                "duration": int(entry.get("duration") or 0),
+                "channel": entry.get("channel") or entry.get("uploader") or "",
+                "webpageUrl": entry.get("url")
+                or f"https://www.youtube.com/watch?v={video_id}",
+            }
+        )
     return results
 
 
