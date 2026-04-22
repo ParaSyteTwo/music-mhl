@@ -3,4 +3,3 @@ uvicorn==0.35.0
 imageio-ffmpeg==0.6.0
 httpx==0.28.1
 yt-dlp @ git+https://github.com/yt-dlp/yt-dlp.git
-playwright==1.52.0

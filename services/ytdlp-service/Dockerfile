@@ -8,11 +8,6 @@ RUN apt-get update \
 RUN curl -fsSL https://deno.land/install.sh | sh
 ENV PATH="/root/.deno/bin:${PATH}"
 
-# Install Playwright and Chromium
-RUN pip install playwright==1.52.0 && \
-    playwright install chromium --with-deps && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
-
 WORKDIR /app
 
 COPY requirements.txt .
