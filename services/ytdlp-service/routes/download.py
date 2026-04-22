@@ -178,13 +178,12 @@ def register_download_routes(app: FastAPI) -> None:
             # Fallback: el backend descarga y sirve el archivo
             print(f"[download-ticket B2] Sin URL directa, usando download endpoint", flush=True)
             from modules.auth import build_token
-            token = build_token({
-                "videoId": resolved_video_id,
-                "fileName": safe_name,
-                "format": format_name,
-                "quality": "alta",
-            })
-            download_url = f"https://ytdlp-service-little-sea-7784.fly.dev/download?token={token}"
+            token_data = build_token(
+                video_id=resolved_video_id,
+                file_name=safe_name,
+                format_name=format_name,
+            )
+            download_url = f"https://ytdlp-service-little-sea-7784.fly.dev/download?token={token_data['token']}"
             return {
                 "success": True,
                 "fileName": safe_name,
