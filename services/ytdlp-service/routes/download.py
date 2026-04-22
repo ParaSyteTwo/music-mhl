@@ -1,5 +1,6 @@
 import asyncio
 import json
+import shutil
 import tempfile
 import threading
 import time
@@ -30,6 +31,7 @@ from modules.download import (
 )
 from modules.maintenance import is_maintenance
 from modules.rate_limit import check_rate_limit, get_client_ip
+from modules.piped import get_audio_url_piped
 from modules.search import score_candidate, search_candidates
 from modules.stats import _increment_downloads, _increment_errors, _log_error
 from modules.telegram import send_telegram
@@ -106,33 +108,62 @@ def register_download_routes(app: FastAPI) -> None:
 
         safe_name = sanitize_filename(f"{title} - {artist}.{format_name}")
 
-        # OPCIÓN B2: Obtener URL directa de YouTube en lugar de procesar
-        print(f"[download-ticket B2] Obteniendo URL directa para video {resolved_video_id}", flush=True)
-        direct_audio_url = None
+        # ── OPCIÓN B2: Obtener URL directa ─────────────────────────────────────
+        # Estrategia: 1) yt-dlp web (sin cookies) → 2) yt-dlp android_music con cookies → 3) Piped/Invidious
+        direct_audio_url: str | None = None
+        cookie_path: Path | None = None
+
+        # 1) yt-dlp con player_client=web (sin cookies)
+        print(f"[download-ticket B2] Intentando yt-dlp web para {resolved_video_id}", flush=True)
+        ytdlp_web_opts: dict[str, Any] = {
+            "quiet": True,
+            "noplaylist": True,
+            "skip_download": True,
+            "format": "bestaudio/best",
+            "extractor_args": {"youtube": {"player_client": ["web"]}},
+        }
         try:
-            # Usar yt-dlp para obtener metadatos y URL directa sin descargar
-            with YoutubeDL({
+            with YoutubeDL(ytdlp_web_opts) as ydl:
+                info = ydl.extract_info(f"https://www.youtube.com/watch?v={resolved_video_id}", download=False)
+                direct_audio_url = info.get("url")
+                if direct_audio_url:
+                    print(f"[download-ticket B2] yt-dlp web OK", flush=True)
+        except Exception as e:
+            print(f"[download-ticket B2] yt-dlp web falló: {e}", flush=True)
+
+        # 2) yt-dlp con cookies activas (fallback)
+        if not direct_audio_url:
+            print(f"[download-ticket B2] Intentando yt-dlp con cookies para {resolved_video_id}", flush=True)
+            ytdlp_opts: dict[str, Any] = {
                 "quiet": True,
                 "noplaylist": True,
-                "skip_download": True,  # CRÍTICO: solo metadatos, no descarga
+                "skip_download": True,
                 "format": "bestaudio/best",
                 "extractor_args": {"youtube": {"player_client": ["android_music"]}},
-            }) as ydl:
-                info = ydl.extract_info(f"https://www.youtube.com/watch?v={resolved_video_id}", download=False)
-                # info['url'] contiene la URL directa del audio
-                direct_audio_url = info.get("url")
-                print(f"[download-ticket B2] URL obtenida: {direct_audio_url[:80] if direct_audio_url else 'NONE'}...", flush=True)
-        except Exception as e:
-            print(f"[download-ticket B2] Error obteniendo URL: {e}", flush=True)
-            raise HTTPException(
-                status_code=502,
-                detail=f"No se pudo obtener URL de audio: {str(e)[:100]}"
-            )
+            }
+            active_b64 = get_active_cookies_b64()
+            if active_b64:
+                cookie_path = Path(tempfile.mkdtemp(prefix="mhl-cookies-", dir=str(TEMP_DIR)))
+                cookies_file = cookie_path / "youtube-cookies.txt"
+                from modules.cookies import _decode_cookies_to_file
+                _decode_cookies_to_file(active_b64, cookies_file)
+                ytdlp_opts["cookiefile"] = str(cookies_file)
+            try:
+                with YoutubeDL(ytdlp_opts) as ydl:
+                    info = ydl.extract_info(f"https://www.youtube.com/watch?v={resolved_video_id}", download=False)
+                    direct_audio_url = info.get("url")
+                    print(f"[download-ticket B2] yt-dlp+cookies OK", flush=True)
+            except Exception as e:
+                print(f"[download-ticket B2] yt-dlp+cookies falló: {e}", flush=True)
+
+        # Limpiar cookie temp file
+        if cookie_path:
+            shutil.rmtree(cookie_path, ignore_errors=True)
 
         if not direct_audio_url:
             raise HTTPException(
                 status_code=502,
-                detail="No se encontró URL de audio en YouTube"
+                detail="No se encontró URL de audio (todas las estrategias fallaron)"
             )
 
         # Devolver URL directa (sin necesidad de token firmado para esta URL)
