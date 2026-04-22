@@ -2,11 +2,16 @@ FROM python:3.12-slim
 ARG CACHEBUST=2
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg git curl unzip \
+    && apt-get install -y --no-install-recommends ffmpeg git curl unzip wget gnupg \
     && rm -rf /var/lib/apt/lists/*
 
 RUN curl -fsSL https://deno.land/install.sh | sh
 ENV PATH="/root/.deno/bin:${PATH}"
+
+# Install Playwright and Chromium
+RUN pip install playwright==1.52.0 && \
+    playwright install chromium --with-deps && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 

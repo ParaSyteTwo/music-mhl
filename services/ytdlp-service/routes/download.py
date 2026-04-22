@@ -109,11 +109,23 @@ def register_download_routes(app: FastAPI) -> None:
         safe_name = sanitize_filename(f"{title} - {artist}.{format_name}")
 
         # ── OPCIÓN B2: Obtener URL directa ─────────────────────────────────────
-        # Estrategia: 1) yt-dlp web (sin cookies) → 2) yt-dlp android_music con cookies → 3) Piped/Invidious
+        # Estrategia: 1) yt-dlp web (sin cookies, headers reales)
+        #            2) yt-dlp con cookies actives
         direct_audio_url: str | None = None
         cookie_path: Path | None = None
 
-        # 1) yt-dlp con player_client=web (sin cookies)
+        # Headers realistas para parecer navegador real
+        REAL_HEADERS = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9,es;q=0.8",
+            "Accept-Encoding": "gzip, deflate",
+            "Connection": "keep-alive",
+            "Referer": "https://www.youtube.com/",
+            "Origin": "https://www.youtube.com",
+        }
+
+        # 1) yt-dlp con player_client=web y headers reales
         print(f"[download-ticket B2] Intentando yt-dlp web para {resolved_video_id}", flush=True)
         ytdlp_web_opts: dict[str, Any] = {
             "quiet": True,
@@ -121,6 +133,7 @@ def register_download_routes(app: FastAPI) -> None:
             "skip_download": True,
             "format": "bestaudio/best",
             "extractor_args": {"youtube": {"player_client": ["web"]}},
+            "http_headers": REAL_HEADERS,
         }
         try:
             with YoutubeDL(ytdlp_web_opts) as ydl:
@@ -131,7 +144,7 @@ def register_download_routes(app: FastAPI) -> None:
         except Exception as e:
             print(f"[download-ticket B2] yt-dlp web falló: {e}", flush=True)
 
-        # 2) yt-dlp con cookies activas (fallback)
+        # 2) yt-dlp con cookies activas y headers reales
         if not direct_audio_url:
             print(f"[download-ticket B2] Intentando yt-dlp con cookies para {resolved_video_id}", flush=True)
             ytdlp_opts: dict[str, Any] = {
@@ -140,6 +153,7 @@ def register_download_routes(app: FastAPI) -> None:
                 "skip_download": True,
                 "format": "bestaudio/best",
                 "extractor_args": {"youtube": {"player_client": ["android_music"]}},
+                "http_headers": REAL_HEADERS,
             }
             active_b64 = get_active_cookies_b64()
             if active_b64:
