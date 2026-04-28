@@ -118,9 +118,11 @@ interface MusicStore {
   lyricOriginal: boolean;
   lyricRomanization: boolean;
   lyricTranslation: boolean;
+  saveLrcFile: boolean;
   setLyricOriginal: (v: boolean) => void;
   setLyricRomanization: (v: boolean) => void;
   setLyricTranslation: (v: boolean) => void;
+  setSaveLrcFile: (v: boolean) => void;
 
   // ─── yt-dlp status ───
   ytDlpVersion: string | null;
@@ -431,7 +433,7 @@ export const useMusicStore = create<MusicStore>()(
               await api.write_file_bytes(filePath, Array.from(new Uint8Array(taggedArr)));
 
               // Guardar .lrc junto al MP3 para que reproductores lo lean con sincronización
-              if (lyricsResult.synced) {
+              if (lyricsResult.synced && get().saveLrcFile) {
                 const lrcName = buildDownloadFileName(track, 'lrc');
                 const lrcPath = outputDir + '/' + lrcName;
                 const lrcBytes = new TextEncoder().encode(lyricsResult.synced);
@@ -708,9 +710,11 @@ export const useMusicStore = create<MusicStore>()(
         lyricOriginal: true,
         lyricRomanization: true,
         lyricTranslation: true,
+        saveLrcFile: true,
         setLyricOriginal: (v) => set({ lyricOriginal: v }),
         setLyricRomanization: (v) => set({ lyricRomanization: v }),
         setLyricTranslation: (v) => set({ lyricTranslation: v }),
+        setSaveLrcFile: (v) => set({ saveLrcFile: v }),
 
         // ─── Reproductor externo preferido (Android) ───
         preferredPlayerPackage: null as string | null,
@@ -1024,6 +1028,7 @@ export const useMusicStore = create<MusicStore>()(
         lyricOriginal: state.lyricOriginal,
         lyricRomanization: state.lyricRomanization,
         lyricTranslation: state.lyricTranslation,
+        saveLrcFile: state.saveLrcFile,
         mostDownloadedArtists: state.mostDownloadedArtists,
         preferredPlayerPackage: state.preferredPlayerPackage,
         // localFileRefs excluded — File objects cannot be serialized
@@ -1043,6 +1048,7 @@ export const useMusicStore = create<MusicStore>()(
         lyricOriginal: persisted?.lyricOriginal ?? true,
         lyricRomanization: persisted?.lyricRomanization ?? true,
         lyricTranslation: persisted?.lyricTranslation ?? true,
+        saveLrcFile: persisted?.saveLrcFile ?? true,
         mostDownloadedArtists: persisted?.mostDownloadedArtists ?? [],
         preferredPlayerPackage: persisted?.preferredPlayerPackage ?? null,
         localFileRefs: new Map(),

@@ -21,6 +21,7 @@ export default function SettingsPage() {
     lyricOriginal, setLyricOriginal,
     lyricRomanization, setLyricRomanization,
     lyricTranslation, setLyricTranslation,
+    saveLrcFile, setSaveLrcFile,
   } = useMusicStore();
 
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'done' | 'skipped' | 'error'>('idle');
@@ -197,6 +198,20 @@ export default function SettingsPage() {
           </label>
           {!lyricOriginal && !lyricRomanization && !lyricTranslation && (
             <p className="text-xs text-[#666660] italic pt-1">Sin selección — no se descargarán letras</p>
+          )}
+          {isPyWebView && (
+            <label className="flex items-start gap-3 cursor-pointer pt-1">
+              <input
+                type="checkbox"
+                checked={saveLrcFile}
+                onChange={e => setSaveLrcFile(e.target.checked)}
+                className="mt-0.5"
+              />
+              <div>
+                <p className="text-sm text-[#F5F5F0]">Guardar archivo LRC</p>
+                <p className="text-xs text-[#666660] mt-0.5">Archivo de letras sincronizadas junto al MP3</p>
+              </div>
+            </label>
           )}
         </div>
       </section>
