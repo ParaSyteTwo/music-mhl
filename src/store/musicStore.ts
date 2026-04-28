@@ -430,6 +430,14 @@ export const useMusicStore = create<MusicStore>()(
               const taggedArr = await taggedBlob.arrayBuffer();
               await api.write_file_bytes(filePath, Array.from(new Uint8Array(taggedArr)));
 
+              // Guardar .lrc junto al MP3 para que reproductores lo lean con sincronización
+              if (lyricsResult.synced) {
+                const lrcName = buildDownloadFileName(track, 'lrc');
+                const lrcPath = outputDir + '/' + lrcName;
+                const lrcBytes = new TextEncoder().encode(lyricsResult.synced);
+                await api.write_file_bytes(lrcPath, Array.from(lrcBytes));
+              }
+
               updateDl({ progress: 100, status: 'completed', error: undefined, fileName });
               get().addMostDownloadedArtist(track.artist);
               toast.success(`✓ Descargado: ${track.title} - ${track.artist}`, { duration: 4000 });
