@@ -1,6 +1,19 @@
 import { Track } from '@/types/music';
 import { Capacitor } from '@capacitor/core';
 import { useMusicStore } from '@/store/musicStore';
+// Detección de pywebview: query param ?platform=pywebview (fiable desde frame 0)
+// o window.pywebview si ya está inyectado
+function isRunningInPyWebView(): boolean {
+  if (typeof window === 'undefined') return false;
+  return (
+    new URLSearchParams(window.location.search).get('platform') === 'pywebview' ||
+    'pywebview' in window
+  );
+}
+
+function isNativeApp(): boolean {
+  return Capacitor.isNativePlatform() || isRunningInPyWebView();
+}
 
 function getRailwayUrl(): string {
   return (import.meta.env.VITE_RAILWAY_URL as string | undefined)?.replace(/\/$/, '') ?? '';
@@ -17,6 +30,37 @@ function railwayHeaders(): HeadersInit {
   };
 }
 
+// ─── Helpers para Desktop Python ───────────────────────────────────────────────────────
+
+function cleanTrackTitleForFileName(title: string): string {
+  const normalized = title
+    .replace(/\s+/g, ' ')
+    .replace(/\b(opening|ending)\s+theme\s+song\b/gi, '')
+    .replace(/\b(opening|ending)\s+theme\b/gi, '')
+    .replace(/\btheme\s+song\b/gi, '')
+    .replace(/\b(ost|original soundtrack|soundtrack)\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const parts = normalized.split(/\s[-–—]\s/);
+  if (parts.length > 1) {
+    const [first, ...rest] = parts;
+    const suffix = rest.join(' - ');
+    if (/(opening|ending|theme|ost|soundtrack|season|anime|ver\.?|version)/i.test(suffix)) {
+      return first.trim() || normalized;
+    }
+  }
+  return normalized || title.trim();
+}
+
+function buildDownloadFileName(track: Track, fileExtension: string): string {
+  const preferredTitle = track.canonicalTitle?.trim() || track.title;
+  const cleanTitle = cleanTrackTitleForFileName(preferredTitle);
+  return `${cleanTitle} - ${track.artist}.${fileExtension}`
+    .replace(/[/\\?%*:|"<>]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 // ─── Map pre-transformed data from backend ───
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapProxiedTrack(t: any): Track {
@@ -31,6 +75,61 @@ function mapProxiedTrack(t: any): Track {
     cover: t.cover || '',
     preview: t.preview || '',
     deezerId: t.deezerId,
+  };
+}
+
+// ─── Llamada directa a Deezer: pywebview (bridge Python) o fetch directo ───
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function callDeezerDirect(path: string): Promise<any> {
+  if (isRunningInPyWebView()) {
+    // Usar el bridge Python — evita CORS en el webview
+    const pyapi = (window as any).pywebview?.api;
+    if (pyapi) {
+      const url = new URL(path, 'https://api.deezer.com');
+      const segments = url.pathname.split('/').filter(Boolean);
+      // Rutas simples: /search, /track/{id}, /album/{id}, /artist/{id}
+      if (segments[0] === 'search') {
+        return pyapi.deezer_search(
+          url.searchParams.get('q') || '',
+          parseInt(url.searchParams.get('limit') || '25'),
+          parseInt(url.searchParams.get('index') || '0'),
+        );
+      }
+      if (segments[0] === 'track' && segments[1]) {
+        return pyapi.deezer_track(segments[1]);
+      }
+      if (segments[0] === 'album' && segments[1]) {
+        return pyapi.deezer_album(segments[1]);
+      }
+      if (segments[0] === 'artist' && segments[1] && !segments[2]) {
+        return pyapi.deezer_artist(segments[1]);
+      }
+      // Rutas anidadas (/artist/{id}/top, etc.) no implementadas en bridge — usar fetch (si CORS lo permite)
+    }
+    // Fallback: fetch directo (funciona si no hay CORS restrictions)
+    const res = await fetch(`https://api.deezer.com${path}`);
+    return res.json();
+  }
+  const res = await fetch(`https://api.deezer.com${path}`);
+  return res.json();
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapRawDeezerTrack(t: any): Track {
+  const artist = t.artist || {};
+  const album = t.album || {};
+  return {
+    id: `dz-${t.id}`,
+    deezerId: t.id,
+    title: t.title || 'Unknown',
+    canonicalTitle: t.title_short || t.title || 'Unknown',
+    artist: artist.name || 'Unknown',
+    album: album.title || 'Unknown',
+    canonicalAlbum: album.title || 'Unknown',
+    duration: t.duration || 0,
+    cover: album.cover_big || album.cover_medium || album.cover_small || '',
+    preview: t.preview || '',
+    isrc: t.isrc || '',
   };
 }
 
@@ -54,6 +153,11 @@ async function callDeezerProxy(body: Record<string, unknown>) {
 // ─── Deezer Search ───
 export async function searchDeezer(query: string, offset = 0, limit = 25): Promise<Track[]> {
   try {
+    if (isNativeApp()) {
+      // pywebview/Android: fetch directo a api.deezer.com (sin CORS en desktop nativo)
+      const data = await callDeezerDirect(`/search?q=${encodeURIComponent(query)}&limit=${limit}&index=${offset}`);
+      return (data.data || []).map(mapRawDeezerTrack);
+    }
     const data = await callDeezerProxy({ action: 'search', query, limit, offset });
     return (data.tracks || []).map(mapProxiedTrack);
   } catch (error) {
@@ -64,6 +168,38 @@ export async function searchDeezer(query: string, offset = 0, limit = 25): Promi
 
 // ─── Deezer Artist Data ───
 export async function getDeezerArtist(artistId: string) {
+  if (isRunningInPyWebView()) {
+    // Usar el bridge Python que ya hace todas las llamadas internamente
+    const pyapi = (window as any).pywebview?.api;
+    if (pyapi?.deezer_artist) {
+      const result = await pyapi.deezer_artist(artistId);
+      if (result.success) {
+        return {
+          success: true,
+          info: { id: result.info.id, name: result.info.name, picture: result.info.picture_xl || result.info.picture_big || '', fans: result.info.nb_fan || 0 },
+          topTracks: (result.top?.data || []).map(mapRawDeezerTrack),
+          albums: (result.albums?.data || []),
+          related: (result.related?.data || []),
+        };
+      }
+      return result;
+    }
+  }
+  if (Capacitor.isNativePlatform()) {
+    const [info, top, albums, related] = await Promise.all([
+      callDeezerDirect(`/artist/${artistId}`),
+      callDeezerDirect(`/artist/${artistId}/top?limit=10`),
+      callDeezerDirect(`/artist/${artistId}/albums?limit=10`),
+      callDeezerDirect(`/artist/${artistId}/related?limit=8`),
+    ]);
+    return {
+      success: true,
+      info: { id: info.id, name: info.name, picture: info.picture_xl || info.picture_big || '', fans: info.nb_fan || 0 },
+      topTracks: (top.data || []).map(mapRawDeezerTrack),
+      albums: (albums.data || []),
+      related: (related.data || []),
+    };
+  }
   return callDeezerProxy({ action: 'artist', artistId });
 }
 
@@ -75,6 +211,19 @@ export async function getDeezerAlbum(albumId: string) {
 // ─── Full metadata for a track (genre, year, track number) ───
 export async function getDeezerTrackMeta(trackId: string | number): Promise<{ genre: string | null; year: number | null; trackNumber: number | null }> {
   try {
+    if (isNativeApp()) {  // incluye pywebview → callDeezerDirect usa fetch() del webview
+      const track = await callDeezerDirect(`/track/${trackId}`);
+      const releaseDate: string | undefined = track.release_date;
+      const year = releaseDate ? parseInt(releaseDate.split('-')[0], 10) : null;
+      let genre: string | null = null;
+      if (track.album?.id) {
+        try {
+          const album = await callDeezerDirect(`/album/${track.album.id}`);
+          genre = album.genres?.data?.[0]?.name ?? null;
+        } catch { /* genre no crítico */ }
+      }
+      return { genre, year, trackNumber: track.track_position ?? null };
+    }
     const data = await callDeezerProxy({ action: 'trackMeta', trackId: String(trackId) });
     return {
       genre: data?.genre || null,
@@ -139,6 +288,13 @@ function buildCandidateQueries(track: Track): string[] {
     const album = normalizeSearchTerm(getPreferredAlbumName(track));
     queries.push(`${title} full`);
     if (album && album !== title) queries.push(`${title} ${album}`);
+    // Anime openings/endings numerados: probar 1-5 automáticamente
+    for (const suffix of ['Opening', 'Ending', 'OP', 'ED']) {
+      for (let n = 1; n <= 5; n++) {
+        queries.push(`${title} ${suffix} ${n}`);
+        queries.push(`${title} ${suffix} ${n} full`);
+      }
+    }
   }
   return queries;
 }
@@ -173,32 +329,36 @@ function scoreNativeCandidate(
   const wantedAlbum = normalizeSearchTerm(getPreferredAlbumName(track));
   let score = 100 - queryIndex * 8;
 
+  // Detectar si es music video
+  const isMusicVideo = /(official music video|music video|\bmv\b|\bm\/v\b)/.test(title);
+
   if (wantedTitle && normalizedTitle === wantedTitle) score += 40;
   else if (wantedTitle && title.includes(wantedTitle)) score += 30;
   if (wantedArtist && title.includes(wantedArtist)) score += 18;
   if (wantedArtist && channel.includes(wantedArtist)) score += 14;
   if (wantedAlbum && title.includes(wantedAlbum)) score += 8;
 
+  // Duración más estricta: penalizar si difiere mucho
   if (track.duration > 0 && candidate.duration > 0) {
     const diffPct = Math.abs(candidate.duration - track.duration) / track.duration;
-    if (diffPct <= 0.10) score += 24;
-    else if (diffPct <= 0.20) score += 10;
-    else if (diffPct >= 0.40) score -= 28;
+    if (diffPct <= 0.02) score += 50;  // ≤2% = canción limpia
+    else if (diffPct <= 0.05) score += 30;
+    else if (diffPct <= 0.10) score += 15;
+    else if (diffPct >= 0.50) score -= 40;
   }
 
+  // Penalizar music videos (tienen intro/outro)
+  if (isMusicVideo) score -= 25;
+
   if (title.includes('official audio')) score += 18;
-  if (title.includes('official video')) score += 14;
   if (channel.includes('topic')) score += 10;
   if (channel.includes('official')) score += 8;
   if (/(opening|ending|\bop\b|\bed\b|full version)/.test(title) && looksAnimeLike(track)) score += 15;
   if (/(lyrics|lyric video|sub esp|sub english|subbed)/.test(title)) score -= 12;
-  if (/(karaoke|reaction|nightcore|sped up|slowed|8d|instrumental|amv|edit)/.test(title)) score -= 22;
+  if (/(karaoke|reaction|nightcore|sped up|slowed|8d|instrumental|amv|edit)/.test(title)) score -= 28;
   if (/(dub cover|english dub cover|fan dub)/.test(title)) score -= 24;
-  if (title.includes('cover') && !channel.includes(wantedArtist)) score -= 12;
-  if (title.includes('live')) score -= 8;
-  if (classifyCandidate(candidate) === 'original probable') score += 10;
-  if (classifyCandidate(candidate) === 'cover') score -= 10;
-  if (classifyCandidate(candidate) === 'live') score -= 8;
+  if (title.includes('cover') && !channel.includes(wantedArtist)) score -= 18;
+  if (title.includes('live') && !title.includes('official')) score -= 12;
 
   return score;
 }
@@ -217,53 +377,52 @@ export async function getDownloadCandidates(
   const cached = candidateCache.get(cacheKey);
   if (cached && cached.length > 0) return cached;
 
+  if (isRunningInPyWebView()) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const api = (window as any).pywebview.api;
+      const queries = buildCandidateQueries(track);
+      const result = await api.get_candidates({
+        title: getPreferredTrackTitle(track),
+        artist: track.artist,
+        album: getPreferredAlbumName(track),
+        duration: track.duration ?? 0,
+        isrc: track.isrc || '',
+        queries,
+      });
+      if (!result.success) throw new Error(result.error || 'Error obteniendo candidatos');
+      const finalCandidates = result.candidates as DownloadCandidate[];
+      if (finalCandidates.length > 0) candidateCache.set(cacheKey, finalCandidates);
+      return finalCandidates;
+    } catch (err) {
+      console.error('[getDownloadCandidates] PyWebView error:', err);
+      throw err;
+    }
+  }
+
   if (Capacitor.isNativePlatform()) {
     try {
-      const { searchYouTubeNative } = await import('@/lib/ytdlpBridge');
+      const { searchYouTubeNativeMulti } = await import('@/lib/ytdlpBridge');
       const queries = buildCandidateQueries(track);
-      console.log('[getDownloadCandidates] Native platform detected. Queries:', queries);
-
-      const resultsPerQuery = await Promise.all(
-        queries.map((q) => {
-          console.log('[searchYouTubeNative] Starting search for query:', q);
-          return withTimeout(searchYouTubeNative(q), 30000)
-            .catch((err) => {
-              console.error('[searchYouTubeNative] Error for query', q, ':', err);
-              return [] as Awaited<ReturnType<typeof searchYouTubeNative>>;
-            });
-        }),
-      );
-
-      console.log('[getDownloadCandidates] All results:', resultsPerQuery);
-
+      // Más queries para anime (Opening/Ending numerados)
+      const maxQueries = looksAnimeLike(track) ? 8 : 4;
+      const results = await withTimeout(searchYouTubeNativeMulti(queries.slice(0, maxQueries)), 45000).catch(() => []);
       const merged = new Map<string, DownloadCandidate>();
-      resultsPerQuery.forEach((results, queryIndex) => {
-        console.log('[getDownloadCandidates] Processing query index', queryIndex, '- got', results.length, 'results');
-        for (const result of results.slice(0, 5)) {
-          const score = scoreNativeCandidate(track, result, queryIndex);
-          const current = merged.get(result.videoId);
-          const candidate: DownloadCandidate = {
-            videoId: result.videoId,
-            title: result.title,
-            channel: result.channel,
-            duration: result.duration,
-            score,
-            label: classifyCandidate(result),
-            confidence: confidenceFromScore(score),
-          };
-          if (!current || score > current.score) {
-            merged.set(result.videoId, candidate);
-          }
-        }
-      });
-
-      const finalCandidates = [...merged.values()]
-        .sort((a, b) => b.score - a.score)
-        .slice(0, 3);
-      console.log('[getDownloadCandidates] Final candidates:', finalCandidates);
-      if (finalCandidates.length > 0) {
-        candidateCache.set(cacheKey, finalCandidates);
+      for (const result of results.slice(0, 8)) {
+        const score = scoreNativeCandidate(track, result, 0);
+        const candidate: DownloadCandidate = {
+          videoId: result.videoId,
+          title: result.title,
+          channel: result.channel,
+          duration: result.duration,
+          score,
+          label: classifyCandidate(result),
+          confidence: confidenceFromScore(score),
+        };
+        merged.set(result.videoId, candidate);
       }
+      const finalCandidates = [...merged.values()].sort((a, b) => b.score - a.score).slice(0, 4);
+      if (finalCandidates.length > 0) candidateCache.set(cacheKey, finalCandidates);
       return finalCandidates;
     } catch (err) {
       console.error('[getDownloadCandidates] Native error:', err);
@@ -304,6 +463,7 @@ interface WebDownloadTicketResponse {
 
 // ─── Download track audio ───
 // Android: yt-dlp local (via YtDlpPlugin nativo)
+// Desktop Python: yt-dlp.exe local (via pywebview)
 // Web: Railway emite un ticket de descarga de corta duración
 export async function downloadTrackAudio(
   track: Track,
@@ -311,6 +471,30 @@ export async function downloadTrackAudio(
   options: DownloadOptions = {},
   videoIdOverride?: string,
 ): Promise<ArrayBuffer> {
+  if (isRunningInPyWebView()) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const api = (window as any).pywebview.api;
+    const title = getPreferredTrackTitle(track);
+    const artist = track.artist;
+    const queries = buildCandidateQueries(track);
+    onProgress?.(10);
+    const result = await api.get_raw_audio(
+      videoIdOverride ?? null,
+      title,
+      artist,
+      queries,
+      options.format ?? 'mp3',
+      options.quality ?? 'alta',
+    );
+    if (!result.success) throw new Error(result.error || 'Error descargando audio');
+    onProgress?.(85);
+    const binary = atob(result.data_b64 as string);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    onProgress?.(95);
+    return bytes.buffer as ArrayBuffer;
+  }
+
   if (Capacitor.isNativePlatform()) {
     const { searchYouTubeNativeMulti, downloadMp3Native } = await import('@/lib/ytdlpBridge');
 
@@ -433,19 +617,128 @@ export async function downloadTrackAudio(
   return buffer;
 }
 
-// ─── Lyrics (LRCLIB) ───
-export async function getLyrics(title: string, artist: string, duration?: number): Promise<{ synced: string | null; plain: string | null }> {
-  try {
-    const params = new URLSearchParams({ track_name: title, artist_name: artist });
-    if (duration) params.set('duration', String(Math.round(duration)));
-    const res = await fetch(`https://lrclib.net/api/get?${params}`);
-    if (!res.ok) return { synced: null, plain: null };
-    const data = await res.json();
-    return {
-      synced: data.syncedLyrics || null,
-      plain: data.plainLyrics || null,
-    };
-  } catch {
-    return { synced: null, plain: null };
+// ─── Lyrics ───
+import type { LyricPrefs } from '@/lib/lyricsProcessor'
+export type { LyricPrefs }
+
+export async function getLyrics(
+  title: string,
+  artist: string,
+  duration?: number,
+  prefs?: LyricPrefs,
+): Promise<{ synced: string | null; plain: string | null }> {
+  const p = prefs ?? { lyricOriginal: true, lyricRomanization: true, lyricTranslation: true, deviceLang: 'es' }
+
+  if (!p.lyricOriginal && !p.lyricRomanization && !p.lyricTranslation) {
+    return { synced: null, plain: null }
   }
+
+  // Fetch LRCLIB y letras.com en paralelo
+  const [lrclibResult, letrasResult] = await Promise.allSettled([
+    _fetchLrclib(title, artist, duration),
+    (async () => {
+      // letras.com solo funciona bien en Android (sin CORS)
+      // En web puede fallar, usamos try/catch
+      try {
+        const { fetchLetrasLyrics } = await import('@/lib/letrasScraper')
+        return await fetchLetrasLyrics(title, artist)
+      } catch {
+        return null
+      }
+    })(),
+  ])
+
+  // Procesar LRCLIB para obtener timestamps y línea original
+  const lrclib = lrclibResult.status === 'fulfilled' ? lrclibResult.value : null
+  const letras = letrasResult.status === 'fulfilled' ? letrasResult.value : null
+
+  // Decidir qué fuentes usar para cada capa
+  // letras.com tiene mejor calidad humana para original + traducción ES
+  // LRCLIB tiene timestamps para sincronización
+
+  if (letras?.original && letras.original.length > 0) {
+    // Tenemos letras.com — combinar con timestamps de LRCLIB
+    const result = _combineLyrics(letras, lrclib, p)
+    if (result) return result
+  }
+
+  // Fallback a LRCLIB directo con romanización
+  if (lrclib?.syncedLrc || lrclib?.plainLrc) {
+    try {
+      const { processLyrics } = await import('@/lib/lyricsProcessor')
+      return await processLyrics(lrclib.syncedLrc || '', lrclib.plainLrc || '', p)
+    } catch {
+      return { synced: null, plain: null }
+    }
+  }
+
+  return { synced: null, plain: null }
+}
+
+interface LrclibResult {
+  syncedLrc: string
+  plainLrc: string
+}
+
+async function _fetchLrclib(title: string, artist: string, duration?: number): Promise<LrclibResult> {
+  const params = new URLSearchParams({ track_name: title, artist_name: artist })
+  if (duration) params.set('duration', String(Math.round(duration)))
+  const res = await fetch(`https://lrclib.net/api/get?${params}`)
+  if (!res.ok) return { syncedLrc: '', plainLrc: '' }
+  const data = await res.json()
+  return {
+    syncedLrc: data.syncedLyrics || '',
+    plainLrc: data.plainLyrics || '',
+  }
+}
+
+interface LetrasResult {
+  original: string[]
+  romaji: string[]
+  translated: string[]
+  sourceUrl: string
+}
+
+function _combineLyrics(
+  letras: LetrasResult,
+  lrclib: LrclibResult | null,
+  p: LyricPrefs,
+): { synced: string | null; plain: string | null } | null {
+  if (letras.original.length === 0) return null
+
+  // Generar timestamps si tenemos LRC de LRCLIB, si no crear fijos cada 3s
+  let timestamps: string[] | null = null
+  if (lrclib?.syncedLrc) {
+    const LRC_RE = /^\[(\d+:\d+\.\d+)\]/g
+    const matches = [...lrclib.syncedLrc.matchAll(LRC_RE)]
+    if (matches.length >= letras.original.length * 0.5) {
+      timestamps = matches.map(m => m[1])
+    }
+  }
+
+  const result: string[] = []
+  const maxLines = Math.max(
+    letras.original.length,
+    letras.romaji.length || 0,
+    letras.translated.length || 0,
+  )
+
+  for (let i = 0; i < maxLines; i++) {
+    // Timestamp — usar el de LRCLIB si existe, si no estimator
+    const ts = timestamps?.[i] ?? `[${String(Math.floor(i / 20) + 0).padStart(2, '0')}:${String((i % 20) * 3).padStart(2, '0')}.00]`
+
+    if (p.lyricOriginal && letras.original[i]) {
+      result.push(`[${ts}]${letras.original[i]}`)
+    }
+
+    if (p.lyricRomanization && letras.romaji[i]) {
+      result.push(`[${ts}]${letras.romaji[i]}`)
+    }
+
+    if (p.lyricTranslation && letras.translated[i]) {
+      result.push(`[${ts}]${letras.translated[i]}`)
+    }
+  }
+
+  return { synced: result.join('\n'), plain: result.join('\n') }
 }

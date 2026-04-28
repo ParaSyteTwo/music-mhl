@@ -58,7 +58,7 @@ export async function writeID3Tags(mp3Buffer: ArrayBuffer, tags: ID3Tags): Promi
   }
 
   if (tags.lyrics) {
-    writer.setFrame('USLT', { description: '', language: 'spa', lyrics: tags.lyrics }); // Lyrics
+    writer.setFrame('USLT', { description: '', language: 'und', lyrics: tags.lyrics });
   }
 
   // Album art (APIC frame)

@@ -31,7 +31,7 @@ from modules.download import (
 )
 from modules.maintenance import is_maintenance
 from modules.rate_limit import check_rate_limit, get_client_ip
-from modules.piped import get_audio_url_piped
+from modules.piped import get_audio_url_no_cookie
 from modules.search import score_candidate, search_candidates
 from modules.stats import _increment_downloads, _increment_errors, _log_error
 from modules.telegram import send_telegram
@@ -144,7 +144,15 @@ def register_download_routes(app: FastAPI) -> None:
         except Exception as e:
             print(f"[download-ticket B2] yt-dlp web falló: {e}", flush=True)
 
-        # 2) yt-dlp con cookies activas y headers reales
+        # 2) Piped/Invidious — proxy de YouTube sin cookies ni bot detection
+        if not direct_audio_url:
+            print(f"[download-ticket B2] Intentando Piped/Invidious para {resolved_video_id}", flush=True)
+            direct_audio_url = get_audio_url_no_cookie(resolved_video_id)
+            if direct_audio_url:
+                print(f"[download-ticket B2] Piped/Invidious OK", flush=True)
+
+        # 3) yt-dlp con cookies activas y headers reales
+        #    web supports cookies, android_music does not
         if not direct_audio_url:
             print(f"[download-ticket B2] Intentando yt-dlp con cookies para {resolved_video_id}", flush=True)
             ytdlp_opts: dict[str, Any] = {
@@ -152,7 +160,7 @@ def register_download_routes(app: FastAPI) -> None:
                 "noplaylist": True,
                 "skip_download": True,
                 "format": "bestaudio/best",
-                "extractor_args": {"youtube": {"player_client": ["android_music"]}},
+                "extractor_args": {"youtube": {"player_client": ["web"]}},
                 "http_headers": REAL_HEADERS,
             }
             active_b64 = get_active_cookies_b64()
@@ -183,7 +191,7 @@ def register_download_routes(app: FastAPI) -> None:
                 file_name=safe_name,
                 format_name=format_name,
             )
-            download_url = f"https://ytdlp-service-little-sea-7784.fly.dev/download?token={token_data['token']}"
+            download_url = f"{RAILWAY_PUBLIC_DOMAIN}/download?token={token_data['token']}"
             return {
                 "success": True,
                 "fileName": safe_name,

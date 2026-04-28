@@ -28,23 +28,39 @@ public class OpenFilePlugin extends Plugin {
 
     private static final String TAG = "OpenFilePlugin";
 
-    /** Devuelve todas las apps instaladas que pueden reproducir audio/mpeg. */
+    /** Devuelve todas las apps instaladas que pueden reproducir audio. */
     @PluginMethod
     public void getAudioPlayers(PluginCall call) {
-        Intent probe = new Intent(Intent.ACTION_VIEW);
-        probe.setType("audio/mpeg");
-
         PackageManager pm = getContext().getPackageManager();
-        List<ResolveInfo> resolved = pm.queryIntentActivities(probe, 0);
-
         JSArray players = new JSArray();
-        for (ResolveInfo info : resolved) {
-            try {
-                JSObject player = new JSObject();
-                player.put("packageName", info.activityInfo.packageName);
-                player.put("label", info.loadLabel(pm).toString());
-                players.put(player);
-            } catch (Exception ignored) {}
+        java.util.Set<String> seen = new java.util.HashSet<>();
+
+        // Probe 1: content:// + audio/* (Retro Music, mayoría de players)
+        Intent probe1 = new Intent(Intent.ACTION_VIEW);
+        probe1.setDataAndType(Uri.parse("content://com.mhl.music/dummy.mp3"), "audio/*");
+        for (ResolveInfo info : pm.queryIntentActivities(probe1, PackageManager.MATCH_ALL)) {
+            if (seen.add(info.activityInfo.packageName)) {
+                try {
+                    JSObject player = new JSObject();
+                    player.put("packageName", info.activityInfo.packageName);
+                    player.put("label", info.loadLabel(pm).toString());
+                    players.put(player);
+                } catch (Exception ignored) {}
+            }
+        }
+
+        // Probe 2: file:// + audio/* (algunos players que prefieren file://)
+        Intent probe2 = new Intent(Intent.ACTION_VIEW);
+        probe2.setDataAndType(Uri.parse("file://com.mhl.music/dummy.mp3"), "audio/*");
+        for (ResolveInfo info : pm.queryIntentActivities(probe2, PackageManager.MATCH_ALL)) {
+            if (seen.add(info.activityInfo.packageName)) {
+                try {
+                    JSObject player = new JSObject();
+                    player.put("packageName", info.activityInfo.packageName);
+                    player.put("label", info.loadLabel(pm).toString());
+                    players.put(player);
+                } catch (Exception ignored) {}
+            }
         }
 
         JSObject result = new JSObject();

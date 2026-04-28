@@ -1,28 +1,36 @@
 import { useState, useEffect } from 'react';
 
-// Detecta si corre en Tauri (desktop), Android (Capacitor) o Web
-export function detectPlatform(): 'tauri' | 'android' | 'web' {
-  if (typeof window !== 'undefined' && (
-    '__TAURI_INTERNALS__' in window ||
-    '__TAURI__' in window ||
-    navigator.userAgent.includes('Tauri')
-  )) return 'tauri';
+// Detecta si corre en Android (Capacitor), pywebview (Python) o Web.
+export function detectPlatform(): 'android' | 'pywebview' | 'web' {
+  if (typeof window === 'undefined') return 'web';
+
+  // pywebview — detectado por query param ?platform=pywebview (inyectado por launcher.py)
+  // o por window.pywebview si ya está disponible
+  if (
+    new URLSearchParams(window.location.search).get('platform') === 'pywebview' ||
+    'pywebview' in window
+  ) {
+    return 'pywebview';
+  }
+
+  // Android (Capacitor)
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { Capacitor } = require('@capacitor/core');
     if (Capacitor.isNativePlatform()) return 'android';
   } catch {}
+
   return 'web';
 }
 
-// Hook reactivo — re-evalúa tras el mount para capturar Tauri tardío
+// Hook reactivo — re-evalúa tras el mount
 export function usePlatform() {
-  const [p, setP] = useState<'tauri' | 'android' | 'web'>(() => detectPlatform());
+  const [p, setP] = useState<'android' | 'pywebview' | 'web'>(() => detectPlatform());
   useEffect(() => { setP(detectPlatform()); }, []);
   return p;
 }
 
-export const platform = detectPlatform();
-export const isTauri  = platform === 'tauri';
-export const isAndroid = platform === 'android';
-export const isWeb    = platform === 'web';
+export const platform     = detectPlatform();
+export const isAndroid    = platform === 'android';
+export const isPyWebView  = platform === 'pywebview';
+export const isWeb        = platform === 'web';

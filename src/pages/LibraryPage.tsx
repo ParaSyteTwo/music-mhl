@@ -16,9 +16,12 @@ import {
   Play,
   Trash2,
   X,
+  FileText,
+  Loader2,
 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
-import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
+import { getLyrics } from '@/lib/api/musicApi';
 import { FilePicker } from '@capawesome/capacitor-file-picker';
 import { scanNativeDocumentsLibrary } from '@/lib/nativeLibraryBridge';
 import { createPortal } from 'react-dom';
@@ -883,6 +886,46 @@ function TracksList({
   onPlay: (id: string) => void;
   onRemove: (id: string) => void;
 }) {
+  const [fetchingLyrics, setFetchingLyrics] = useState<Set<string>>(new Set());
+  const { lyricOriginal, lyricRomanization, lyricTranslation } = useMusicStore();
+
+  const handleGetLyrics = async (e: React.MouseEvent, track: LocalTrack) => {
+    e.stopPropagation();
+    if (fetchingLyrics.has(track.id)) return;
+    setFetchingLyrics(prev => new Set(prev).add(track.id));
+    try {
+      const result = await getLyrics(track.title, track.artist, track.duration, {
+        lyricOriginal, lyricRomanization, lyricTranslation,
+        deviceLang: navigator.language.split('-')[0],
+      });
+      const content = result.synced || result.plain;
+      if (!content) { toast.error('No se encontraron letras'); return; }
+      const filename = `${track.title} - ${track.artist}.lrc`;
+      if (Capacitor.isNativePlatform()) {
+        await Filesystem.writeFile({
+          path: `Music/MHL Music/${filename}`,
+          data: content,
+          directory: Directory.ExternalStorage,
+          encoding: Encoding.UTF8,
+        });
+        toast.success('Letra guardada junto a la canción');
+      } else {
+        const blob = new Blob([content], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = filename;
+        document.body.appendChild(a); a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+        toast.success('Archivo .lrc descargado');
+      }
+    } catch {
+      toast.error('Error al obtener la letra');
+    } finally {
+      setFetchingLyrics(prev => { const n = new Set(prev); n.delete(track.id); return n; });
+    }
+  };
+
   return (
     <div className="space-y-2">
       {tracks.map((track, i) => (
@@ -894,10 +937,8 @@ function TracksList({
           className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg hover:bg-[rgba(255,255,255,0.04)] transition-colors cursor-pointer group"
           onClick={() => onPlay(track.id)}
         >
-          {/* Play icon */}
           <Play className="w-4 h-4 text-[#C8F04B] group-hover:scale-110 transition-transform flex-shrink-0" />
 
-          {/* Cover */}
           <div className="w-10 h-10 rounded overflow-hidden flex-shrink-0 bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.06)]">
             {track.cover ? (
               <img src={track.cover} alt="" className="w-full h-full object-cover" />
@@ -908,21 +949,29 @@ function TracksList({
             )}
           </div>
 
-          {/* Info */}
           <div className="flex-1 min-w-0">
             <p className="text-[13px] font-medium truncate text-[#F5F5F0]">{track.title}</p>
             <p className="text-[11px] text-[#666660] truncate">{track.artist}</p>
           </div>
 
-          {/* Delete button */}
+          {/* Letra */}
           <motion.button
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.95 }}
-            onClick={(e) => {
-              e.stopPropagation();
-              onRemove(track.id);
-            }}
-            className="p-1.5 rounded opacity-0 group-hover:opacity-100 hover:bg-red-500/20 transition-all"
+            onClick={(e) => handleGetLyrics(e, track)}
+            title="Obtener letra"
+            className="p-1.5 rounded opacity-0 group-hover:opacity-100 hover:bg-[rgba(200,240,75,0.15)] transition-all flex-shrink-0"
+          >
+            {fetchingLyrics.has(track.id)
+              ? <Loader2 className="w-4 h-4 text-[#C8F04B] animate-spin" />
+              : <FileText className="w-4 h-4 text-[#C8F04B]" />}
+          </motion.button>
+
+          <motion.button
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={(e) => { e.stopPropagation(); onRemove(track.id); }}
+            className="p-1.5 rounded opacity-0 group-hover:opacity-100 hover:bg-red-500/20 transition-all flex-shrink-0"
           >
             <Trash2 className="w-4 h-4 text-red-500" />
           </motion.button>

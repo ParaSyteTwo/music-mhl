@@ -19,6 +19,7 @@ export function CandidatePicker({
   const [candidates, setCandidates] = useState<DownloadCandidate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [visibleCount, setVisibleCount] = useState(4);
   const isNativeMobile = Capacitor.isNativePlatform();
 
   useEffect(() => {
@@ -30,6 +31,7 @@ export function CandidatePicker({
   useEffect(() => {
     setLoading(true);
     setError(null);
+    setVisibleCount(4);
     getDownloadCandidates(track)
       .then((cands) => {
         setCandidates(cands);
@@ -109,12 +111,9 @@ export function CandidatePicker({
           ) : candidates.length === 0 ? (
             <p className="text-center text-xs text-[#555] py-8">No se encontraron resultados</p>
           ) : (
-            <div className="space-y-1.5 mt-1">
-              {candidates.map((c, i) => {
-                const durationMatch = track.duration > 0 && c.duration > 0
-                  ? Math.abs(c.duration - track.duration) / track.duration
-                  : 1;
-                const isClose = durationMatch <= 0.15;
+            <>
+              <div className="space-y-1.5 mt-1">
+                {candidates.slice(0, visibleCount).map((c, i) => {
                 const isBest = i === 0;
                 const confidenceClass = c.confidence === 'alta'
                   ? 'bg-[rgba(200,240,75,0.15)] text-[#C8F04B]'
@@ -138,26 +137,13 @@ export function CandidatePicker({
                     <div className="flex-1 min-w-0">
                       <p className="text-[13px] text-[#F5F5F0] leading-tight line-clamp-2">{c.title}</p>
                       <p className="text-[11px] text-[#555] truncate mt-0.5">{c.channel}</p>
-                      <div className="flex flex-wrap gap-1.5 mt-1.5">
-                        {c.label && (
-                          <span className="text-[9px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-[rgba(255,255,255,0.06)] text-[#A9A99F]">
-                            {c.label}
-                          </span>
-                        )}
-                        {c.confidence && (
-                          <span className={`text-[9px] uppercase tracking-wide px-1.5 py-0.5 rounded ${confidenceClass}`}>
-                            confianza {c.confidence}
-                          </span>
-                        )}
-                      </div>
                     </div>
                     <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                      {c.label && c.label !== 'original probable' && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-[rgba(255,255,255,0.06)] text-[#777] capitalize">{c.label}</span>
+                      )}
                       {c.duration > 0 && (
-                        <span className={`flex items-center gap-1 text-[10px] tabular-nums px-1.5 py-0.5 rounded ${
-                          isClose
-                            ? 'bg-[rgba(200,240,75,0.15)] text-[#C8F04B]'
-                            : 'bg-[rgba(255,255,255,0.06)] text-[#555]'
-                        }`}>
+                        <span className="flex items-center gap-1 text-[10px] tabular-nums px-1.5 py-0.5 rounded bg-[rgba(255,255,255,0.06)] text-[#555]">
                           <Clock className="w-2.5 h-2.5" />
                           {fmt(c.duration)}
                         </span>
@@ -169,7 +155,18 @@ export function CandidatePicker({
                   </motion.button>
                 );
               })}
-            </div>
+              </div>
+              {visibleCount < candidates.length && (
+                <motion.button
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  onClick={() => setVisibleCount((v) => v + 4)}
+                  className="w-full mt-2 py-2.5 rounded-xl text-center text-xs text-[#888] bg-[rgba(255,255,255,0.04)] hover:bg-[rgba(255,255,255,0.08)] border border-[rgba(255,255,255,0.06)] transition-colors"
+                >
+                  Ver {Math.min(4, candidates.length - visibleCount)} más
+                </motion.button>
+              )}
+            </>
           )}
         </div>
       </motion.div>

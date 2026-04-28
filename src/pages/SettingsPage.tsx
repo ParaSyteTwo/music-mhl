@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { useMusicStore } from '@/store/musicStore';
 import { t } from '@/lib/i18n';
 import { Capacitor } from '@capacitor/core';
+import { isPyWebView } from '@/lib/platform';
 import type { AudioPlayer } from '@/lib/openFileBridge';
 
 const isAndroid = Capacitor.getPlatform() === 'android';
@@ -17,6 +18,9 @@ export default function SettingsPage() {
     ytDlpVersion, ytDlpUpdateAvailable, ytDlpUpdating,
     setYtDlpVersion, setYtDlpUpdateAvailable, setYtDlpUpdating,
     preferredPlayerPackage, setPreferredPlayerPackage,
+    lyricOriginal, setLyricOriginal,
+    lyricRomanization, setLyricRomanization,
+    lyricTranslation, setLyricTranslation,
   } = useMusicStore();
 
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'done' | 'skipped' | 'error'>('idle');
@@ -68,6 +72,21 @@ export default function SettingsPage() {
   };
 
   const handlePickFolder = async () => {
+    // pywebview (Desktop Python): usar diálogo nativo de bridge.py
+    if ('pywebview' in window) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const api = (window as any).pywebview?.api;
+        if (api?.pick_folder) {
+          const folder = await api.pick_folder();
+          if (folder) {
+            await api.save_setting('download_folder', folder);
+            setDownloadFolder(folder, folder.split(/[/\\]/).pop() || folder);
+          }
+        }
+      } catch { /* cancelado */ }
+      return;
+    }
     if (!('showDirectoryPicker' in window)) return;
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -136,6 +155,52 @@ export default function SettingsPage() {
         </div>
       </section>
 
+      {/* Letras */}
+      <section className="mb-8">
+        <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">Letras</h2>
+        <div className="p-4 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] space-y-3">
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={lyricOriginal}
+              onChange={e => setLyricOriginal(e.target.checked)}
+              className="mt-0.5"
+            />
+            <div>
+              <p className="text-sm text-[#F5F5F0]">Original</p>
+              <p className="text-xs text-[#666660] mt-0.5">Letra tal como fue escrita por el artista</p>
+            </div>
+          </label>
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={lyricRomanization}
+              onChange={e => setLyricRomanization(e.target.checked)}
+              className="mt-0.5"
+            />
+            <div>
+              <p className="text-sm text-[#F5F5F0]">Romanización</p>
+              <p className="text-xs text-[#666660] mt-0.5">Solo para idiomas con escritura no latina (japonés, coreano, chino)</p>
+            </div>
+          </label>
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={lyricTranslation}
+              onChange={e => setLyricTranslation(e.target.checked)}
+              className="mt-0.5"
+            />
+            <div>
+              <p className="text-sm text-[#F5F5F0]">Traducción</p>
+              <p className="text-xs text-[#666660] mt-0.5">Al idioma del dispositivo</p>
+            </div>
+          </label>
+          {!lyricOriginal && !lyricRomanization && !lyricTranslation && (
+            <p className="text-xs text-[#666660] italic pt-1">Sin selección — no se descargarán letras</p>
+          )}
+        </div>
+      </section>
+
       <section className="mb-8">
         <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">Carpeta de descargas</h2>
 
@@ -170,9 +235,9 @@ export default function SettingsPage() {
                   </>
                 )}
               </div>
-              {'showDirectoryPicker' in window && (
+              {(('showDirectoryPicker' in window) || isPyWebView) && (
                 <div className="flex items-center gap-2 flex-shrink-0">
-                  {downloadFolderName && (
+                  {downloadFolderName && !isPyWebView && (
                     <button
                       onClick={clearDownloadFolder}
                       className="p-1.5 rounded-md text-[#666660] hover:text-[#F5F5F0] hover:bg-[rgba(255,255,255,0.06)] transition-colors"

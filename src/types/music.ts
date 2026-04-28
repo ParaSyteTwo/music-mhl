@@ -10,6 +10,7 @@ export interface Track {
   preview?: string;
   deezerId?: number;
   youtubeId?: string;
+  isrc?: string;
   // ─── Local library fields ───
   isLocal?: boolean;
   localPath?: string;

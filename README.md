@@ -28,19 +28,19 @@ MHL Music es una app multi-plataforma para buscar, escuchar y descargar música 
 
 ## 📦 Descargas
 
-### 💻 Windows Desktop (v1.3.2)
+### 💻 Windows Desktop (v1.3.4)
 
 **Opción 1 — Portable (recomendada)**
 > Copia la carpeta a cualquier sitio y ejecuta. Sin instalación, sin admin, sin Python, sin Node.
 
-1. Descarga [`MHL-Music-Portable-1.3.2.zip`](../../releases/latest)
+1. Descarga [`MHL-Music-Portable-1.3.4.zip`](../../releases/latest)
 2. Descomprime en cualquier carpeta
 3. Ejecuta `MHL Music.exe`
 
 **Opción 2 — Installer**
 > Instala en `Program Files` sin necesidad de admin.
 
-1. Descarga [`MHL Music_1.3.2_x64-setup.exe`](../../releases/latest)
+1. Descarga [`MHL Music_1.3.4_x64-setup.exe`](../../releases/latest)
 2. Ejecuta el installer
 3. Listo
 

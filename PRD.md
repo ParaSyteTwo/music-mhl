@@ -52,6 +52,7 @@ MHL Music es una app multi-plataforma para buscar, reproducir y descargar músic
 - El frontend (React/Vite build) se sirve desde el proceso Tauri
 - Instalador `.exe` generado con Tauri bundler (NSIS)
 - Auto-updater opcional (v2.1)
+- ⚠️ BUG CONOCIDO: la búsqueda en Desktop Tauri no funciona — el frontend no detecta correctamente el contexto Tauri y hace fallback al backend Fly.io. Fix en TECH_DESIGN.md §4.
 
 ## 5. Acceptance Criteria
 

@@ -118,59 +118,62 @@ export const isWeb     = platform === 'web';
 
 ### Búsqueda Deezer (sin backend)
 ```
-[React UI] → musicApi.searchDeezer() con isTauri=true
-    ↓ deezerDirect.ts → fetch('https://api.deezer.com/search?q=...')
+[React UI] → musicApi.searchDeezer() con isNativeApp()=true
+    ↓ callDeezerDirect() → invoke('deezer_get', { path })
+[Rust: deezer_get] → fetch('https://api.deezer.com/search?q=...')
 [api.deezer.com] — sin CORS en webview nativo de Tauri
-    ↓ JSON crudo → mapProxiedTrack()
+    ↓ JSON crudo → mapRawDeezerTrack()
 [React UI] → muestra resultados
 ```
 
 ### Búsqueda YouTube + Descarga (sin backend)
 ```
-[React UI] → tauriDownloader.searchYouTube(track)
-    ↓ Command.create('yt-dlp', ['--dump-json', 'ytsearch5:...'])
+[React UI] → tauriDownloader.searchYouTubeTauri(query)
+    ↓ invoke('ytdlp_search', { args })
+[Rust: ytdlp_search] → spawn yt-dlp.exe --dump-json ytsearch8:...
 [yt-dlp.exe] (bundleado en resources/win/)
     ↓ stdout: resultados JSON
 [React UI] → muestra candidatos
 
-[React UI] → tauriDownloader.downloadMp3(videoId, opts)
-    ↓ Command.create('yt-dlp', [url, '-x', '--audio-format', 'mp3', '--ffmpeg-location', ffmpegPath, ...])
-[yt-dlp.exe → ffmpeg.exe]
+[React UI] → tauriDownloader.downloadMp3Tauri(videoId, opts)
+    ↓ invoke('ytdlp_download', { trackId, args, outputDir })
+[Rust: ytdlp_download] → spawn yt-dlp.exe → ffmpeg.exe
     ↓ archivo .mp3 + ID3 tags
 [~/Music/MHL/{artist} - {title}.mp3]
-    ↓ evento de progreso vía onEvent()
+    ↓ evento de progreso vía emit()
 [React UI] → actualiza estado de descarga
 ```
 
-**Archivos clave a crear/completar:**
+### ⚠️ Bug: Detección de contexto Tauri (BLOQUEANTE)
 
-| Archivo | Estado | Rol |
-|---------|--------|-----|
-| `src/lib/api/deezerDirect.ts` | Existe, incompleto | Expandir con `trackMeta`, `home`, `artist`, `album` full |
-| `src/lib/tauriDownloader.ts` | Por crear | `searchYouTube()` + `downloadMp3()` via Tauri Shell |
-| `src/lib/api/musicApi.ts` | Existe | Agregar branch `isTauri` para Deezer + descarga |
+**Problema:** `isNativeApp()` en `musicApi.ts` usa `__TAURI_INTERNALS__` para detectar Tauri. Este flag NO existe en Tauri v2. El paquete `@tauri-apps/api` no está instalado en `package.json`, por lo tanto las llamadas `invoke()` fallan silenciosamente y la app hace fallback al backend Fly.io.
+
+**Cadena rota:**
+```
+isNativeApp() → '__TAURI_INTERNALS__' in window → false (siempre)
+→ callDeezerProxy() (web fallback) → busca en backend Fly.io
+→ downloadTrackAudio() → Railway /candidates y /download-ticket
+→ Desktop deja de ser self-contained
+```
+
+**Fix requerido (4 pasos):**
+1. `npm install @tauri-apps/api` en el proyecto root
+2. Reemplazar `isNativeApp()` en `musicApi.ts` por `platform === 'tauri'` (usando `src/lib/platform/index.ts` que ya existe y funciona)
+3. En `downloadTrackAudio()` para Tauri: usar `tauriDownloader.ts` en lugar del fallback web (igual que Android)
+4. Verificar que `tauri.conf.json` tenga la sección `plugins.shell` con `scope` para invocar yt-dlp.exe
+
+**Archivos a modificar:**
+| Archivo | Cambio |
+|---------|--------|
+| `package.json` | Agregar `@tauri-apps/api` |
+| `src/lib/platform/index.ts` | Ya funciona — no tocar |
+| `src/lib/api/musicApi.ts` | Reemplazar `isNativeApp()` por `isTauri`; agregar branch Tauri en `downloadTrackAudio` |
+| `src-tauri/tauri.conf.json` | Agregar scope de shell para yt-dlp |
 
 **Rutas de binarios en producción (Tauri):**
 ```typescript
-// src/lib/tauriDownloader.ts
-import { Command } from '@tauri-apps/plugin-shell';
-import { resolveResource } from '@tauri-apps/api/path';
-
-const ytdlpPath = await resolveResource('win/yt-dlp.exe');
-const ffmpegPath = await resolveResource('win/ffmpeg.exe');
-```
-
-**Configuración Tauri Shell** (`src-tauri/tauri.conf.json`):
-```json
-{
-  "plugins": {
-    "shell": {
-      "scope": [
-        { "name": "yt-dlp", "cmd": "resources/win/yt-dlp.exe", "args": true }
-      ]
-    }
-  }
-}
+// yt-dlp.exe resuelto en Rust via find_resource() en lib.rs
+// No se necesita resolveResource() en frontend — todo pasa por invoke()
 ```
 
 ---
@@ -282,6 +285,7 @@ VITE_SERVICE_API_KEY=...
 - [ ] `npm run build` sin probar PWA manifest primero
 - [ ] Subir yt-dlp.exe / ffmpeg.exe al repositorio git (usar .gitignore + script de descarga)
 - [ ] `shell: { open: true }` en Tauri sin revisión de seguridad
+- [ ] Usar `__TAURI_INTERNALS__` para detectar Tauri — no existe en Tauri v2, usar `platform === 'tauri'` de `src/lib/platform/index.ts`
 
 ---
 

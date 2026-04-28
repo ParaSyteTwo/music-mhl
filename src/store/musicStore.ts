@@ -12,7 +12,7 @@ import {
 } from '@/lib/localTrackRuntime';
 import { parseLocalFiles } from '@/lib/metadataEnricher';
 import { Capacitor } from '@capacitor/core';
-import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { toast } from 'sonner';
 
 function getProgressLabel(progress: number): string {
@@ -113,6 +113,14 @@ interface MusicStore {
   setDownloadWifiOnly: (v: boolean) => void;
   appLanguage: 'es' | 'en';
   setAppLanguage: (lang: 'es' | 'en') => void;
+
+  // ─── Lyric settings ───
+  lyricOriginal: boolean;
+  lyricRomanization: boolean;
+  lyricTranslation: boolean;
+  setLyricOriginal: (v: boolean) => void;
+  setLyricRomanization: (v: boolean) => void;
+  setLyricTranslation: (v: boolean) => void;
 
   // ─── yt-dlp status ───
   ytDlpVersion: string | null;
@@ -358,6 +366,84 @@ export const useMusicStore = create<MusicStore>()(
             }).catch(() => {});
           }
 
+          // PyWebView Desktop: Python descarga audio, frontend escribe ID3 con browser-id3-writer
+          if ('pywebview' in window) {
+            try {
+              updateDl({ progress: 10 });
+              const [trackMeta, lyricsResult] = await Promise.all([
+                track.deezerId ? getDeezerTrackMeta(track.deezerId).catch(() => ({ genre: null, year: null, trackNumber: null })) : Promise.resolve({ genre: null, year: null, trackNumber: null }),
+                getLyrics(
+                  track.canonicalTitle?.trim() || track.title,
+                  track.artist,
+                  track.duration,
+                  { lyricOriginal: get().lyricOriginal, lyricRomanization: get().lyricRomanization, lyricTranslation: get().lyricTranslation, deviceLang: navigator.language.split('-')[0] }
+                ).catch(() => ({ synced: null, plain: null })),
+              ]);
+              updateDl({ progress: 30 });
+              const lyrics = lyricsResult.synced || lyricsResult.plain || null;
+              const queries = [
+                `${track.canonicalTitle?.trim() || track.title} ${track.artist}`,
+                `${track.canonicalTitle?.trim() || track.title} ${track.artist} official audio`,
+              ];
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const api = (window as any).pywebview?.api;
+              const settings = await api.get_settings();
+              const outputDir = settings.download_folder || 'C:/Users/Paul/Music/MHL Music';
+              const rawResult = await api.get_raw_audio(
+                videoIdOverride ?? null,
+                track.canonicalTitle?.trim() || track.title,
+                track.artist,
+                queries,
+                downloadFormat,
+                mp3Quality,
+              );
+              if (!rawResult.success) throw new Error(rawResult.error || 'Error descargando audio');
+
+              updateDl({ progress: 50 });
+              // Convertir hex a ArrayBuffer
+              const hex = rawResult.data_b64 as string;
+              const byteCount = hex.length / 2;
+              const audioBuffer = new ArrayBuffer(byteCount);
+              const view = new Uint8Array(audioBuffer);
+              for (let i = 0; i < byteCount; i++) {
+                view[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+              }
+
+              updateDl({ progress: 70 });
+              // Escribir ID3 tags con browser-id3-writer (misma lógica que web/Android)
+              const taggedBlob = await writeID3Tags(audioBuffer, {
+                title: track.canonicalTitle?.trim() || track.title,
+                artist: track.artist,
+                album: getPreferredAlbumName(track),
+                coverUrl: track.cover,
+                ...(trackMeta.genre ? { genre: trackMeta.genre } : {}),
+                ...(trackMeta.year ? { year: trackMeta.year } : {}),
+                ...(trackMeta.trackNumber ? { trackNumber: trackMeta.trackNumber } : {}),
+                ...(lyrics ? { lyrics } : {}),
+              });
+
+              updateDl({ progress: 90 });
+              // Guardar archivo con nombre y ruta correcta
+              const ext = downloadFormat === 'aac' ? 'm4a' : 'mp3';
+              const fileName = buildDownloadFileName(track, ext);
+              const filePath = outputDir + '/' + fileName;
+              const taggedArr = await taggedBlob.arrayBuffer();
+              await api.write_file_bytes(filePath, Array.from(new Uint8Array(taggedArr)));
+
+              updateDl({ progress: 100, status: 'completed', error: undefined, fileName });
+              get().addMostDownloadedArtist(track.artist);
+              toast.success(`✓ Descargado: ${track.title} - ${track.artist}`, { duration: 4000 });
+            } catch (error) {
+              const msg = error instanceof Error ? error.message : 'Download failed';
+              updateDl({ status: 'failed', error: msg });
+              toast.error(`Error: ${msg}`, { duration: 5000 });
+            } finally {
+              set((s) => ({ activeDownloads: Math.max(0, s.activeDownloads - 1) }));
+              setTimeout(() => get().processDownloadQueue(), 100);
+            }
+            return;
+          }
+
           try {
           for (let attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
@@ -372,9 +458,20 @@ export const useMusicStore = create<MusicStore>()(
               // Obtener metadatos extendidos y letra en paralelo
               const [trackMeta, lyricsResult] = await Promise.all([
                 track.deezerId ? getDeezerTrackMeta(track.deezerId).catch(() => ({ genre: null, year: null, trackNumber: null })) : Promise.resolve({ genre: null, year: null, trackNumber: null }),
-                getLyrics(track.canonicalTitle?.trim() || track.title, track.artist, track.duration).catch(() => ({ synced: null, plain: null })),
+                getLyrics(
+                  track.canonicalTitle?.trim() || track.title,
+                  track.artist,
+                  track.duration,
+                  {
+                    lyricOriginal: get().lyricOriginal,
+                    lyricRomanization: get().lyricRomanization,
+                    lyricTranslation: get().lyricTranslation,
+                    deviceLang: navigator.language.split('-')[0],
+                  }
+                ).catch(() => ({ synced: null, plain: null })),
               ]);
-              const lyrics = lyricsResult.plain || null;
+              // Preferir synced (LRC con timestamps) — Retro Music lo sincroniza automáticamente
+              const lyrics = lyricsResult.synced || lyricsResult.plain || null;
 
               if (downloadFormat === 'mp3' && Capacitor.isNativePlatform()) {
                 const taggedBlob = await writeID3Tags(audioBuffer, {
@@ -395,6 +492,17 @@ export const useMusicStore = create<MusicStore>()(
                 const { saveTaggedAudioToMusic } = await import('@/lib/ytdlpBridge');
                 const mediaUri = await saveTaggedAudioToMusic(resolvedFileName, base64);
                 updateDl({ mediaUri });
+
+                // Guardar .lrc junto al MP3 para que Retro Music lo sincronice
+                if (lyricsResult.synced) {
+                  const lrcName = resolvedFileName.replace(/\.[^.]+$/, '.lrc');
+                  Filesystem.writeFile({
+                    path: `Music/MHL Music/${lrcName}`,
+                    data: lyricsResult.synced,
+                    directory: Directory.ExternalStorage,
+                    encoding: Encoding.UTF8,
+                  }).catch(() => { /* silencioso — no bloquea la descarga */ });
+                }
               } else if (!Capacitor.isNativePlatform()) {
                 // Web: escribir ID3 tags y guardar como .mp3
                 const taggedBlob = await writeID3Tags(audioBuffer, {
@@ -587,6 +695,14 @@ export const useMusicStore = create<MusicStore>()(
         setDownloadWifiOnly: (v) => set({ downloadWifiOnly: v }),
         appLanguage: 'es',
         setAppLanguage: (lang) => set({ appLanguage: lang }),
+
+        // Lyric settings
+        lyricOriginal: true,
+        lyricRomanization: true,
+        lyricTranslation: true,
+        setLyricOriginal: (v) => set({ lyricOriginal: v }),
+        setLyricRomanization: (v) => set({ lyricRomanization: v }),
+        setLyricTranslation: (v) => set({ lyricTranslation: v }),
 
         // ─── Reproductor externo preferido (Android) ───
         preferredPlayerPackage: null as string | null,
@@ -897,6 +1013,9 @@ export const useMusicStore = create<MusicStore>()(
         mp3Quality: state.mp3Quality,
         downloadWifiOnly: state.downloadWifiOnly,
         appLanguage: state.appLanguage,
+        lyricOriginal: state.lyricOriginal,
+        lyricRomanization: state.lyricRomanization,
+        lyricTranslation: state.lyricTranslation,
         mostDownloadedArtists: state.mostDownloadedArtists,
         preferredPlayerPackage: state.preferredPlayerPackage,
         // localFileRefs excluded — File objects cannot be serialized
@@ -913,6 +1032,9 @@ export const useMusicStore = create<MusicStore>()(
         mp3Quality: persisted?.mp3Quality ?? 'alta',
         downloadWifiOnly: persisted?.downloadWifiOnly ?? false,
         appLanguage: persisted?.appLanguage ?? 'es',
+        lyricOriginal: persisted?.lyricOriginal ?? true,
+        lyricRomanization: persisted?.lyricRomanization ?? true,
+        lyricTranslation: persisted?.lyricTranslation ?? true,
         mostDownloadedArtists: persisted?.mostDownloadedArtists ?? [],
         preferredPlayerPackage: persisted?.preferredPlayerPackage ?? null,
         localFileRefs: new Map(),

@@ -13,6 +13,9 @@ const config: CapacitorConfig = {
     captureInput: true,
   },
   plugins: {
+    CapacitorHttp: {
+      enabled: true,
+    },
     StatusBar: {
       overlaysWebView: true,
       style: 'DARK',
