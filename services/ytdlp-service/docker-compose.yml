@@ -1,0 +1,21 @@
+services:
+  ytdlp-service:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - SERVICE_API_KEY=TU_SERVICE_API_KEY_AQUI
+      - DOWNLOAD_SIGNING_SECRET=TU_SIGNING_SECRET_AQUI
+      - YOUTUBE_COOKIES_B64=TU_COOKIES_B64_AQUI
+      - YOUTUBE_COOKIES_B64_2=
+      - YOUTUBE_COOKIES_B64_3=
+      - YOUTUBE_API_KEY=
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
+      - TOKEN_TTL_SECONDS=3600
+      - MAX_CONCURRENT_DOWNLOADS=3
+      - YTDLP_UPDATE_COOLDOWN=3600
+    volumes:
+      - ./temp:/app/temp
+

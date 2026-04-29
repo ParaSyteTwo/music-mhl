@@ -58,3 +58,16 @@ __pycache__/
 
 # Serena IDE cache
 .serena/cache
+
+# Python Desktop binaries (download with scripts/download-binaries.ps1)
+mhl-desktop/assets/*.exe
+mhl-desktop/assets/*.ico
+mhl-desktop/build/
+mhl-desktop/dist/
+mhl-desktop/__pycache__/
+
+# Release artifacts (generated builds)
+release/
+
+# Playwright test artifacts
+.playwright-mcp/
