@@ -8,6 +8,7 @@ import { buildAffinityPool, artistColor } from '@/data/globalArtists';
 import { Capacitor } from '@capacitor/core';
 import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
+import { useI18n } from '@/lib/useI18n';
 
 function formatDuration(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -32,6 +33,7 @@ function useRecentSearches() {
 }
 
 export default function SearchPage() {
+  const { t } = useI18n();
   const {
     searchQuery,
     searchResults,
@@ -138,7 +140,7 @@ export default function SearchPage() {
         <h1 className="text-xl sm:text-3xl font-bold tracking-tight font-[family-name:Syne] text-[#F5F5F0]">
           MHL Music
         </h1>
-        <p className="text-[11px] sm:text-sm text-[#666660] mt-0.5">Tu musica. Sin limites.</p>
+        <p className="text-[11px] sm:text-sm text-[#666660] mt-0.5">{t('appTagline')}</p>
       </div>
 
       <div className="relative mb-3 sm:mb-5">
@@ -150,7 +152,7 @@ export default function SearchPage() {
           onKeyDown={handleKeyDown}
           onFocus={() => setInputFocused(true)}
           onBlur={() => setTimeout(() => setInputFocused(false), 200)}
-          placeholder="Buscar canciones, artistas..."
+          placeholder={t('searchPlaceholder')}
           className="w-full pl-10 pr-10 py-3 rounded-xl bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.08)] text-sm text-[#F5F5F0] placeholder:text-[#444] focus:outline-none focus:border-[#C8F04B] focus:shadow-[0_0_0_3px_rgba(200,240,75,0.15)] transition-all"
         />
         {isSearching ? (
@@ -167,7 +169,7 @@ export default function SearchPage() {
 
       {inputFocused && !query.trim() && recent.length > 0 && (
         <div className="mb-4">
-          <p className="text-[10px] uppercase tracking-widest text-[#555] mb-2">Recientes</p>
+          <p className="text-[10px] uppercase tracking-widest text-[#555] mb-2">{t('recent')}</p>
           <div className="flex flex-wrap gap-2">
             {recent.map((term) => (
               <button
@@ -190,7 +192,7 @@ export default function SearchPage() {
 
       {showEmpty && (
         <div className="mb-6">
-          <p className="text-[10px] uppercase tracking-widest text-[#555] mb-3 text-center">Prueba con:</p>
+          <p className="text-[10px] uppercase tracking-widest text-[#555] mb-3 text-center">{t('tryWith')}</p>
           <div className="grid grid-cols-3 gap-2 max-w-sm mx-auto">
             {suggestedSearches.map((term) => {
               const color = artistColor(term);
@@ -215,7 +217,7 @@ export default function SearchPage() {
 
       {searchResults.length > 0 && !isSearching && (
         <p className="text-[11px] text-[#555] mb-3">
-          {searchResults.length} canciones encontradas para &apos;{searchQuery}&apos;
+          {t('resultsFor', { count: searchResults.length, query: searchQuery })}
         </p>
       )}
 
@@ -271,7 +273,7 @@ export default function SearchPage() {
                           onTouchStart={() => { if (!downloading) handleDownloadPrefetch(track); }}
                           disabled={downloading}
                           className="absolute top-2 right-2 p-2 rounded-lg bg-black/60 text-white hover:bg-black/80 transition-colors"
-                          title="Descargar MP3"
+                          title={t('downloadMp3')}
                         >
                           {downloading ? <Loader2 className="w-4 h-4 animate-spin" /> : downloaded ? <CheckCircle className="w-4 h-4 text-[#C8F04B]" /> : <Download className="w-4 h-4" />}
                         </button>
@@ -360,7 +362,7 @@ export default function SearchPage() {
                       className={`p-2.5 -mr-1 rounded-xl transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center ${
                         downloading ? 'text-[#C8F04B] cursor-wait' : downloaded ? 'text-[#C8F04B]' : 'text-[#666660] hover:text-[#C8F04B] active:text-[#C8F04B] hover:bg-[rgba(200,240,75,0.1)]'
                       }`}
-                      title="Descargar MP3"
+                      title={t('downloadMp3')}
                     >
                       {downloading ? <Loader2 className="w-5 h-5 animate-spin" /> : downloaded ? <CheckCircle className="w-5 h-5" /> : <Download className="w-5 h-5" />}
                     </button>
@@ -378,7 +380,7 @@ export default function SearchPage() {
                 </div>
               )}
               {!hasMoreResults && searchResults.length > 0 && (
-                <p className="text-xs text-[#555]">No hay mas resultados</p>
+                <p className="text-xs text-[#555]">{t('noMoreResults')}</p>
               )}
             </div>
           </>
@@ -389,7 +391,7 @@ export default function SearchPage() {
             animate={{ opacity: 1 }}
             className="text-center text-sm text-[#666660] py-12"
           >
-            No se encontraron resultados
+            {t('noResults')}
           </motion.p>
         ) : showEmpty ? (
           <motion.div
@@ -399,7 +401,7 @@ export default function SearchPage() {
             className="text-center py-12 sm:py-16 space-y-3"
           >
             <Music className="w-16 h-16 text-[#333] mx-auto animate-pulse" />
-            <p className="text-sm text-[#666660]">Escribe el nombre de una cancion o artista</p>
+            <p className="text-sm text-[#666660]">{t('emptySearch')}</p>
           </motion.div>
         ) : null}
       </AnimatePresence>
@@ -429,6 +431,7 @@ function CandidatePicker({
   onClose: () => void;
   onSelect: (videoId: string) => void;
 }) {
+  const { t } = useI18n();
   const [candidates, setCandidates] = useState<DownloadCandidate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -449,18 +452,18 @@ function CandidatePicker({
         console.log('[CandidatePicker] Got candidates:', cands);
         setCandidates(cands);
         if (cands.length === 0) {
-          toast.warning('No se encontraron candidatos de descarga');
-          setError('Sin resultados');
+          toast.warning(t('noDownloadCandidates'));
+          setError(t('noResults'));
         }
       })
       .catch((e) => {
-        const errorMsg = e instanceof Error ? e.message : 'Error buscando candidatos';
+        const errorMsg = e instanceof Error ? e.message : t('noDownloadCandidates');
         console.error('[CandidatePicker] Error:', e, errorMsg);
         toast.error(errorMsg);
         setError(errorMsg);
       })
       .finally(() => setLoading(false));
-  }, [track]);
+  }, [track, t]);
 
   function fmt(s: number) {
     const m = Math.floor(s / 60);
@@ -507,10 +510,10 @@ function CandidatePicker({
 
         <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-[rgba(255,255,255,0.06)] flex-shrink-0">
           <div>
-            <p className="text-xs font-medium text-[#F5F5F0]">Resultados inteligentes</p>
-            <p className="text-[11px] text-[#555]">Busqueda rapida ordenada por coincidencia</p>
+            <p className="text-xs font-medium text-[#F5F5F0]">{t('smartResults')}</p>
+            <p className="text-[11px] text-[#555]">{t('smartResultsHint')}</p>
           </div>
-          <span className="text-[10px] text-[#444] text-right">Elige la cancion exacta a descargar</span>
+          <span className="text-[10px] text-[#444] text-right">{t('chooseExactSong')}</span>
         </div>
 
         <div className="overflow-y-auto flex-1 px-3 pb-4 overscroll-contain">
@@ -523,7 +526,7 @@ function CandidatePicker({
           ) : error ? (
             <p className="text-center text-xs text-red-400 py-8">{error}</p>
           ) : candidates.length === 0 ? (
-            <p className="text-center text-xs text-[#555] py-8">No se encontraron resultados</p>
+            <p className="text-center text-xs text-[#555] py-8">{t('noResults')}</p>
           ) : (
             <div className="space-y-1.5 mt-1">
               {candidates.map((c, i) => {
@@ -562,7 +565,7 @@ function CandidatePicker({
                         )}
                         {c.confidence && (
                           <span className={`text-[9px] uppercase tracking-wide px-1.5 py-0.5 rounded ${confidenceClass}`}>
-                            confianza {c.confidence}
+                            {t('confidence', { value: c.confidence })}
                           </span>
                         )}
                       </div>
@@ -579,7 +582,7 @@ function CandidatePicker({
                         </span>
                       )}
                       {isBest && (
-                        <span className="text-[9px] text-[#C8F04B] font-medium">mejor match</span>
+                        <span className="text-[9px] text-[#C8F04B] font-medium">{t('bestMatch')}</span>
                       )}
                     </div>
                   </motion.button>

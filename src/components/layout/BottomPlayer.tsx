@@ -2,6 +2,7 @@ import { Play, Pause, Volume2, VolumeX, Loader2 } from 'lucide-react';
 import { useMusicStore } from '@/store/musicStore';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useState } from 'react';
+import { useI18n } from '@/lib/useI18n';
 
 function formatTime(seconds: number): string {
   if (!isFinite(seconds) || seconds < 0) return '0:00';
@@ -11,6 +12,7 @@ function formatTime(seconds: number): string {
 }
 
 export function BottomPlayer() {
+  const { t } = useI18n();
   const { currentTrack, isPlaying, isLoading, volume, progress, duration, togglePlay, setVolume, seekTo, dominantColor } = useMusicStore();
   const [hoverProgress, setHoverProgress] = useState(false);
 
@@ -29,6 +31,11 @@ export function BottomPlayer() {
         style={{ bottom: `calc(${bottomStyle} + var(--player-height))` }}
       >
         <div
+          role="slider"
+          aria-label={t('seek')}
+          aria-valuemin={0}
+          aria-valuemax={Math.max(0, duration)}
+          aria-valuenow={Math.min(progress, duration)}
           className="h-1 group cursor-pointer bg-[rgba(255,255,255,0.08)] transition-all duration-200 hover:h-[5px]"
           onMouseEnter={() => setHoverProgress(true)}
           onMouseLeave={() => setHoverProgress(false)}
@@ -105,6 +112,7 @@ export function BottomPlayer() {
             boxShadow: isPlaying && !isLoading ? '0 0 20px rgba(200, 240, 75, 0.4)' : '0 4px 12px rgba(0,0,0,0.3)',
           }}
           disabled={isLoading}
+          aria-label={isLoading ? t('loading') : isPlaying ? t('pause') : t('play')}
         >
           {isLoading ? (
             <Loader2 className="w-5 h-5 animate-spin" />
@@ -121,10 +129,16 @@ export function BottomPlayer() {
           <button
             onClick={() => setVolume(volume > 0 ? 0 : 0.8)}
             className="text-[#666660] hover:text-[#F5F5F0] transition-colors"
+            aria-label={volume > 0 ? t('mute') : t('unmute')}
           >
             {volume > 0 ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
           </button>
           <div
+            role="slider"
+            aria-label={t('volume')}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(volume * 100)}
             className="w-16 h-1 bg-[rgba(255,255,255,0.08)] rounded-full cursor-pointer"
             onClick={(e) => {
               const rect = e.currentTarget.getBoundingClientRect();

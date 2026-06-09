@@ -28,6 +28,7 @@ import { createPortal } from 'react-dom';
 import { toImportedAudioFile } from '@/lib/localTrackRuntime';
 import { toast } from 'sonner';
 import type { LocalTrack } from '@/types/music';
+import { useI18n } from '@/lib/useI18n';
 
 type Tab = 'albums' | 'artists' | 'genres' | 'topPlayed' | 'tracks';
 
@@ -41,6 +42,7 @@ interface CollectionEntry {
 }
 
 export default function LibraryPage() {
+  const { t, lang } = useI18n();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = useState<Tab>('albums');
   const [showImportOptions, setShowImportOptions] = useState(false);
@@ -77,7 +79,7 @@ export default function LibraryPage() {
       const permResult = await Filesystem.requestPermissions();
       if (permResult.publicStorage !== 'granted') {
         if (!silent) {
-          toast.error('Permiso denegado. Ve a Configuracion > Permisos > Almacenamiento');
+          toast.error(t('permissionDeniedStorage'));
         }
         return;
       }
@@ -100,7 +102,7 @@ export default function LibraryPage() {
 
       if (audioFiles.length === 0) {
         if (!silent) {
-          toast.info('No hay archivos en Documents/MHL Music/. Usa "Seleccionar carpeta" para otra ubicacion.');
+          toast.info(t('noDocumentsFiles'));
         }
         return;
       }
@@ -116,7 +118,10 @@ export default function LibraryPage() {
         console.warn('Native library scan failed, falling back to JS import:', nativeError);
       }
 
-      const scanToastId = silent ? '' : toast.loading(`Escaneando ${audioFiles.length} archivo${audioFiles.length > 1 ? 's' : ''}...`);
+      const scanToastId = silent ? '' : toast.loading(t('scanningFiles', {
+        count: audioFiles.length,
+        plural: audioFiles.length > 1 ? 's' : '',
+      }));
       try {
         const fileObjects: File[] = await Promise.all(
           audioFiles.map(async (f) => {
@@ -151,12 +156,12 @@ export default function LibraryPage() {
         if (scanToastId) toast.dismiss(scanToastId);
         const errorMsg = e instanceof Error ? e.message : String(e);
         console.error('Android import error:', errorMsg);
-        if (!silent) toast.error(`Error: ${errorMsg}. Intenta "Seleccionar carpeta" en su lugar.`);
+        if (!silent) toast.error(t('importErrorTryPicker', { error: errorMsg }));
       }
     } catch (e) {
       const errorMsg = e instanceof Error ? e.message : String(e);
       console.error('Android import error:', errorMsg);
-      if (!silent) toast.error(`Error: ${errorMsg}. Intenta "Seleccionar carpeta" en su lugar.`);
+      if (!silent) toast.error(t('importErrorTryPicker', { error: errorMsg }));
     }
   };
 
@@ -167,7 +172,7 @@ export default function LibraryPage() {
         // Android: use native file picker
         const result = await FilePicker.pickFiles({
           types: ['audio/mpeg', 'audio/mp4', 'audio/aac', 'audio/flac', 'audio/ogg', 'audio/opus', 'audio/webm', 'audio/wav'],
-          multiple: true,
+          limit: 0,
         });
 
         if (!result.files || result.files.length === 0) {
@@ -176,7 +181,10 @@ export default function LibraryPage() {
         }
 
         const totalFiles = result.files.length;
-        const importToastId = toast.loading(`Importando ${totalFiles} archivo${totalFiles > 1 ? 's' : ''}...`);
+        const importToastId = toast.loading(t('importingFiles', {
+          count: totalFiles,
+          plural: totalFiles > 1 ? 's' : '',
+        }));
 
         // Helper function to convert single file
         const AUDIO_EXTENSIONS = ['mp3', 'm4a', 'aac', 'flac', 'ogg', 'opus', 'webm', 'wav'];
@@ -231,7 +239,7 @@ export default function LibraryPage() {
 
         if (fileObjects.length === 0) {
           toast.dismiss(importToastId);
-          toast.error('No se encontraron archivos de audio validos. Asegurate de que sean MP3, M4A, FLAC, etc.');
+          toast.error(t('noValidAudioFiles'));
           setShowImportOptions(false);
           return;
         }
@@ -240,9 +248,16 @@ export default function LibraryPage() {
         await importLocalFiles(fileObjects);
 
         // Show summary with skipped files
-        let message = `${fileObjects.length} archivo${fileObjects.length > 1 ? 's' : ''} importado${fileObjects.length > 1 ? 's' : ''}`;
+        const importedPlural = fileObjects.length > 1 ? 's' : '';
+        let message = t('importedFiles', {
+          count: fileObjects.length,
+          plural: importedPlural,
+        });
         if (skippedCount > 0) {
-          message += ` (${skippedCount} archivo${skippedCount > 1 ? 's' : ''} no-audio ignorado${skippedCount > 1 ? 's' : ''})`;
+          message += t('skippedNonAudioFiles', {
+            count: skippedCount,
+            plural: skippedCount > 1 ? 's' : '',
+          });
         }
         toast.success(message, { duration: 4000 });
       } else {
@@ -252,7 +267,7 @@ export default function LibraryPage() {
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       console.error('File picker error:', errorMsg);
-      toast.error(`Error: ${errorMsg}`, { duration: 5000 });
+      toast.error(t('downloadError', { error: errorMsg }), { duration: 5000 });
     }
     setShowImportOptions(false);
   };
@@ -282,12 +297,17 @@ export default function LibraryPage() {
       <div className="mb-8">
         <div className="flex items-center gap-3 mb-2">
           <Library className="w-6 h-6 text-[#C8F04B]" />
-          <h1 className="text-2xl sm:text-3xl font-bold text-[#F5F5F0]">Biblioteca</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-[#F5F5F0]">{t('libraryTitle')}</h1>
         </div>
         {!empty && (
           <p className="text-sm text-[#666660]">
-            {localLibrary.length} pista{localLibrary.length > 1 ? 's' : ''} •{' '}
-            {albums.length} álbum{albums.length > 1 ? 'es' : ''}
+            {t('librarySummary', {
+              tracks: t('tracksCount', { count: localLibrary.length, plural: localLibrary.length > 1 ? 's' : '' }),
+              albums: t('albumsCount', {
+                count: albums.length,
+                plural: albums.length > 1 ? (lang === 'es' ? 'es' : 's') : '',
+              }),
+            })}
           </p>
         )}
       </div>
@@ -306,12 +326,12 @@ export default function LibraryPage() {
               <div className="animate-spin">
                 <Music className="w-4 h-4" />
               </div>
-              Importando...
+              {t('importing')}
             </>
           ) : (
             <>
               <Upload className="w-4 h-4" />
-              Importar música
+              {t('importMusic')}
             </>
           )}
         </motion.button>
@@ -328,11 +348,11 @@ export default function LibraryPage() {
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
-                onClick={handleImportAuto}
+                onClick={() => void handleImportAuto()}
                 disabled={isImporting}
                 className="flex-1 px-4 py-2 rounded-lg bg-[#333] text-[#C8F04B] text-xs font-medium hover:bg-[#444] transition-all"
               >
-                📁 Auto-escanear (Documents/MHL Music)
+                {t('autoScan')}
               </motion.button>
               <motion.button
                 whileHover={{ scale: 1.02 }}
@@ -341,7 +361,7 @@ export default function LibraryPage() {
                 disabled={isImporting}
                 className="flex-1 px-4 py-2 rounded-lg bg-[#333] text-[#C8F04B] text-xs font-medium hover:bg-[#444] transition-all"
               >
-                🔍 Seleccionar carpeta / archivos
+                {t('selectFolderFiles')}
               </motion.button>
             </motion.div>
           )}
@@ -353,7 +373,6 @@ export default function LibraryPage() {
         ref={fileInputRef}
         type="file"
         multiple
-        webkitdirectory={Capacitor.isNativePlatform() ? true : undefined}
         accept="audio/mpeg,.mp3,audio/mp4,.m4a,audio/aac,.aac,audio/x-flac,.flac,audio/ogg,.ogg,audio/opus,.opus,audio/webm,.webm,audio/wav,.wav,audio/*"
         onChange={handleFileInput}
         className="hidden"
@@ -375,8 +394,8 @@ export default function LibraryPage() {
             <Library className="w-14 h-14 text-[#C8F04B]/60" />
           </motion.div>
           <div>
-            <p className="text-sm text-[#F5F5F0] font-medium">Tu biblioteca está vacía</p>
-            <p className="text-xs text-[#B0B0B0] mt-1">Importa tus MP3 para empezar</p>
+            <p className="text-sm text-[#F5F5F0] font-medium">{t('emptyLibraryTitle')}</p>
+            <p className="text-xs text-[#B0B0B0] mt-1">{t('emptyLibraryHelp')}</p>
           </div>
         </motion.div>
       ) : (
@@ -385,11 +404,11 @@ export default function LibraryPage() {
           <div className="flex gap-1 mb-6 border-b border-[rgba(255,255,255,0.06)] overflow-x-auto pb-3">
             {(['albums', 'artists', 'genres', 'topPlayed', 'tracks'] as const).map((tab) => {
               const labels = {
-                albums: 'Álbumes',
-                artists: 'Artistas',
-                genres: 'Géneros',
-                topPlayed: 'Más tocadas',
-                tracks: 'Pistas',
+                albums: t('albums'),
+                artists: t('artists'),
+                genres: t('genres'),
+                topPlayed: t('topPlayed'),
+                tracks: t('tracks'),
               };
               const isActive = activeTab === tab;
               return (
@@ -513,6 +532,7 @@ function CollectionOverlay({
   onPlay: (id: string) => void;
   onRemove: (id: string) => void;
 }) {
+  const { t } = useI18n();
   // Cerrar con Escape
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -565,7 +585,7 @@ function CollectionOverlay({
             <p className="text-base font-semibold text-[#F5F5F0] truncate">{collection.name}</p>
             <p className="text-xs text-[#666660] truncate">{collection.subtitle}</p>
             <p className="text-[10px] text-[#444] mt-0.5">
-              {collection.tracks.length} pista{collection.tracks.length !== 1 ? 's' : ''}
+              {t('trackCount', { count: collection.tracks.length, plural: collection.tracks.length !== 1 ? 's' : '' })}
             </p>
           </div>
           <motion.button
@@ -629,6 +649,7 @@ function AlbumsGrid({
   onRemove: (id: string) => void;
   onOpenCollection: (c: CollectionEntry) => void;
 }) {
+  const { t } = useI18n();
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
@@ -669,7 +690,7 @@ function AlbumsGrid({
                     onClick={(e) => {
                       e.stopPropagation();
                       album.tracks.forEach((t) => onRemove(t.id));
-                      toast.success(`Álbum "${album.name}" eliminado`);
+                      toast.success(t('albumRemoved', { name: album.name }));
                     }}
                     className="w-10 h-10 rounded-full bg-red-500 flex items-center justify-center shadow-lg hover:bg-red-600"
                   >
@@ -681,7 +702,9 @@ function AlbumsGrid({
 
             <p className="text-[13px] font-medium truncate mt-2.5 text-[#F5F5F0]">{album.name}</p>
             <p className="text-[11px] text-[#666660] truncate">{album.artist}</p>
-            <p className="text-[10px] text-[#444] mt-0.5">{album.trackCount} pista{album.trackCount > 1 ? 's' : ''}</p>
+            <p className="text-[10px] text-[#444] mt-0.5">
+              {t('trackCount', { count: album.trackCount, plural: album.trackCount > 1 ? 's' : '' })}
+            </p>
           </motion.div>
         ))}
       </div>
@@ -702,6 +725,7 @@ function ArtistsGrid({
   onRemove: (id: string) => void;
   onOpenCollection: (c: CollectionEntry) => void;
 }) {
+  const { t, lang } = useI18n();
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
       {artists.map((artist, i) => {
@@ -720,7 +744,13 @@ function ArtistsGrid({
             onClick={() => onOpenCollection({
               type: 'artist',
               name: artist.name,
-              subtitle: `${artist.trackCount} pista${artist.trackCount !== 1 ? 's' : ''} · ${artist.albumCount} álbum${artist.albumCount !== 1 ? 'es' : ''}`,
+              subtitle: t('artistCollectionSubtitle', {
+                tracks: t('trackCount', { count: artist.trackCount, plural: artist.trackCount !== 1 ? 's' : '' }),
+                albums: t('albumCount', {
+                  count: artist.albumCount,
+                  plural: artist.albumCount !== 1 ? (lang === 'es' ? 'es' : 's') : '',
+                }),
+              }),
               cover: artist.cover ?? null,
               tracks: artist.tracks,
             })}
@@ -748,7 +778,7 @@ function ArtistsGrid({
               onClick={(e) => {
                 e.stopPropagation();
                 artist.tracks.forEach((t) => onRemove(t.id));
-                toast.success(`Artista "${artist.name}" eliminado`);
+                toast.success(t('artistRemoved', { name: artist.name }));
               }}
               className="absolute top-2 right-2 p-2 rounded-lg bg-red-500/80 hover:bg-red-600 text-white opacity-0 group-hover:opacity-100 sm:opacity-0 transition-opacity"
             >
@@ -758,7 +788,13 @@ function ArtistsGrid({
 
           <p className="text-[13px] font-medium truncate mt-2.5 text-[#F5F5F0]">{artist.name}</p>
           <p className="text-[10px] text-[#666660] mt-0.5">
-            {artist.trackCount} pista{artist.trackCount > 1 ? 's' : ''} • {artist.albumCount} álbum{artist.albumCount > 1 ? 'es' : ''}
+            {t('artistCollectionSubtitle', {
+              tracks: t('trackCount', { count: artist.trackCount, plural: artist.trackCount > 1 ? 's' : '' }),
+              albums: t('albumCount', {
+                count: artist.albumCount,
+                plural: artist.albumCount > 1 ? (lang === 'es' ? 'es' : 's') : '',
+              }),
+            })}
           </p>
         </motion.div>
         );
@@ -777,6 +813,7 @@ function GenresList({
   onPlay: (id: string) => void;
   onRemove: (id: string) => void;
 }) {
+  const { t } = useI18n();
   return (
     <div className="space-y-3">
       {genres.map((genre) => (
@@ -788,7 +825,9 @@ function GenresList({
         >
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-sm font-medium text-[#F5F5F0]">{genre.name}</h3>
-            <span className="text-xs text-[#666660]">{genre.trackCount} pista{genre.trackCount > 1 ? 's' : ''}</span>
+            <span className="text-xs text-[#666660]">
+              {t('trackCount', { count: genre.trackCount, plural: genre.trackCount > 1 ? 's' : '' })}
+            </span>
           </div>
           <div className="space-y-1">
             {genre.tracks.slice(0, 3).map((track) => (
@@ -801,7 +840,7 @@ function GenresList({
               </div>
             ))}
             {genre.trackCount > 3 && (
-              <p className="text-[10px] text-[#555] px-2 py-1">+{genre.trackCount - 3} más</p>
+              <p className="text-[10px] text-[#555] px-2 py-1">+{genre.trackCount - 3} {t('more')}</p>
             )}
           </div>
         </motion.div>
@@ -886,6 +925,7 @@ function TracksList({
   onPlay: (id: string) => void;
   onRemove: (id: string) => void;
 }) {
+  const { t, lang } = useI18n();
   const [fetchingLyrics, setFetchingLyrics] = useState<Set<string>>(new Set());
   const { lyricOriginal, lyricRomanization, lyricTranslation } = useMusicStore();
 
@@ -896,10 +936,10 @@ function TracksList({
     try {
       const result = await getLyrics(track.title, track.artist, track.duration, {
         lyricOriginal, lyricRomanization, lyricTranslation,
-        deviceLang: navigator.language.split('-')[0],
+        deviceLang: lang,
       });
       const content = result.synced || result.plain;
-      if (!content) { toast.error('No se encontraron letras'); return; }
+      if (!content) { toast.error(t('lyricsNotFound')); return; }
       const filename = `${track.title} - ${track.artist}.lrc`;
       if (Capacitor.isNativePlatform()) {
         await Filesystem.writeFile({
@@ -908,7 +948,7 @@ function TracksList({
           directory: Directory.ExternalStorage,
           encoding: Encoding.UTF8,
         });
-        toast.success('Letra guardada junto a la canción');
+        toast.success(t('lyricsSavedWithSong'));
       } else {
         const blob = new Blob([content], { type: 'text/plain' });
         const url = URL.createObjectURL(blob);
@@ -917,10 +957,10 @@ function TracksList({
         document.body.appendChild(a); a.click();
         document.body.removeChild(a);
         setTimeout(() => URL.revokeObjectURL(url), 5000);
-        toast.success('Archivo .lrc descargado');
+        toast.success(t('lrcDownloaded'));
       }
     } catch {
-      toast.error('Error al obtener la letra');
+      toast.error(t('lyricsFetchError'));
     } finally {
       setFetchingLyrics(prev => { const n = new Set(prev); n.delete(track.id); return n; });
     }
@@ -959,7 +999,7 @@ function TracksList({
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.95 }}
             onClick={(e) => handleGetLyrics(e, track)}
-            title="Obtener letra"
+            title={t('getLyrics')}
             className="p-1.5 rounded opacity-0 group-hover:opacity-100 hover:bg-[rgba(200,240,75,0.15)] transition-all flex-shrink-0"
           >
             {fetchingLyrics.has(track.id)

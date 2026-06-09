@@ -73,12 +73,8 @@ def _wait_for_server(timeout=10.0):
 def _fatal(msg: str):
     """Muestra un error y termina — funciona aunque no haya consola (frozen)."""
     try:
-        import tkinter as tk
-        import tkinter.messagebox as mb
-        root = tk.Tk()
-        root.withdraw()
-        mb.showerror('MHL Music — Error de inicio', msg)
-        root.destroy()
+        import ctypes
+        ctypes.windll.user32.MessageBoxW(0, msg, 'MHL Music - Error de inicio', 0x10)
     except Exception:
         pass
     sys.exit(1)

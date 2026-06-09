@@ -34,6 +34,7 @@ export interface LocalAlbum {
   name: string;
   artist: string;
   cover: string;
+  colorGradient: string;
   trackCount: number;
   tracks: LocalTrack[];
 }

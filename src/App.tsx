@@ -4,15 +4,17 @@ import { Capacitor } from "@capacitor/core";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { useMusicStore } from "@/store/musicStore";
+import { useI18n } from "@/lib/useI18n";
 
 const SearchPage = lazy(() => import("./pages/SearchPage"));
 const DownloadsPage = lazy(() => import("./pages/DownloadsPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 
 function RouteFallback() {
+  const { t } = useI18n();
   return (
     <div className="min-h-[50vh] flex items-center justify-center text-sm text-[#666660]">
-      Cargando...
+      {t('loading')}
     </div>
   );
 }

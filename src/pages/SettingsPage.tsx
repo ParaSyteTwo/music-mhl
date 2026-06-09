@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { Settings, Folder, Wifi, RefreshCw, CheckCircle2, FolderOpen, X, Music2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useMusicStore } from '@/store/musicStore';
-import { t } from '@/lib/i18n';
+import { useI18n } from '@/lib/useI18n';
+import type { UiLanguageMode } from '@/lib/language';
 import { Capacitor } from '@capacitor/core';
 import { isPyWebView } from '@/lib/platform';
 import type { AudioPlayer } from '@/lib/openFileBridge';
@@ -10,6 +11,7 @@ import type { AudioPlayer } from '@/lib/openFileBridge';
 const isAndroid = Capacitor.getPlatform() === 'android';
 
 export default function SettingsPage() {
+  const { t } = useI18n();
   const {
     downloadFolderName, setDownloadFolder, clearDownloadFolder,
     downloadFormat, setDownloadFormat,
@@ -22,6 +24,7 @@ export default function SettingsPage() {
     lyricRomanization, setLyricRomanization,
     lyricTranslation, setLyricTranslation,
     saveLrcFile, setSaveLrcFile,
+    uiLanguageMode, setUiLanguageMode,
   } = useMusicStore();
 
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'done' | 'skipped' | 'error'>('idle');
@@ -105,8 +108,35 @@ export default function SettingsPage() {
       transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
       className="px-4 sm:px-8 py-4 sm:py-10 max-w-3xl mx-auto"
     >
-      <h1 className="text-lg sm:text-2xl font-semibold tracking-tighter mb-1 sm:mb-2">Ajustes</h1>
-      <p className="text-xs sm:text-sm text-[#666660] mb-6 sm:mb-8">Configuración de la app</p>
+      <h1 className="text-lg sm:text-2xl font-semibold tracking-tighter mb-1 sm:mb-2">{t('settings')}</h1>
+      <p className="text-xs sm:text-sm text-[#666660] mb-6 sm:mb-8">{t('appSettingsSubtitle')}</p>
+
+      <section className="mb-8">
+        <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">{t('language')}</h2>
+        <div className="p-4 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)]">
+          <div className="grid grid-cols-3 gap-2">
+            {([
+              ['system', t('languageSystem')],
+              ['es', t('languageSpanish')],
+              ['en', t('languageEnglish')],
+            ] as Array<[UiLanguageMode, string]>).map(([mode, label]) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setUiLanguageMode(mode)}
+                className={`px-3 py-2 rounded-lg text-xs font-semibold transition-colors ${
+                  uiLanguageMode === mode
+                    ? 'bg-[#C8F04B] text-[#18181A]'
+                    : 'bg-[rgba(255,255,255,0.04)] text-[#B0B0B0] hover:text-[#F5F5F0]'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-[#666660] mt-3">{t('languageHelp')}</p>
+        </div>
+      </section>
 
       {/* Formato de descarga */}
       <section className="mb-8">
@@ -130,15 +160,15 @@ export default function SettingsPage() {
           <div className="flex gap-4 items-center p-4 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)]">
               <label className="flex items-center gap-2 cursor-pointer">
               <input type="radio" name="mp3q" value="alta" checked={mp3Quality === 'alta'} onChange={() => setMp3Quality('alta')} />
-              <span className="text-sm">Alta (320kbps)</span>
+              <span className="text-sm">{t('qualityHigh')}</span>
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="radio" name="mp3q" value="media" checked={mp3Quality === 'media'} onChange={() => setMp3Quality('media')} />
-              <span className="text-sm">Media (192kbps)</span>
+              <span className="text-sm">{t('qualityMedium')}</span>
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="radio" name="mp3q" value="baja" checked={mp3Quality === 'baja'} onChange={() => setMp3Quality('baja')} />
-              <span className="text-sm">Baja (128kbps)</span>
+              <span className="text-sm">{t('qualityLow')}</span>
             </label>
           </div>
         </section>
@@ -151,14 +181,14 @@ export default function SettingsPage() {
           <Wifi className="w-5 h-5 text-[#C8F04B] flex-shrink-0" />
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" checked={downloadWifiOnly} onChange={e => setDownloadWifiOnly(e.target.checked)} />
-            <span className="text-sm">Permitir descargas solo cuando haya conexión WiFi</span>
+            <span className="text-sm">{t('wifiOnlyHelp')}</span>
           </label>
         </div>
       </section>
 
       {/* Letras */}
       <section className="mb-8">
-        <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">Letras</h2>
+        <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">{t('lyrics')}</h2>
         <div className="p-4 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] space-y-3">
           <label className="flex items-start gap-3 cursor-pointer">
             <input
@@ -168,8 +198,8 @@ export default function SettingsPage() {
               className="mt-0.5"
             />
             <div>
-              <p className="text-sm text-[#F5F5F0]">Original</p>
-              <p className="text-xs text-[#666660] mt-0.5">Letra tal como fue escrita por el artista</p>
+              <p className="text-sm text-[#F5F5F0]">{t('lyricsOriginal')}</p>
+              <p className="text-xs text-[#666660] mt-0.5">{t('lyricsOriginalHelp')}</p>
             </div>
           </label>
           <label className="flex items-start gap-3 cursor-pointer">
@@ -180,8 +210,8 @@ export default function SettingsPage() {
               className="mt-0.5"
             />
             <div>
-              <p className="text-sm text-[#F5F5F0]">Romanización</p>
-              <p className="text-xs text-[#666660] mt-0.5">Solo para idiomas con escritura no latina (japonés, coreano, chino)</p>
+              <p className="text-sm text-[#F5F5F0]">{t('lyricsRomanization')}</p>
+              <p className="text-xs text-[#666660] mt-0.5">{t('lyricsRomanizationHelp')}</p>
             </div>
           </label>
           <label className="flex items-start gap-3 cursor-pointer">
@@ -192,12 +222,12 @@ export default function SettingsPage() {
               className="mt-0.5"
             />
             <div>
-              <p className="text-sm text-[#F5F5F0]">Traducción</p>
-              <p className="text-xs text-[#666660] mt-0.5">Al idioma del dispositivo</p>
+              <p className="text-sm text-[#F5F5F0]">{t('lyricsTranslation')}</p>
+              <p className="text-xs text-[#666660] mt-0.5">{t('lyricsTranslationHelp')}</p>
             </div>
           </label>
           {!lyricOriginal && !lyricRomanization && !lyricTranslation && (
-            <p className="text-xs text-[#666660] italic pt-1">Sin selección — no se descargarán letras</p>
+            <p className="text-xs text-[#666660] italic pt-1">{t('lyricsNoneSelected')}</p>
           )}
           {isPyWebView && (
             <label className="flex items-start gap-3 cursor-pointer pt-1">
@@ -208,8 +238,8 @@ export default function SettingsPage() {
                 className="mt-0.5"
               />
               <div>
-                <p className="text-sm text-[#F5F5F0]">Guardar archivo LRC</p>
-                <p className="text-xs text-[#666660] mt-0.5">Archivo de letras sincronizadas junto al MP3</p>
+                <p className="text-sm text-[#F5F5F0]">{t('saveLrcFile')}</p>
+                <p className="text-xs text-[#666660] mt-0.5">{t('saveLrcFileHelp')}</p>
               </div>
             </label>
           )}
@@ -217,16 +247,16 @@ export default function SettingsPage() {
       </section>
 
       <section className="mb-8">
-        <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">Carpeta de descargas</h2>
+        <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">{t('downloadFolder')}</h2>
 
         <div className="p-4 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)]">
           {isAndroid ? (
             <div className="flex items-center gap-3">
               <Folder className="w-5 h-5 text-[#C8F04B] flex-shrink-0" />
               <div className="flex-1 min-w-0">
-                <p className="text-sm text-[#F5F5F0] font-medium">Music / MHL Music</p>
+                <p className="text-sm text-[#F5F5F0] font-medium">{t('androidFolderTitle')}</p>
                 <p className="text-xs text-[#666660] mt-0.5">
-                  Las canciones se guardan directamente en la carpeta <span className="text-[#C8F04B] font-medium">Música → MHL Music</span> del dispositivo, visible en cualquier reproductor de audio.
+                  {t('androidFolderHelp')}
                 </p>
               </div>
             </div>
@@ -237,15 +267,15 @@ export default function SettingsPage() {
                 {downloadFolderName ? (
                   <>
                     <p className="text-sm text-[#F5F5F0] font-medium truncate">{downloadFolderName}/</p>
-                    <p className="text-xs text-[#666660] mt-0.5">Las canciones se guardarán en esta carpeta.</p>
+                    <p className="text-xs text-[#666660] mt-0.5">{t('selectedFolderHelp')}</p>
                   </>
                 ) : (
                   <>
-                    <p className="text-sm text-[#F5F5F0] font-medium">Sin carpeta seleccionada</p>
+                    <p className="text-sm text-[#F5F5F0] font-medium">{t('noFolderSelected')}</p>
                     <p className="text-xs text-[#666660] mt-0.5">
                       {'showDirectoryPicker' in window
-                        ? 'Elige una carpeta para guardar las descargas directamente.'
-                        : 'Tu navegador no soporta selector de carpeta. Las canciones se descargarán al lugar por defecto.'}
+                        ? t('folderPickerHelp')
+                        : t('folderPickerUnsupported')}
                     </p>
                   </>
                 )}
@@ -256,7 +286,7 @@ export default function SettingsPage() {
                     <button
                       onClick={clearDownloadFolder}
                       className="p-1.5 rounded-md text-[#666660] hover:text-[#F5F5F0] hover:bg-[rgba(255,255,255,0.06)] transition-colors"
-                      title="Quitar carpeta"
+                      title={t('removeFolder')}
                     >
                       <X className="w-4 h-4" />
                     </button>
@@ -266,7 +296,7 @@ export default function SettingsPage() {
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold bg-[#C8F04B] text-[#18181A] hover:bg-[#d4f56a] transition-colors"
                   >
                     <FolderOpen className="w-3.5 h-3.5" />
-                    {downloadFolderName ? 'Cambiar' : 'Elegir carpeta'}
+                    {downloadFolderName ? t('changeFolder') : t('chooseFolder')}
                   </button>
                 </div>
               )}
@@ -278,16 +308,16 @@ export default function SettingsPage() {
       {/* Reproductor predeterminado — solo Android */}
       {isAndroid && (
         <section className="mb-8">
-          <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">Reproductor predeterminado</h2>
+          <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">{t('defaultPlayer')}</h2>
           <div className="p-4 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] space-y-3">
             <p className="text-xs text-[#666660]">
-              Elige qué app abre las canciones descargadas. Si dejas "Preguntar siempre" verás el selector cada vez.
+              {t('defaultPlayerHelp')}
             </p>
 
             {loadingPlayers ? (
-              <p className="text-xs text-[#444]">Cargando reproductores…</p>
+              <p className="text-xs text-[#444]">{t('loadingPlayers')}</p>
             ) : audioPlayers.length === 0 ? (
-              <p className="text-xs text-[#444]">No se detectaron reproductores de audio.</p>
+              <p className="text-xs text-[#444]">{t('noAudioPlayers')}</p>
             ) : (
               <div className="space-y-2">
                 {/* Opción "Preguntar siempre" */}
@@ -303,7 +333,7 @@ export default function SettingsPage() {
                     <div className="w-8 h-8 rounded-lg bg-[rgba(255,255,255,0.06)] flex items-center justify-center flex-shrink-0">
                       <Music2 className="w-4 h-4 text-[#666660]" />
                     </div>
-                    <span className="text-sm text-[#F5F5F0]">Preguntar siempre</span>
+                    <span className="text-sm text-[#F5F5F0]">{t('askAlways')}</span>
                   </div>
                 </label>
 
@@ -335,10 +365,10 @@ export default function SettingsPage() {
       {isAndroid && (
         <section className="mb-8">
           <h2 className="text-xs font-semibold uppercase tracking-widest text-[#8A8A8A] mb-2 flex items-center gap-2">
-            Motor de descarga
+            {t('downloadEngine')}
             {ytDlpUpdateAvailable && (
               <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#C8F04B]/20 text-[#C8F04B] border border-[#C8F04B]/30">
-                ¡Actualización disponible!
+                {t('updateAvailable')}
               </span>
             )}
           </h2>
@@ -352,22 +382,22 @@ export default function SettingsPage() {
                   <span className="text-base font-semibold text-[#F5F5F0]">yt-dlp</span>
                   <span className="text-xs font-mono text-[#8A8A8A]">{ytDlpVersion ?? 'cargando…'}</span>
                 </div>
-                <p className="text-xs text-[#8A8A8A] mt-0.5">Plugin encargado de las descargas de YouTube y otras fuentes.</p>
+                <p className="text-xs text-[#8A8A8A] mt-0.5">{t('downloadEngineHelp')}</p>
                 {ytDlpUpdateAvailable && (
                   <p className="text-xs text-[#C8F04B] mt-1 font-medium">
-                    Versión desactualizada — se recomienda actualizar para evitar errores de descarga.
+                    {t('updateRecommended')}
                   </p>
                 )}
                 {updateStatus === 'done' && (
                   <p className="text-xs text-[#C8F04B] mt-1 flex items-center gap-1">
-                    <CheckCircle2 className="w-3 h-3" /> Actualizado correctamente
+                    <CheckCircle2 className="w-3 h-3" /> {t('updatedOk')}
                   </p>
                 )}
                 {updateStatus === 'skipped' && (
-                  <p className="text-xs text-[#8A8A8A] mt-1">Ya tienes la última versión</p>
+                  <p className="text-xs text-[#8A8A8A] mt-1">{t('alreadyLatest')}</p>
                 )}
                 {updateStatus === 'error' && (
-                  <p className="text-xs text-red-400 mt-1">Error al actualizar — comprueba tu conexión</p>
+                  <p className="text-xs text-red-400 mt-1">{t('updateError')}</p>
                 )}
               </div>
               <button
@@ -380,7 +410,7 @@ export default function SettingsPage() {
                 } disabled:opacity-50 disabled:cursor-wait`}
               >
                 <RefreshCw className={`w-4 h-4 ${ytDlpUpdating ? 'animate-spin' : ''}`} />
-                {ytDlpUpdating ? 'Actualizando…' : 'Actualizar'}
+                {ytDlpUpdating ? t('updating') : t('update')}
               </button>
             </div>
           </div>
@@ -389,13 +419,13 @@ export default function SettingsPage() {
 
       {/* About Section */}
       <section className="mb-8">
-        <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">Acerca de</h2>
+        <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">{t('about')}</h2>
         <div className="p-4 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)]">
           <div className="flex items-center gap-3">
             <Settings className="w-5 h-5 text-[#C8F04B] flex-shrink-0" />
             <div>
               <p className="text-sm text-[#F5F5F0] font-medium">MHL Music</p>
-              <p className="text-xs text-[#666660] mt-0.5">Tu música. Sin límites.</p>
+              <p className="text-xs text-[#666660] mt-0.5">{t('aboutTagline')}</p>
               <a
                 href="https://paul-dev.vercel.app"
                 target="_blank"
@@ -403,7 +433,7 @@ export default function SettingsPage() {
                 className="text-xs mt-2 block"
                 style={{ color: "rgba(102,102,96,0.6)" }}
               >
-                Desarrollado por Paul · paul-dev.vercel.app
+                {t('developedBy')}
               </a>
             </div>
           </div>

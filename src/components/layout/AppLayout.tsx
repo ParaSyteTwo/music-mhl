@@ -2,7 +2,7 @@ import { Outlet, NavLink } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
 import { BottomPlayer } from './BottomPlayer';
 import { Search, Download, Settings } from 'lucide-react';
-import { t } from '@/lib/i18n';
+import { useI18n } from '@/lib/useI18n';
 import { useMusicStore } from '@/store/musicStore';
 
 const RAILWAY_URL = (import.meta as { env: Record<string, string> }).env.VITE_RAILWAY_URL;
@@ -15,7 +15,7 @@ function useCountdown(until: number | null): string {
       const secs = Math.max(0, Math.round(until - Date.now() / 1000));
       const m = Math.floor(secs / 60);
       const s = secs % 60;
-      setDisplay(secs === 0 ? '¡listo!' : `${m}:${String(s).padStart(2, '0')}`);
+      setDisplay(secs === 0 ? 'ready' : `${m}:${String(s).padStart(2, '0')}`);
     };
     update();
     const id = setInterval(update, 1000);
@@ -25,6 +25,7 @@ function useCountdown(until: number | null): string {
 }
 
 export function AppLayout() {
+  const { t } = useI18n();
   const downloadCount = useMusicStore((s) => s.downloads.filter((d) => d.status === 'downloading').length);
   const dominantColor = useMusicStore((s) => s.dominantColor);
   const currentTrack = useMusicStore((s) => s.currentTrack);
@@ -71,16 +72,16 @@ export function AppLayout() {
             <span className="text-lg" style={{ display: 'inline-block', animation: 'spin 2s linear infinite' }}>⚙️</span>
             <div className="flex flex-col items-center sm:flex-row sm:gap-2 leading-tight">
               <span className="text-amber-200 font-semibold text-sm tracking-wide">
-                🔧 Mantenimiento en curso
+                {t('maintenanceTitle')}
               </span>
-              {countdown && countdown !== '¡listo!' && (
+              {countdown && countdown !== 'ready' && (
                 <span className="text-amber-400/80 text-xs sm:text-sm font-mono">
-                  — vuelve en <span className="text-amber-300 font-bold tabular-nums">{countdown}</span>
+                  {t('maintenanceBackIn', { time: countdown })}
                 </span>
               )}
-              {countdown === '¡listo!' && (
+              {countdown === 'ready' && (
                 <span className="text-green-400 text-xs sm:text-sm font-semibold animate-pulse">
-                  ✅ ¡listo! recargando...
+                  {t('maintenanceReady')}
                 </span>
               )}
             </div>

@@ -1,3 +1,5 @@
+import type { Lang } from '@/lib/language'
+
 const MYMEMORY_URL = 'https://api.mymemory.translated.net/get'
 const MAX_CHARS = 450
 
@@ -29,6 +31,48 @@ export function detectScript(text: string): Script {
   return 'latin'
 }
 
+export type LyricSourceLang = Lang | 'unknown'
+
+const ES_WORDS = /\b(el|la|los|las|un|una|unos|unas|de|del|que|y|en|por|para|con|sin|mi|tu|yo|te|me|amor|corazon|vida|noche|quiero|eres|estoy|esta|como)\b/gi
+const EN_WORDS = /\b(the|and|you|your|me|my|i|we|to|of|in|on|for|with|without|love|heart|life|night|want|are|is|am|like|baby)\b/gi
+
+function countMatches(text: string, re: RegExp): number {
+  return (text.match(re) ?? []).length
+}
+
+export function detectLatinLyricLanguage(text: string): LyricSourceLang {
+  const sample = text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\p{L}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  if (!sample) return 'unknown'
+  const raw = text.toLowerCase()
+  const hasSpanishSignals = /[áéíóúñ¿¡]/i.test(text) || /\b(que|estoy|corazon|cancion|tu|mi|amor)\b/i.test(raw)
+  const esScore = countMatches(sample, ES_WORDS) + (hasSpanishSignals ? 3 : 0)
+  const enScore = countMatches(sample, EN_WORDS)
+
+  if (esScore >= 4 && esScore >= enScore + 2) return 'es'
+  if (enScore >= 4 && enScore >= esScore + 2) return 'en'
+  return 'unknown'
+}
+
+export function detectLyricSourceLanguage(text: string, script = detectScript(text)): LyricSourceLang {
+  return script === 'latin' ? detectLatinLyricLanguage(text) : 'unknown'
+}
+
+export function shouldTranslateLyrics(
+  sourceLang: LyricSourceLang,
+  targetLang: Lang,
+  enabled: boolean,
+): boolean {
+  if (!enabled) return false
+  return sourceLang === 'unknown' || sourceLang !== targetLang
+}
+
 // ─── Kuroshiro singleton (kuromoji dictionary — heavy, load once) ───────────
 // kuroshiro y kuromoji-analyzer son CJS. En Android los dicts están en
 // android/app/src/main/assets/public/kuromoji-dict/ y se acceden como
@@ -48,17 +92,35 @@ async function _getKuroshiro(): Promise<any | null> {
   _kuroshiroPromise = (async () => {
     try {
       const { default: Kuroshiro } = await import('kuroshiro')
-      const { default: KuromojiAnalyzer } = await import('kuroshiro-analyzer-kuromoji/lib/index.js')
-
-      // Detectar plataforma para ubicar los dicts correctamente
+      const { default: kuromoji } = await import('kuromoji/build/kuromoji.js')
       const isAndroid = typeof navigator !== 'undefined' &&
         /android/i.test(navigator.userAgent)
       const dictPath = isAndroid
         ? 'file:///android_asset/public/kuromoji-dict/'
         : '/kuromoji-dict/'
 
+      const analyzer = {
+        tokenizer: null as JapaneseTokenizer | null,
+        init() {
+          return new Promise<void>((resolve, reject) => {
+            kuromoji.builder({ dicPath: dictPath }).build((error, tokenizer) => {
+              if (error) {
+                reject(error)
+                return
+              }
+              this.tokenizer = tokenizer
+              resolve()
+            })
+          })
+        },
+        async parse(text: string) {
+          if (!this.tokenizer) throw new Error('Japanese analyzer is not initialized')
+          return this.tokenizer.tokenize(text)
+        },
+      }
+
       const ks = new Kuroshiro()
-      await ks.init(new KuromojiAnalyzer({ dictPath }))
+      await ks.init(analyzer)
       _kuroshiro = ks
     } catch (e) {
       console.warn('[lyrics] kuroshiro-kuromoji init failed:', e)
@@ -104,8 +166,29 @@ async function _romanizeJapanese(lines: string[]): Promise<string[]> {
 }
 
 async function _romanizeKorean(lines: string[]): Promise<string[]> {
-  const { romanize } = await import('@romanize/korean')
-  return lines.map(l => l.trim() ? romanize(l) : l)
+  const initials = [
+    'g', 'kk', 'n', 'd', 'tt', 'r', 'm', 'b', 'pp', 's',
+    'ss', '', 'j', 'jj', 'ch', 'k', 't', 'p', 'h',
+  ]
+  const vowels = [
+    'a', 'ae', 'ya', 'yae', 'eo', 'e', 'yeo', 'ye', 'o', 'wa',
+    'wae', 'oe', 'yo', 'u', 'wo', 'we', 'wi', 'yu', 'eu', 'ui', 'i',
+  ]
+  const finals = [
+    '', 'k', 'k', 'k', 'n', 'n', 'n', 't', 'l', 'k',
+    'm', 'p', 'l', 'l', 'p', 'l', 'm', 'p', 'p', 't',
+    't', 'ng', 't', 't', 'k', 't', 'p', 't',
+  ]
+
+  return lines.map((line) => Array.from(line).map((char) => {
+    const code = char.charCodeAt(0)
+    if (code < 0xac00 || code > 0xd7a3) return char
+    const syllable = code - 0xac00
+    const initial = Math.floor(syllable / 588)
+    const vowel = Math.floor((syllable % 588) / 28)
+    const final = syllable % 28
+    return `${initials[initial]}${vowels[vowel]}${finals[final]}`
+  }).join(''))
 }
 
 async function _romanizeChinese(lines: string[]): Promise<string[]> {
@@ -117,13 +200,13 @@ async function _romanizeChinese(lines: string[]): Promise<string[]> {
 }
 
 async function _romanizeOther(lines: string[]): Promise<string[]> {
-  const { default: transliterate } = await import('transliteration')
+  const { transliterate } = await import('transliteration')
   return lines.map(l => l.trim() ? transliterate(l) : l)
 }
 
 // ─── Translation via MyMemory (gratuito, sin API key) ────────────────────────
 
-export async function translateLines(lines: string[], targetLang: string): Promise<string[] | null> {
+export async function translateLines(lines: string[], targetLang: Lang): Promise<string[] | null> {
   const indexed = lines.map((l, i) => ({ i, l })).filter(x => x.l.trim())
   if (!indexed.length) return null
 
@@ -135,7 +218,7 @@ export async function translateLines(lines: string[], targetLang: string): Promi
   return result
 }
 
-async function _translateInChunks(lines: string[], lang: string): Promise<string[] | null> {
+async function _translateInChunks(lines: string[], lang: Lang): Promise<string[] | null> {
   const chunks: string[][] = []
   let chunk: string[] = [], len = 0
   for (const line of lines) {
@@ -155,7 +238,7 @@ async function _translateInChunks(lines: string[], lang: string): Promise<string
   return result
 }
 
-async function _callMyMemory(text: string, lang: string): Promise<string | null> {
+async function _callMyMemory(text: string, lang: Lang): Promise<string | null> {
   try {
     const params = new URLSearchParams({ q: text, langpair: `autodetect|${lang}` })
     const res = await fetch(`${MYMEMORY_URL}?${params}`)
@@ -214,7 +297,7 @@ export interface LyricPrefs {
   lyricOriginal: boolean
   lyricRomanization: boolean
   lyricTranslation: boolean
-  deviceLang: string
+  deviceLang: Lang
 }
 
 export async function processLyrics(
@@ -227,6 +310,8 @@ export async function processLyrics(
   const sample = syncedLrc.replace(LRC_RE, '$2').slice(0, 200)
   const script = detectScript(sample)
   const isLatin = script === 'latin'
+  const sourceLang = detectLyricSourceLanguage(sample, script)
+  const shouldTranslate = shouldTranslateLyrics(sourceLang, prefs.deviceLang, prefs.lyricTranslation)
 
   const rawLines = syncedLrc.split('\n').map(l => {
     const m = LRC_RE.exec(l); return m ? m[2] : l
@@ -236,7 +321,7 @@ export async function processLyrics(
     prefs.lyricRomanization && !isLatin
       ? romanizeLines(rawLines, script)
       : Promise.resolve(null),
-    prefs.lyricTranslation
+    shouldTranslate
       ? translateLines(rawLines, prefs.deviceLang)
       : Promise.resolve(null),
   ])
@@ -244,7 +329,7 @@ export async function processLyrics(
   const { synced, plain } = buildLRC(syncedLrc, romanized, translated, {
     original:     prefs.lyricOriginal,
     romanization: prefs.lyricRomanization,
-    translation:  prefs.lyricTranslation,
+    translation:  shouldTranslate,
   })
 
   return { synced: synced || null, plain: plain || null }

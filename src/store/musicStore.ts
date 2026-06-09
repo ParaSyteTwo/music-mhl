@@ -14,13 +14,24 @@ import { parseLocalFiles } from '@/lib/metadataEnricher';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { toast } from 'sonner';
+import { translate } from '@/lib/i18n';
+import {
+  type Lang,
+  type UiLanguageMode,
+  isUiLanguageMode,
+  resolveEffectiveLanguage,
+} from '@/lib/language';
 
-function getProgressLabel(progress: number): string {
-  if (progress >= 100) return '✓ Completado';
-  if (progress >= 90) return 'Guardando archivo...';
-  if (progress >= 70) return 'Escribiendo metadatos...';
-  if (progress >= 30) return 'Obteniendo audio...';
-  return 'Buscando en YouTube...';
+function storeText(mode: UiLanguageMode, key: string, vars?: Record<string, string | number>): string {
+  return translate(resolveEffectiveLanguage(mode), key, vars);
+}
+
+function getProgressLabel(progress: number, lang: Lang = 'es'): string {
+  if (progress >= 100) return translate(lang, 'progressCompleted');
+  if (progress >= 90) return translate(lang, 'progressSavingFile');
+  if (progress >= 70) return translate(lang, 'progressWritingMetadata');
+  if (progress >= 30) return translate(lang, 'progressGettingAudio');
+  return translate(lang, 'phaseSearchingYoutube');
 }
 
 export { getProgressLabel };
@@ -111,8 +122,10 @@ interface MusicStore {
   setMp3Quality: (q: 'alta' | 'media' | 'baja') => void;
   downloadWifiOnly: boolean;
   setDownloadWifiOnly: (v: boolean) => void;
-  appLanguage: 'es' | 'en';
-  setAppLanguage: (lang: 'es' | 'en') => void;
+  uiLanguageMode: UiLanguageMode;
+  setUiLanguageMode: (mode: UiLanguageMode) => void;
+  preferredPlayerPackage: string | null;
+  setPreferredPlayerPackage: (pkg: string | null) => void;
 
   // ─── Lyric settings ───
   lyricOriginal: boolean;
@@ -245,7 +258,7 @@ export const useMusicStore = create<MusicStore>()(
               .catch((error) => {
                 console.error('Play failed:', error);
                 set({ isLoading: false, isPlaying: false });
-                toast.error('No se pudo reproducir la canción');
+                toast.error(storeText(get().uiLanguageMode, 'playbackFailed'));
               });
           } else {
             set({ isLoading: false });
@@ -378,7 +391,12 @@ export const useMusicStore = create<MusicStore>()(
                   track.canonicalTitle?.trim() || track.title,
                   track.artist,
                   track.duration,
-                  { lyricOriginal: get().lyricOriginal, lyricRomanization: get().lyricRomanization, lyricTranslation: get().lyricTranslation, deviceLang: navigator.language.split('-')[0] }
+                  {
+                    lyricOriginal: get().lyricOriginal,
+                    lyricRomanization: get().lyricRomanization,
+                    lyricTranslation: get().lyricTranslation,
+                    deviceLang: resolveEffectiveLanguage(get().uiLanguageMode),
+                  }
                 ).catch(() => ({ synced: null, plain: null })),
               ]);
               updateDl({ progress: 30 });
@@ -442,11 +460,14 @@ export const useMusicStore = create<MusicStore>()(
 
               updateDl({ progress: 100, status: 'completed', error: undefined, fileName });
               get().addMostDownloadedArtist(track.artist);
-              toast.success(`✓ Descargado: ${track.title} - ${track.artist}`, { duration: 4000 });
+              toast.success(storeText(get().uiLanguageMode, 'downloadCompletedToast', {
+                title: track.title,
+                artist: track.artist,
+              }), { duration: 4000 });
             } catch (error) {
               const msg = error instanceof Error ? error.message : 'Download failed';
-              updateDl({ status: 'failed', error: msg });
-              toast.error(`Error: ${msg}`, { duration: 5000 });
+              updateDl({ status: 'error', error: msg });
+              toast.error(storeText(get().uiLanguageMode, 'downloadError', { error: msg }), { duration: 5000 });
             } finally {
               set((s) => ({ activeDownloads: Math.max(0, s.activeDownloads - 1) }));
               setTimeout(() => get().processDownloadQueue(), 100);
@@ -457,8 +478,12 @@ export const useMusicStore = create<MusicStore>()(
           try {
           for (let attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
-              const attemptLabel = maxAttempts > 1 ? ` (intento ${attempt}/${maxAttempts})` : '';
-              updateDl({ progress: 10, error: attempt > 1 ? `Reintentando...${attemptLabel}` : undefined });
+              updateDl({
+                progress: 10,
+                error: attempt > 1
+                  ? storeText(get().uiLanguageMode, 'retryingAttempt', { attempt, max: maxAttempts })
+                  : undefined,
+              });
 
               const audioBuffer = await downloadTrackAudio(track, (progress) => {
                 updateDl({ progress });
@@ -476,7 +501,7 @@ export const useMusicStore = create<MusicStore>()(
                     lyricOriginal: get().lyricOriginal,
                     lyricRomanization: get().lyricRomanization,
                     lyricTranslation: get().lyricTranslation,
-                    deviceLang: navigator.language.split('-')[0],
+                    deviceLang: resolveEffectiveLanguage(get().uiLanguageMode),
                   }
                 ).catch(() => ({ synced: null, plain: null })),
               ]);
@@ -598,14 +623,20 @@ export const useMusicStore = create<MusicStore>()(
 
               updateDl({ progress: 100, status: 'completed', error: undefined, fileName: resolvedFileName });
               get().addMostDownloadedArtist(track.artist);
-              toast.success(`✓ Descargado: ${track.title} - ${track.artist}`, { duration: 4000 });
+              toast.success(storeText(get().uiLanguageMode, 'downloadCompletedToast', {
+                title: track.title,
+                artist: track.artist,
+              }), { duration: 4000 });
               return;
             } catch (error) {
               const msg = error instanceof Error ? error.message : 'Download failed';
 
               if (msg === '__MAINTENANCE__') {
                 get().setMaintenanceMode(true);
-                updateDl({ status: 'error', error: 'Servicio en mantenimiento (~5 min). Reintenta en breve.' });
+                updateDl({
+                  status: 'error',
+                  error: storeText(get().uiLanguageMode, 'maintenanceDownloadError'),
+                });
                 // Polling hasta que el servidor salga de mantenimiento
                 const poll = setInterval(async () => {
                   try {
@@ -623,12 +654,21 @@ export const useMusicStore = create<MusicStore>()(
               console.error(`Download attempt ${attempt}/${maxAttempts} failed:`, msg);
 
               if (attempt === maxAttempts) {
-                updateDl({ status: 'error', error: `Error tras ${maxAttempts} intentos: ${msg}` });
+                updateDl({
+                  status: 'error',
+                  error: storeText(get().uiLanguageMode, 'failedAfterAttempts', {
+                    max: maxAttempts,
+                    error: msg,
+                  }),
+                });
               } else {
                 updateDl({
                   status: 'downloading',
                   progress: 0,
-                  error: `Reintentando... (intento ${attempt + 1}/${maxAttempts})`,
+                  error: storeText(get().uiLanguageMode, 'retryingAttempt', {
+                    attempt: attempt + 1,
+                    max: maxAttempts,
+                  }),
                 });
                 await new Promise((resolve) => setTimeout(resolve, 2000));
               }
@@ -644,7 +684,7 @@ export const useMusicStore = create<MusicStore>()(
         startDownload: async (track) => {
           // Check WiFi-only setting
           if (get().downloadWifiOnly && !isOnWifi()) {
-            toast.error('Descarga cancelada: solo WiFi activado', { duration: 4000 });
+            toast.error(storeText(get().uiLanguageMode, 'wifiOnlyCancelled'), { duration: 4000 });
             return;
           }
 
@@ -666,7 +706,7 @@ export const useMusicStore = create<MusicStore>()(
 
         startDownloadWithVideoId: (track, videoId) => {
           if (get().downloadWifiOnly && !isOnWifi()) {
-            toast.error('Descarga cancelada: solo WiFi activado', { duration: 4000 });
+            toast.error(storeText(get().uiLanguageMode, 'wifiOnlyCancelled'), { duration: 4000 });
             return;
           }
           const existing = get().downloads.find((d) => d.track.id === track.id);
@@ -703,8 +743,8 @@ export const useMusicStore = create<MusicStore>()(
         setMp3Quality: (q) => set({ mp3Quality: q }),
         downloadWifiOnly: false,
         setDownloadWifiOnly: (v) => set({ downloadWifiOnly: v }),
-        appLanguage: 'es',
-        setAppLanguage: (lang) => set({ appLanguage: lang }),
+        uiLanguageMode: 'system',
+        setUiLanguageMode: (mode) => set({ uiLanguageMode: mode }),
 
         // Lyric settings
         lyricOriginal: true,
@@ -766,17 +806,27 @@ export const useMusicStore = create<MusicStore>()(
             const skipped = parsed.length - newTracks.length;
             if (newTracks.length > 0 && !options?.silent) {
               const plural = newTracks.length > 1 ? 's' : '';
-              const dupMsg = skipped > 0 ? ` (${skipped} duplicadas)` : '';
-              toast.success(`${newTracks.length} pista${plural} importada${plural}${dupMsg}`, { duration: 4000 });
+              const duplicatePlural = skipped === 1 ? '' : 's';
+              const duplicates = skipped > 0
+                ? storeText(get().uiLanguageMode, 'duplicateTracks', {
+                    count: skipped,
+                    plural: duplicatePlural,
+                  })
+                : '';
+              toast.success(storeText(get().uiLanguageMode, 'importedTracks', {
+                count: newTracks.length,
+                plural,
+                duplicates,
+              }), { duration: 4000 });
             } else if (!options?.silent) {
-              toast('No se anadieron pistas nuevas', { duration: 3000 });
+              toast(storeText(get().uiLanguageMode, 'noNewTracks'), { duration: 3000 });
             }
           } catch (e) {
             const errorMsg = e instanceof Error ? e.message : String(e);
             console.error('Import failed:', e);
             set({ isImporting: false });
             if (!options?.silent) {
-              toast.error(`Error al importar: ${errorMsg}`, { duration: 5000 });
+              toast.error(storeText(get().uiLanguageMode, 'importFailed', { error: errorMsg }), { duration: 5000 });
             }
           }
         },
@@ -819,7 +869,10 @@ export const useMusicStore = create<MusicStore>()(
 
           if (!options?.silent) {
             const plural = nextTracks.length === 1 ? '' : 's';
-            toast.success(`${nextTracks.length} pista${plural} sincronizada${plural}`, { duration: 3500 });
+            toast.success(storeText(get().uiLanguageMode, 'syncedTracks', {
+              count: nextTracks.length,
+              plural,
+            }), { duration: 3500 });
           }
         },
 
@@ -917,7 +970,7 @@ export const useMusicStore = create<MusicStore>()(
               const startTimeout = window.setTimeout(() => {
                 if (!didStart) {
                   set({ isLoading: false, isPlaying: false });
-                  toast.error('La pista tardo demasiado en empezar. Intenta otra vez.');
+                  toast.error(storeText(get().uiLanguageMode, 'playbackTimeout'));
                 }
               }, 4500);
 
@@ -934,7 +987,7 @@ export const useMusicStore = create<MusicStore>()(
 
           const fileRef = get().localFileRefs.get(id);
           if (!fileRef) {
-            toast.error('Archivo no disponible. Vuelve a importarlo.');
+            toast.error(storeText(get().uiLanguageMode, 'localFileUnavailable'));
             return;
           }
 
@@ -1024,7 +1077,7 @@ export const useMusicStore = create<MusicStore>()(
         downloadFormat: state.downloadFormat,
         mp3Quality: state.mp3Quality,
         downloadWifiOnly: state.downloadWifiOnly,
-        appLanguage: state.appLanguage,
+        uiLanguageMode: state.uiLanguageMode,
         lyricOriginal: state.lyricOriginal,
         lyricRomanization: state.lyricRomanization,
         lyricTranslation: state.lyricTranslation,
@@ -1044,7 +1097,11 @@ export const useMusicStore = create<MusicStore>()(
         downloadFormat: persisted?.downloadFormat ?? 'mp3',
         mp3Quality: persisted?.mp3Quality ?? 'alta',
         downloadWifiOnly: persisted?.downloadWifiOnly ?? false,
-        appLanguage: persisted?.appLanguage ?? 'es',
+        uiLanguageMode: isUiLanguageMode(persisted?.uiLanguageMode)
+          ? persisted.uiLanguageMode
+          : isUiLanguageMode(persisted?.appLanguage)
+            ? (persisted.appLanguage as Lang)
+            : 'system',
         lyricOriginal: persisted?.lyricOriginal ?? true,
         lyricRomanization: persisted?.lyricRomanization ?? true,
         lyricTranslation: persisted?.lyricTranslation ?? true,

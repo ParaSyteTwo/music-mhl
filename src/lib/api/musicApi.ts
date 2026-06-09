@@ -1,6 +1,81 @@
 import { Track } from '@/types/music';
 import { Capacitor } from '@capacitor/core';
 import { useMusicStore } from '@/store/musicStore';
+
+interface PyWebViewApi {
+  deezer_search?: (query: string, limit: number, index: number) => Promise<unknown>
+  deezer_track?: (trackId: string) => Promise<unknown>
+  deezer_album?: (albumId: string) => Promise<unknown>
+  deezer_artist?: (artistId: string) => Promise<{
+    success?: boolean
+    info?: {
+      id?: string | number
+      name?: string
+      picture_xl?: string
+      picture_big?: string
+      nb_fan?: number
+    }
+    top?: { data?: RawDeezerTrack[] }
+    albums?: { data?: unknown[] }
+    related?: { data?: unknown[] }
+  }>
+}
+
+interface PyWebViewWindow extends Window {
+  pywebview?: {
+    api?: PyWebViewApi
+  }
+}
+
+interface ProxiedTrack {
+  id?: string
+  deezerId?: string | number
+  title?: string
+  title_short?: string
+  canonicalTitle?: string
+  artist?: string
+  album?: string
+  canonicalAlbum?: string
+  duration?: number
+  cover?: string
+  preview?: string
+}
+
+interface RawDeezerTrack {
+  id?: string | number
+  title?: string
+  title_short?: string
+  artist?: { name?: string }
+  album?: {
+    id?: string | number
+    title?: string
+    cover_big?: string
+    cover_medium?: string
+    cover_small?: string
+  }
+  duration?: number
+  preview?: string
+  isrc?: string
+  release_date?: string
+  track_position?: number
+}
+
+interface RawDeezerArtist {
+  id?: string | number
+  name?: string
+  picture_xl?: string
+  picture_big?: string
+  nb_fan?: number
+}
+
+interface RawDeezerList<T> {
+  data?: T[]
+}
+
+interface RawDeezerAlbum {
+  id?: string | number
+  genres?: { data?: Array<{ name?: string }> }
+}
 // Detección de pywebview: query param ?platform=pywebview (fiable desde frame 0)
 // o window.pywebview si ya está inyectado
 function isRunningInPyWebView(): boolean {
@@ -62,8 +137,7 @@ function buildDownloadFileName(track: Track, fileExtension: string): string {
 }
 
 // ─── Map pre-transformed data from backend ───
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapProxiedTrack(t: any): Track {
+function mapProxiedTrack(t: ProxiedTrack): Track {
   return {
     id: t.id || `dz-${t.deezerId}`,
     title: t.title || 'Unknown',
@@ -74,53 +148,51 @@ function mapProxiedTrack(t: any): Track {
     duration: t.duration || 0,
     cover: t.cover || '',
     preview: t.preview || '',
-    deezerId: t.deezerId,
+    deezerId: t.deezerId == null ? undefined : Number(t.deezerId),
   };
 }
 
 // ─── Llamada directa a Deezer: pywebview (bridge Python) o fetch directo ───
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function callDeezerDirect(path: string): Promise<any> {
+async function callDeezerDirect<T = unknown>(path: string): Promise<T> {
   if (isRunningInPyWebView()) {
     // Usar el bridge Python — evita CORS en el webview
-    const pyapi = (window as any).pywebview?.api;
+    const pyapi = (window as PyWebViewWindow).pywebview?.api;
     if (pyapi) {
       const url = new URL(path, 'https://api.deezer.com');
       const segments = url.pathname.split('/').filter(Boolean);
       // Rutas simples: /search, /track/{id}, /album/{id}, /artist/{id}
       if (segments[0] === 'search') {
-        return pyapi.deezer_search(
+        return await pyapi.deezer_search?.(
           url.searchParams.get('q') || '',
           parseInt(url.searchParams.get('limit') || '25'),
           parseInt(url.searchParams.get('index') || '0'),
-        );
+        ) as T;
       }
       if (segments[0] === 'track' && segments[1]) {
-        return pyapi.deezer_track(segments[1]);
+        return await pyapi.deezer_track?.(segments[1]) as T;
       }
       if (segments[0] === 'album' && segments[1]) {
-        return pyapi.deezer_album(segments[1]);
+        return await pyapi.deezer_album?.(segments[1]) as T;
       }
       if (segments[0] === 'artist' && segments[1] && !segments[2]) {
-        return pyapi.deezer_artist(segments[1]);
+        return await pyapi.deezer_artist?.(segments[1]) as T;
       }
       // Rutas anidadas (/artist/{id}/top, etc.) no implementadas en bridge — usar fetch (si CORS lo permite)
     }
     // Fallback: fetch directo (funciona si no hay CORS restrictions)
     const res = await fetch(`https://api.deezer.com${path}`);
-    return res.json();
+    return await res.json() as T;
   }
   const res = await fetch(`https://api.deezer.com${path}`);
-  return res.json();
+  return await res.json() as T;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapRawDeezerTrack(t: any): Track {
+function mapRawDeezerTrack(t: RawDeezerTrack): Track {
   const artist = t.artist || {};
   const album = t.album || {};
   return {
     id: `dz-${t.id}`,
-    deezerId: t.id,
+    deezerId: t.id == null ? undefined : Number(t.id),
     title: t.title || 'Unknown',
     canonicalTitle: t.title_short || t.title || 'Unknown',
     artist: artist.name || 'Unknown',
@@ -155,7 +227,7 @@ export async function searchDeezer(query: string, offset = 0, limit = 25): Promi
   try {
     if (isNativeApp()) {
       // pywebview/Android: fetch directo a api.deezer.com (sin CORS en desktop nativo)
-      const data = await callDeezerDirect(`/search?q=${encodeURIComponent(query)}&limit=${limit}&index=${offset}`);
+      const data = await callDeezerDirect<{ data?: RawDeezerTrack[] }>(`/search?q=${encodeURIComponent(query)}&limit=${limit}&index=${offset}`);
       return (data.data || []).map(mapRawDeezerTrack);
     }
     const data = await callDeezerProxy({ action: 'search', query, limit, offset });
@@ -170,7 +242,7 @@ export async function searchDeezer(query: string, offset = 0, limit = 25): Promi
 export async function getDeezerArtist(artistId: string) {
   if (isRunningInPyWebView()) {
     // Usar el bridge Python que ya hace todas las llamadas internamente
-    const pyapi = (window as any).pywebview?.api;
+    const pyapi = (window as PyWebViewWindow).pywebview?.api;
     if (pyapi?.deezer_artist) {
       const result = await pyapi.deezer_artist(artistId);
       if (result.success) {
@@ -187,10 +259,10 @@ export async function getDeezerArtist(artistId: string) {
   }
   if (Capacitor.isNativePlatform()) {
     const [info, top, albums, related] = await Promise.all([
-      callDeezerDirect(`/artist/${artistId}`),
-      callDeezerDirect(`/artist/${artistId}/top?limit=10`),
-      callDeezerDirect(`/artist/${artistId}/albums?limit=10`),
-      callDeezerDirect(`/artist/${artistId}/related?limit=8`),
+      callDeezerDirect<RawDeezerArtist>(`/artist/${artistId}`),
+      callDeezerDirect<RawDeezerList<RawDeezerTrack>>(`/artist/${artistId}/top?limit=10`),
+      callDeezerDirect<RawDeezerList<unknown>>(`/artist/${artistId}/albums?limit=10`),
+      callDeezerDirect<RawDeezerList<unknown>>(`/artist/${artistId}/related?limit=8`),
     ]);
     return {
       success: true,
@@ -212,13 +284,13 @@ export async function getDeezerAlbum(albumId: string) {
 export async function getDeezerTrackMeta(trackId: string | number): Promise<{ genre: string | null; year: number | null; trackNumber: number | null }> {
   try {
     if (isNativeApp()) {  // incluye pywebview → callDeezerDirect usa fetch() del webview
-      const track = await callDeezerDirect(`/track/${trackId}`);
+      const track = await callDeezerDirect<RawDeezerTrack>(`/track/${trackId}`);
       const releaseDate: string | undefined = track.release_date;
       const year = releaseDate ? parseInt(releaseDate.split('-')[0], 10) : null;
       let genre: string | null = null;
       if (track.album?.id) {
         try {
-          const album = await callDeezerDirect(`/album/${track.album.id}`);
+          const album = await callDeezerDirect<RawDeezerAlbum>(`/album/${track.album.id}`);
           genre = album.genres?.data?.[0]?.name ?? null;
         } catch { /* genre no crítico */ }
       }
@@ -658,7 +730,7 @@ export async function getLyrics(
 
   if (letras?.original && letras.original.length > 0) {
     // Tenemos letras.com — combinar con timestamps de LRCLIB
-    const result = _combineLyrics(letras, lrclib, p)
+    const result = await _combineLyrics(letras, lrclib, p)
     if (result) return result
   }
 
@@ -699,11 +771,11 @@ interface LetrasResult {
   sourceUrl: string
 }
 
-function _combineLyrics(
+async function _combineLyrics(
   letras: LetrasResult,
   lrclib: LrclibResult | null,
   p: LyricPrefs,
-): { synced: string | null; plain: string | null } | null {
+): Promise<{ synced: string | null; plain: string | null } | null> {
   if (letras.original.length === 0) return null
 
   // Generar timestamps si tenemos LRC de LRCLIB, si no crear fijos cada 3s
@@ -717,15 +789,30 @@ function _combineLyrics(
   }
 
   const result: string[] = []
+  const sample = letras.original.join('\n').slice(0, 500)
+  const {
+    detectScript,
+    detectLyricSourceLanguage,
+    shouldTranslateLyrics,
+    translateLines,
+  } = await import('@/lib/lyricsProcessor')
+  const sourceLang = detectLyricSourceLanguage(sample, detectScript(sample))
+  const shouldTranslate = shouldTranslateLyrics(sourceLang, p.deviceLang, p.lyricTranslation)
+  const translated = shouldTranslate
+    ? p.deviceLang === 'es' && letras.translated.length > 0
+      ? letras.translated
+      : await translateLines(letras.original, p.deviceLang)
+    : null
+
   const maxLines = Math.max(
     letras.original.length,
     letras.romaji.length || 0,
-    letras.translated.length || 0,
+    translated?.length || 0,
   )
 
   for (let i = 0; i < maxLines; i++) {
     // Timestamp — usar el de LRCLIB si existe, si no estimator
-    const ts = timestamps?.[i] ?? `[${String(Math.floor(i / 20) + 0).padStart(2, '0')}:${String((i % 20) * 3).padStart(2, '0')}.00]`
+    const ts = timestamps?.[i] ?? `${String(Math.floor(i / 20) + 0).padStart(2, '0')}:${String((i % 20) * 3).padStart(2, '0')}.00`
 
     if (p.lyricOriginal && letras.original[i]) {
       result.push(`[${ts}]${letras.original[i]}`)
@@ -735,10 +822,14 @@ function _combineLyrics(
       result.push(`[${ts}]${letras.romaji[i]}`)
     }
 
-    if (p.lyricTranslation && letras.translated[i]) {
-      result.push(`[${ts}]${letras.translated[i]}`)
+    if (shouldTranslate && translated?.[i]) {
+      result.push(`[${ts}]${translated[i]}`)
     }
   }
 
   return { synced: result.join('\n'), plain: result.join('\n') }
+}
+
+export const __testing = {
+  combineLyrics: _combineLyrics,
 }

@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { Capacitor } from '@capacitor/core';
 import { openDownloadedFile } from '@/lib/openFileBridge';
 import type { Download } from '@/types/music';
+import { useI18n } from '@/lib/useI18n';
 
 function formatDuration(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -22,16 +23,16 @@ interface DownloadPhase {
   icon: string;
 }
 
-function getPhase(dl: Download): DownloadPhase {
-  if (dl.progress >= 95) return { label: 'Guardando en Music…', icon: '💾' };
-  if (dl.progress >= 80) return { label: 'Aplicando metadatos…', icon: '🏷️' };
-  if (dl.progress >= 25) return { label: 'Descargando audio…', icon: '⬇️' };
-  if (dl.progress >= 15) return { label: 'Identificando canción…', icon: '🔎' };
-  return { label: 'Buscando en YouTube…', icon: '🔍' };
+function getPhase(dl: Download, t: (key: string) => string): DownloadPhase {
+  if (dl.progress >= 95) return { label: t('phaseSaving'), icon: '💾' };
+  if (dl.progress >= 80) return { label: t('phaseMetadata'), icon: '🏷️' };
+  if (dl.progress >= 25) return { label: t('phaseDownloading'), icon: '⬇️' };
+  if (dl.progress >= 15) return { label: t('phaseIdentifying'), icon: '🔎' };
+  return { label: t('phaseSearchingYoutube'), icon: '🔍' };
 }
 
-function ActiveDownloadCard({ dl }: { dl: Download }) {
-  const phase = getPhase(dl);
+function ActiveDownloadCard({ dl, t }: { dl: Download; t: (key: string) => string }) {
+  const phase = getPhase(dl, t);
   const showSpeedInfo = dl.progress >= 25 && dl.progress < 80 && (dl.speed || dl.eta);
 
   return (
@@ -40,7 +41,6 @@ function ActiveDownloadCard({ dl }: { dl: Download }) {
       animate={{ opacity: 1, y: 0 }}
       className="p-4 rounded-xl bg-[rgba(200,240,75,0.04)] border border-[rgba(200,240,75,0.15)] shadow-sm"
     >
-      {/* Header row: cover + info */}
       <div className="flex items-start gap-3 mb-3">
         <div className="relative flex-shrink-0">
           {dl.track.cover ? (
@@ -50,15 +50,12 @@ function ActiveDownloadCard({ dl }: { dl: Download }) {
               <Music className="w-5 h-5 text-[#C8F04B]" />
             </div>
           )}
-          {/* Pulsing ring */}
           <span className="absolute -inset-0.5 rounded-lg border border-[#C8F04B]/30 animate-pulse" />
         </div>
 
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-[#F5F5F0] truncate">{dl.track.title}</p>
           <p className="text-xs text-[#666660] truncate">{dl.track.artist}</p>
-
-          {/* Phase label */}
           <p className="text-[11px] text-[#888] mt-0.5">
             {dl.error ? (
               <span className="text-amber-400">{dl.error}</span>
@@ -68,7 +65,6 @@ function ActiveDownloadCard({ dl }: { dl: Download }) {
           </p>
         </div>
 
-        {/* Right side: speed + ETA */}
         <div className="flex-shrink-0 text-right min-w-[64px]">
           {showSpeedInfo && dl.speed ? (
             <>
@@ -86,7 +82,6 @@ function ActiveDownloadCard({ dl }: { dl: Download }) {
         </div>
       </div>
 
-      {/* Progress bar */}
       <div className="space-y-1.5">
         <div className="relative h-2 bg-[rgba(255,255,255,0.07)] rounded-full overflow-hidden">
           <motion.div
@@ -99,7 +94,6 @@ function ActiveDownloadCard({ dl }: { dl: Download }) {
             animate={{ width: `${dl.progress}%` }}
             transition={{ duration: 0.4, ease: 'easeOut' }}
           />
-          {/* Shimmer sweep */}
           {dl.progress > 0 && dl.progress < 100 && (
             <motion.div
               className="absolute inset-y-0 w-16 bg-gradient-to-r from-transparent via-white/20 to-transparent"
@@ -109,16 +103,14 @@ function ActiveDownloadCard({ dl }: { dl: Download }) {
           )}
         </div>
 
-        {/* Bottom row: segments indicator + percentage */}
         <div className="flex items-center justify-between">
-          {/* Mini phase dots */}
           <div className="flex items-center gap-1">
             {[
-              { threshold: 15, label: 'Búsqueda' },
+              { threshold: 15, label: t('phaseSearch') },
               { threshold: 25, label: 'ID' },
               { threshold: 80, label: 'Audio' },
               { threshold: 95, label: 'Tags' },
-              { threshold: 100, label: 'Guardado' },
+              { threshold: 100, label: t('phaseSaved') },
             ].map((step) => (
               <span
                 key={step.threshold}
@@ -140,6 +132,7 @@ function ActiveDownloadCard({ dl }: { dl: Download }) {
 }
 
 export default function DownloadsPage() {
+  const { t } = useI18n();
   const { downloads, startDownload, removeDownload, preferredPlayerPackage } = useMusicStore();
   const isNative = Capacitor.isNativePlatform();
 
@@ -155,29 +148,25 @@ export default function DownloadsPage() {
       transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
       className="px-4 sm:px-8 py-4 sm:py-10 max-w-3xl mx-auto"
     >
-      <h1 className="text-lg sm:text-2xl font-semibold tracking-tighter mb-1 sm:mb-2">Descargas</h1>
+      <h1 className="text-lg sm:text-2xl font-semibold tracking-tighter mb-1 sm:mb-2">{t('downloads')}</h1>
       <p className="text-xs sm:text-sm text-[#666660] mb-6 sm:mb-8">
-        <span className="tabular-nums">{downloads.length}</span> total ·{' '}
-        <span className="tabular-nums">{active.length}</span> activas ·{' '}
-        <span className="tabular-nums">{queued.length}</span> en cola
+        {t('downloadsSummary', { total: downloads.length, active: active.length, queued: queued.length })}
       </p>
 
-      {/* Active */}
       {active.length > 0 && (
         <section className="mb-8">
-          <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">En progreso</h2>
+          <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">{t('inProgress')}</h2>
           <div className="space-y-3">
             {active.map((dl) => (
-              <ActiveDownloadCard key={dl.id} dl={dl} />
+              <ActiveDownloadCard key={dl.id} dl={dl} t={t} />
             ))}
           </div>
         </section>
       )}
 
-      {/* Queued */}
       {queued.length > 0 && (
         <section className="mb-8">
-          <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">En cola</h2>
+          <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">{t('queued')}</h2>
           <div className="space-y-1">
             {queued.map((dl, i) => (
               <motion.div
@@ -192,17 +181,16 @@ export default function DownloadsPage() {
                   <p className="text-sm font-medium truncate text-[#F5F5F0]">{dl.track.title}</p>
                   <p className="text-xs text-[#666660]">{dl.track.artist}</p>
                 </div>
-                <span className="text-xs text-zinc-500">En cola…</span>
+                <span className="text-xs text-zinc-500">{t('queuedStatus')}</span>
               </motion.div>
             ))}
           </div>
         </section>
       )}
 
-      {/* Failed */}
       {failed.length > 0 && (
         <section className="mb-8">
-          <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">Fallidas</h2>
+          <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">{t('failed')}</h2>
           <div className="space-y-1">
             {failed.map((dl) => (
               <div
@@ -212,13 +200,13 @@ export default function DownloadsPage() {
                 <XCircle className="w-4 h-4 text-red-400 shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="text-[13px] sm:text-sm font-medium truncate text-[#F5F5F0]">{dl.track.title}</p>
-                  <p className="text-[11px] sm:text-xs text-red-400/70">{dl.error || 'Error desconocido'}</p>
+                  <p className="text-[11px] sm:text-xs text-red-400/70">{dl.error || t('unknownError')}</p>
                 </div>
                 <button
                   onClick={() => startDownload(dl.track)}
                   className="text-xs text-[#C8F04B] hover:underline px-2 py-1 min-h-[44px] flex items-center"
                 >
-                  Reintentar
+                  {t('retry')}
                 </button>
                 <button
                   onClick={() => removeDownload(dl.id)}
@@ -232,10 +220,9 @@ export default function DownloadsPage() {
         </section>
       )}
 
-      {/* Completed */}
       {completed.length > 0 && (
         <section className="mb-8">
-          <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">Completadas</h2>
+          <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">{t('completed')}</h2>
           <div className="space-y-1">
             {completed.map((dl) => (
               <div
@@ -261,10 +248,10 @@ export default function DownloadsPage() {
                   <button
                     onClick={() => void openDownloadedFile(dl.fileName, dl.mediaUri, preferredPlayerPackage ?? undefined)}
                     className="px-2.5 py-2 text-[#C8F04B] hover:text-[#e6ff8a] transition-colors min-h-[44px] flex items-center gap-1.5"
-                    title="Abrir en reproductor"
+                    title={t('openInPlayer')}
                   >
                     <ExternalLink className="w-4 h-4" />
-                    <span className="hidden sm:inline text-xs">Abrir</span>
+                    <span className="hidden sm:inline text-xs">{t('open')}</span>
                   </button>
                 )}
                 <button
@@ -287,7 +274,7 @@ export default function DownloadsPage() {
           className="text-center py-12 sm:py-16 space-y-3"
         >
           <Music className="w-20 h-20 text-[#C8F04B]/60 mx-auto" />
-          <p className="text-sm text-[#B0B0B0]">No hay descargas aún</p>
+          <p className="text-sm text-[#B0B0B0]">{t('noDownloadsYet')}</p>
         </motion.div>
       )}
     </motion.div>

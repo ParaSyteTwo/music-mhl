@@ -27,7 +27,7 @@ export default defineConfig(({ mode }) => ({
         start_url: "/",
         icons: [
           {
-            src: "/favicon.ico",
+            src: "/MHL.ico",
             sizes: "64x64",
             type: "image/x-icon",
           },

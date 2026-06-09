@@ -631,17 +631,16 @@ class Bridge:
 
     def pick_folder(self) -> str:
         """Abre un diálogo para elegir carpeta. Devuelve la ruta o ''."""
-        import tkinter as tk
-        import tkinter.filedialog as fd
-        root = tk.Tk()
-        root.withdraw()
-        root.attributes('-topmost', True)
-        folder = fd.askdirectory(
-            title='Carpeta de descargas',
-            initialdir=settings.get('download_folder', str(Path.home() / 'Music')),
+        import webview
+
+        window = getattr(self, '_window', None)
+        if window is None:
+            return ''
+        selected = window.create_file_dialog(
+            webview.FOLDER_DIALOG,
+            directory=settings.get('download_folder', str(Path.home() / 'Music')),
         )
-        root.destroy()
-        return folder or ''
+        return selected[0] if selected else ''
 
     def open_folder(self, path: str) -> dict:
         """Abre una carpeta en el explorador de Windows."""

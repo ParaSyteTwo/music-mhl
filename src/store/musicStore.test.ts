@@ -53,6 +53,7 @@ describe('useMusicStore', () => {
       downloadFolder: null,
       downloadFolderName: '',
       dominantColor: null,
+      uiLanguageMode: 'system',
       localLibrary: [],
       localFileRefs: new Map(),
       isImporting: false,
@@ -230,6 +231,17 @@ describe('useMusicStore', () => {
       const state = useMusicStore.getState();
 
       expect(state.searchOffset).toBe(0);
+    });
+  });
+
+  describe('Language Settings', () => {
+    it('should initialize language mode with system default', () => {
+      expect(useMusicStore.getState().uiLanguageMode).toBe('system');
+    });
+
+    it('should set language mode', () => {
+      useMusicStore.getState().setUiLanguageMode('en');
+      expect(useMusicStore.getState().uiLanguageMode).toBe('en');
     });
   });
 

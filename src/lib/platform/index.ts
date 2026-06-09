@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Capacitor } from '@capacitor/core';
 
 // Detecta si corre en Android (Capacitor), pywebview (Python) o Web.
 export function detectPlatform(): 'android' | 'pywebview' | 'web' {
@@ -14,11 +15,7 @@ export function detectPlatform(): 'android' | 'pywebview' | 'web' {
   }
 
   // Android (Capacitor)
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { Capacitor } = require('@capacitor/core');
-    if (Capacitor.isNativePlatform()) return 'android';
-  } catch {}
+  if (Capacitor.isNativePlatform()) return 'android';
 
   return 'web';
 }

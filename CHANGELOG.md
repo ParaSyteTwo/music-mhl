@@ -1,5 +1,26 @@
 # Changelog
 
+## v1.3.5 - 2026-06-09
+
+### Added
+
+- Interfaz completa en español e inglés con detección del idioma del dispositivo y selección manual.
+- Controles de idioma accesibles en ajustes para Web, Android y Windows.
+- Romanización y traducción de letras para los idiomas y escrituras compatibles.
+
+### Fixed
+
+- Las letras ya no se traducen cuando el idioma original coincide con el idioma efectivo de la aplicación.
+- `letras.com` solo aporta su traducción española cuando el destino es español.
+- Los avisos, estados, contadores y acciones visibles respetan el idioma seleccionado.
+- Migración de la preferencia de idioma anterior al nuevo modo `system`, `es` o `en`.
+
+### Improved
+
+- Núcleo de traducción desacoplado de React y Zustand.
+- Mayor coherencia en Biblioteca, Descargas, Búsqueda, Ajustes y reproductor.
+- Pruebas unitarias para resolución de idioma, persistencia y procesamiento de letras.
+
 ## v1.2.3 - 2026-03-31
 
 ### Fixed
@@ -43,4 +64,3 @@
 
 - Android app version is aligned to `1.1.0`.
 - Supabase function `yt-stream` was redeployed for this release.
-

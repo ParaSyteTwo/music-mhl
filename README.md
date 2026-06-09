@@ -2,161 +2,160 @@
 
 ## Tu música. Sin límites.
 
-MHL Music es una app multi-plataforma para buscar, escuchar y descargar música — sin cuentas, sin tracking, sin anuncios.
+MHL Music es una aplicación de código abierto para buscar, reproducir, descargar y organizar música. Comparte una interfaz React entre Android y Windows y está pensada para funcionar sin cuentas, anuncios ni seguimiento.
 
-**[🌐 Web/PWA](https://music-mhl.onrender.com)** · **[📱 Android APK](../../releases/latest)** · **[💻 Windows Desktop](../../releases/latest)**
+**[📱 Descargar para Android](../../releases/latest)** · **[💻 Descargar para Windows](../../releases/latest)**
 
-[![Web](https://img.shields.io/badge/web-music--mhl.onrender.com-blue)](https://music-mhl.onrender.com)
 [![Latest Release](https://img.shields.io/github/v/release/ParaSyteTwo/music-mhl?label=versión&color=C8F04B)](../../releases/latest)
-[![License](https://img.shields.io/badge/licencia-MIT-green)](../../releases/latest)
+[![License](https://img.shields.io/badge/licencia-MIT-green)](LICENSE)
 
 ---
 
-## ✨ ¿Qué puede hacer?
+## ✨ Funciones
 
-| Plataforma | Buscar | Reproducir | Descargar | Abrir en externo |
-|-----------|--------|------------|-----------|-----------------|
-| 🌐 Web / PWA | ✅ Deezer | ✅ Previews | ✅ Ticket firmado | ❌ |
-| 📱 Android | ✅ 3 fuentes | ✅ Nativo | ✅ yt-dlp local | ✅ VLC, etc. |
-| 💻 Windows Desktop | ✅ Deezer | ✅ Nativo | ✅ yt-dlp local | ✅ |
-
-- 🎨 **Colores únicos por artista** — sistema HSL determinístico
-- 🔐 **Sin secretos** — sin tracking, sin cuentas, sin anuncios
-- 📁 **Sin dependencias externas** — Desktop funciona 100% offline (Deezer API directa)
-
----
-
-## 📦 Descargas
-
-### 💻 Windows Desktop (v1.3.4)
-
-**Opción 1 — Portable (recomendada)**
-> Copia la carpeta a cualquier sitio y ejecuta. Sin instalación, sin admin, sin Python, sin Node.
-
-1. Descarga [`MHL-Music-Portable-1.3.4.zip`](../../releases/latest)
-2. Descomprime en cualquier carpeta
-3. Ejecuta `MHL Music.exe`
-
-**Opción 2 — Installer**
-> Instala en `Program Files` sin necesidad de admin.
-
-1. Descarga [`MHL Music_1.3.4_x64-setup.exe`](../../releases/latest)
-2. Ejecuta el installer
-3. Listo
-
-**Requisitos:** Windows 10/11 (x64). No requiere nada más instalado.
+- Búsqueda musical y reproducción de previews.
+- Descarga de audio con `yt-dlp` y conversión mediante `ffmpeg`.
+- Metadatos ID3 automáticos para los archivos descargados.
+- Letras sincronizadas con texto original, romanización y traducción.
+- Biblioteca local organizada por álbumes, artistas y géneros.
+- Historial de búsqueda y sugerencias personalizadas.
+- Apertura de canciones con reproductores externos compatibles.
+- Interfaz disponible en español e inglés.
+- Detección automática del idioma del dispositivo y selección manual.
 
 ---
 
-### 📱 Android
+## 🚀 Plataformas
 
-1. Descarga [`MHL-Music-vX.X.X.apk`](../../releases/latest)
-2. Abre el APK en el dispositivo
-3. Si aparece aviso de fuentes desconocidas: Ajustes → Seguridad → Activar
+| Plataforma | Tecnología | Distribución | Estado |
+|---|---|---|---|
+| Windows 10/11 x64 | React + pywebview | ZIP portable | ✅ Recomendada |
+| Android 7.0+ | React + Capacitor | APK | ✅ Recomendada |
+| Web / PWA | React + backend externo | Navegador | ⚠️ Disponibilidad limitada |
 
-> Requiere Android 7.0+ (API 24+)
+### Windows Desktop
 
----
+La versión de escritorio es autónoma. Incluye Python embebido, pywebview, `yt-dlp.exe` y `ffmpeg.exe`; no necesita instalación, Node, Python ni permisos de administrador.
 
-### 🌐 Web / PWA (iPhone)
+### Android
 
-1. Abre [music-mhl.onrender.com](https://music-mhl.onrender.com) en **Safari**
-2. Pulsa **Compartir → Añadir a pantalla de inicio**
-3. Confirma el nombre
+La aplicación Android usa Capacitor y un puente nativo para descargar audio, acceder a la biblioteca y abrir canciones con reproductores instalados.
 
-> ⚠️ Sin descarga nativa en iOS. Búsqueda y previews sí funcionan.
+### Web / PWA
 
----
-
-## 🎼 Arquitectura
-
-### Stack por plataforma
-
-| Capa | Web/PWA | Android | Desktop (Windows) |
-|------|---------|---------|------------------|
-| Frontend | React + Vite | React + Capacitor | React + Vite |
-| Estado | Zustand | Zustand | Zustand |
-| Motor búsqueda | Fly.io backend | 3 fuentes en paralelo | `api.deezer.com` directo |
-| Descarga | Backend + ticket | yt-dlp plugin nativo | yt-dlp.exe local |
-| Binarios | N/A | En APK | `win/` junto al exe |
-| Hosting | Render | APK directo | NSIS installer |
-
-### Flujo Desktop (100% offline)
-
-```
-Búsqueda  →  api.deezer.com  (sin CORS en webview nativo)
-YouTube   →  yt-dlp.exe local  (bundleado en win/)
-Descarga  →  yt-dlp.exe → ffmpeg.exe  (genera MP3 con ID3 tags)
-```
-
-**No usa Fly.io para nada.** Funciona aunque el backend caiga.
+La versión web depende de servicios externos. Algunas funciones pueden no estar disponibles si el backend está fuera de servicio.
 
 ---
 
-## 🗂️ Estructura del proyecto
+## 📦 Instalación
 
-```
+### Windows
+
+1. Descarga el archivo `MHL-Music-Portable-X.X.X.zip` desde [Releases](../../releases/latest).
+2. Descomprime el ZIP.
+3. Ejecuta `MHL Music.exe`.
+
+### Android
+
+1. Descarga `MHL-Music-X.X.X.apk` desde [Releases](../../releases/latest).
+2. Abre el archivo en el teléfono.
+3. Autoriza la instalación desde esa fuente si Android lo solicita.
+
+---
+
+## 🎤 Letras
+
+MHL Music puede combinar tres capas:
+
+- **Original:** texto escrito en el idioma de la canción.
+- **Romanización:** conversión de escrituras como japonés, coreano o chino a caracteres latinos.
+- **Traducción:** español o inglés según el idioma efectivo de la aplicación.
+
+Las capas pueden activarse individualmente. Cuando el idioma original coincide con el idioma elegido, la aplicación evita traducciones innecesarias. También puede guardar las letras sincronizadas en archivos `.lrc`.
+
+---
+
+## 🏗️ Arquitectura
+
+| Capa | Tecnología |
+|---|---|
+| Interfaz | React 18 + Vite + TypeScript |
+| Estado | Zustand |
+| Android | Capacitor |
+| Windows | pywebview + PyInstaller |
+| Backend Web | FastAPI |
+| Pruebas | Vitest + pytest |
+
+```text
 music-mhl/
-├── src/
-│   ├── lib/
-│   │   ├── api/musicApi.ts       ← detección platform + branching
-│   │   ├── platform/index.ts     ← detectPlatform()
-│   │   ├── tauriDownloader.ts    ← Desktop: yt-dlp.exe + ffmpeg.exe
-│   │   ├── deezerDirect.ts       ← Desktop: llamadas Deezer directas
-│   │   ├── ytdlpBridge.ts        ← Android: Capacitor plugin bridge
-│   │   └── openFileBridge.ts     ← Android: abrir en reproductor externo
-│   ├── store/musicStore.ts       ← estado global Zustand
-│   └── pages/
-│       ├── SearchPage.tsx        ← búsqueda + sugerencias affinity
-│       ├── DownloadsPage.tsx     ← cola de descarga
-│       └── SettingsPage.tsx      ← calidad, carpeta, reproductor
-├── src-tauri/                    ← Tauri v2 (Rust desktop)
-│   └── src/lib.rs                ← comandos Rust locales
-├── resources/win/                 ← yt-dlp.exe + ffmpeg.exe (gitignored)
-├── services/ytdlp-service/       ← Backend FastAPI (Fly.io) — solo Web/PWA
-└── android/                       ← Capacitor Android — NO TOCAR
+├── src/                         # Frontend compartido
+│   ├── components/             # Componentes de interfaz
+│   ├── lib/                    # APIs, plataforma, idioma y letras
+│   ├── pages/                  # Búsqueda, biblioteca, descargas y ajustes
+│   └── store/                  # Estado global Zustand
+├── android/                    # Proyecto Capacitor Android
+├── mhl-desktop/                # Aplicación Windows con pywebview
+├── services/ytdlp-service/     # Backend para Web/PWA
+└── release/                    # Artefactos compilados locales
 ```
+
+### Flujo de Windows
+
+```text
+Búsqueda → Deezer API
+Audio    → yt-dlp.exe
+Proceso  → ffmpeg.exe
+Salida   → MP3 con metadatos y letras LRC
+```
+
+La versión Desktop no llama al backend Web/Fly.io.
 
 ---
 
-## 🔧 Desarrollo local
+## 🔧 Desarrollo
+
+### Frontend
 
 ```bash
-# Web + Desktop
 npm install
-npm run dev          # http://localhost:8080
-
-# Desktop build
-npm run tauri:build  # genera installer en src-tauri/target/release/bundle/nsis/
-
-# Descargar binarios Desktop (si no existen)
-npm run download-binaries
+npm run dev
+npm run test
+npm run lint
+npm run build
 ```
 
+### Windows
+
 ```bash
-# Backend (solo para Web/PWA)
-cd services/ytdlp-service
-pip install -r requirements.txt
-uvicorn app:app --reload --port 8080
+cd mhl-desktop
+python -m pytest tests
+python -m PyInstaller MHLMusic.spec --noconfirm
+```
+
+### Android
+
+```bash
+npx cap sync android
+cd android
+gradlew assembleRelease
 ```
 
 ---
 
 ## 🔒 Privacidad
 
-- Sin registro obligatorio
-- Sin tracking ni cuentas de usuario
-- Desktop no transmite datos a ningún servidor externo
-- Audio no pasa por servidores intermedios
-- Código abierto y auditable
+- Sin registro obligatorio.
+- Sin cuentas de usuario.
+- Sin anuncios ni tracking.
+- Desktop y Android procesan el audio localmente.
+- Código abierto y auditable.
 
 ---
 
-## 👨‍💻 Creado por
+## 👨‍💻 Autor
 
 **Paul Antonio Díaz Talica**
+
 [paul-dev.vercel.app](https://paul-dev.vercel.app)
 
----
-
-¿Encontraste un bug? Abre un [issue](../../issues).
+¿Encontraste un problema? Abre un [issue](../../issues).

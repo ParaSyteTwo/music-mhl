@@ -8,9 +8,11 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
+.tools/
 dist
 dist-ssr
 dev-dist
+*.tsbuildinfo
 *.local
 
 # Editor directories and files
@@ -64,6 +66,7 @@ mhl-desktop/assets/*.exe
 mhl-desktop/assets/*.ico
 mhl-desktop/build/
 mhl-desktop/dist/
+mhl-desktop/.venv/
 mhl-desktop/__pycache__/
 
 # Release artifacts (generated builds)

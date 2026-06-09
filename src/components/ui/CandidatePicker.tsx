@@ -6,6 +6,7 @@ import { Capacitor } from '@capacitor/core';
 import { toast } from 'sonner';
 import { getDownloadCandidates, type DownloadCandidate } from '@/lib/api/musicApi';
 import type { Track } from '@/types/music';
+import { useI18n } from '@/lib/useI18n';
 
 export function CandidatePicker({
   track,
@@ -16,6 +17,7 @@ export function CandidatePicker({
   onClose: () => void;
   onSelect: (videoId: string) => void;
 }) {
+  const { t } = useI18n();
   const [candidates, setCandidates] = useState<DownloadCandidate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -36,17 +38,17 @@ export function CandidatePicker({
       .then((cands) => {
         setCandidates(cands);
         if (cands.length === 0) {
-          toast.warning('No se encontraron candidatos de descarga');
-          setError('Sin resultados');
+          toast.warning(t('noDownloadCandidates'));
+          setError(t('noResults'));
         }
       })
       .catch((e) => {
-        const errorMsg = e instanceof Error ? e.message : 'Error buscando candidatos';
+        const errorMsg = e instanceof Error ? e.message : t('noDownloadCandidates');
         toast.error(errorMsg);
         setError(errorMsg);
       })
       .finally(() => setLoading(false));
-  }, [track]);
+  }, [track, t]);
 
   function fmt(s: number) {
     const m = Math.floor(s / 60);
@@ -93,10 +95,10 @@ export function CandidatePicker({
 
         <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-[rgba(255,255,255,0.06)] flex-shrink-0">
           <div>
-            <p className="text-xs font-medium text-[#F5F5F0]">Resultados inteligentes</p>
-            <p className="text-[11px] text-[#555]">Busqueda rapida ordenada por coincidencia</p>
+            <p className="text-xs font-medium text-[#F5F5F0]">{t('smartResults')}</p>
+            <p className="text-[11px] text-[#555]">{t('smartResultsHint')}</p>
           </div>
-          <span className="text-[10px] text-[#444] text-right">Elige la cancion exacta a descargar</span>
+          <span className="text-[10px] text-[#444] text-right">{t('chooseExactSong')}</span>
         </div>
 
         <div className="overflow-y-auto flex-1 px-3 pb-4 overscroll-contain">
@@ -109,7 +111,7 @@ export function CandidatePicker({
           ) : error ? (
             <p className="text-center text-xs text-red-400 py-8">{error}</p>
           ) : candidates.length === 0 ? (
-            <p className="text-center text-xs text-[#555] py-8">No se encontraron resultados</p>
+            <p className="text-center text-xs text-[#555] py-8">{t('noResults')}</p>
           ) : (
             <>
               <div className="space-y-1.5 mt-1">
@@ -149,7 +151,7 @@ export function CandidatePicker({
                         </span>
                       )}
                       {isBest && (
-                        <span className="text-[9px] text-[#C8F04B] font-medium">mejor match</span>
+                        <span className="text-[9px] text-[#C8F04B] font-medium">{t('bestMatch')}</span>
                       )}
                     </div>
                   </motion.button>
@@ -163,7 +165,7 @@ export function CandidatePicker({
                   onClick={() => setVisibleCount((v) => v + 4)}
                   className="w-full mt-2 py-2.5 rounded-xl text-center text-xs text-[#888] bg-[rgba(255,255,255,0.04)] hover:bg-[rgba(255,255,255,0.08)] border border-[rgba(255,255,255,0.06)] transition-colors"
                 >
-                  Ver {Math.min(4, candidates.length - visibleCount)} más
+                  {t('showMore', { count: Math.min(4, candidates.length - visibleCount) })}
                 </motion.button>
               )}
             </>

@@ -37,7 +37,7 @@ function slugify(text: string): string {
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9\s\-]/g, '')
+    .replace(/[^a-z0-9\s-]/g, '')
     .replace(/\s+/g, '-')
     .replace(/-+/g, '-')
     .trim()
@@ -138,7 +138,7 @@ async function searchLetrasSong(title: string, artist: string): Promise<string |
   if (!html) return null
 
   // Buscar todos los enlaces de canciones
-  const songLinks = [...html.matchAll(/href="(https:\/\/www\.letras\.com\/[a-z0-9\-]+\/[a-z0-9\-]+\/?)"/gi)]
+  const songLinks = [...html.matchAll(/href="(https:\/\/www\.letras\.com\/[a-z0-9-]+\/[a-z0-9-]+\/?)"/gi)]
     .map((m) => m[1])
     .filter((url) => {
       // Filtrar: solo URLs de canciones (2 segmentos, no estilos/discografia/etc)
@@ -208,60 +208,4 @@ export async function fetchLetrasLyrics(
     translated: translated ?? [],
     sourceUrl: songUrl,
   }
-}
-
-// ─── Generar LRC multicapa desde resultado de letras.com ────────────────────
-
-export function buildLRCFromLetras(
-  letras: LetrasSongResult,
-  baseTimestamps: string[] | null,   // de LRCLIB para sincronización
-  flags: {
-    original: boolean
-    romaji: boolean
-    translation: boolean
-  },
-): { synced: string; plain: string } | null {
-  if (letras.original.length === 0) return null
-
-  const allLines: string[] = []
-  const maxLines = Math.max(
-    letras.original.length,
-    letras.romaji.length || 0,
-    letras.translated.length || 0,
-  )
-
-  for (let i = 0; i < maxLines; i++) {
-    const ts = baseTimestamps?.[i] ?? `[${String(Math.floor(i / 20) + 0).padStart(2, '0')}:${String((i % 20) * 3).padStart(2, '0')}.00]`
-    const tsP = `[${ts}]`
-
-    if (flags.original && letras.original[i]) {
-      allLines.push(`${tsP}${letras.original[i]}`)
-    }
-    if (flags.romaji && letras.romaji[i]) {
-      allLines.push(`${tsP}${letras.romaji[i]}`)
-    }
-    if (flags.translation && letras.translated[i]) {
-      allLines.push(`${tsP}${letras.translated[i]}`)
-    }
-  }
-
-  return {
-    synced: allLines.join('\n'),
-    plain: allLines.join('\n'),
-  }
-}
-
-// ─── Debug: test rápido ───────────────────────────────────────────────────────
-
-export async function testLetrasScraper() {
-  const result = await fetchLetrasLyrics('Usseewa', 'Ado')
-  console.log('=== letras.com result for Usseewa - Ado ===')
-  console.log('sourceUrl:', result.sourceUrl)
-  console.log('original lines:', result.original.length)
-  console.log('romaji lines:', result.romaji.length)
-  console.log('translated lines:', result.translated.length)
-  if (result.original.length > 0) console.log('First 3 originals:', result.original.slice(0, 3))
-  if (result.romaji.length > 0) console.log('First 3 romaji:', result.romaji.slice(0, 3))
-  if (result.translated.length > 0) console.log('First 3 translated:', result.translated.slice(0, 3))
-  return result
 }

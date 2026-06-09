@@ -23,7 +23,7 @@
       "purpose": "any maskable"
     },
     {
-      "src": "/favicon.ico",
+      "src": "/MHL.ico",
       "sizes": "64x64 32x32 16x16",
       "type": "image/x-icon"
     }
