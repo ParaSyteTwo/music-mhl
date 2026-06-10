@@ -1,25 +1,26 @@
 # AGENTS.md — Project Rules
 > Project: MHL Music
-> Stack: TypeScript / React + Tauri v2 + Capacitor + FastAPI
-> Last updated: 2026-04-28
+> Stack: TypeScript / React + pywebview + Capacitor + FastAPI
+> Last updated: 2026-06-10
 
 ## Stack & Constraints
 
 | Plataforma | Technology | Notes |
 |-----------|-----------|-------|
 | Frontend | React 18 + Vite + TypeScript | Compartido Web + Desktop + Android |
-| Desktop | Tauri v2 (Rust) | yt-dlp.exe bundleado localmente — sin backend Fly.io |
+| Desktop | pywebview + PyInstaller | yt-dlp.exe y ffmpeg.exe bundleados — sin backend Fly.io |
 | Android | Capacitor 8 + plugin nativo | Ya funciona al 100% — no tocar sin razón |
 | Backend | FastAPI (Fly.io) | Solo para Web/PWA — Desktop NO lo usa |
 | State | Zustand 5 | Compartido en todo el frontend |
 | PWA | vite-plugin-pwa | Solo Web/PWA |
 
 **Prohibido:**
-- Llamar backend Fly.io desde Tauri Desktop
-- `__TAURI_INTERNALS__` para detectar Tauri (no existe en v2) → usar `src/lib/platform/index.ts`
-- `decorations: false` en tauri.conf.json
+- Llamar backend Fly.io desde Desktop
 - Tocar código Android sin motivo
 - Subir binarios a git (yt-dlp.exe, ffmpeg.exe)
+- Cambiar el certificado de firma Android o publicar un APK con otra firma
+- Reutilizar `versionCode` en una release normal
+- Crear otro mecanismo de auto-update que contradiga @ANDROID_UPDATE_CONTRACT.md
 
 ## Code Generation Rules
 
@@ -61,8 +62,24 @@ Types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`
 - Ambos artefactos deben quedar en la carpeta `release/` del proyecto.
 - No generar instalador de Windows salvo petición explícita.
 
+## Android Update Compatibility
+
+`@ANDROID_UPDATE_CONTRACT.md` es normativo para toda iteración Android posterior a `1.3.5`, incluso antes de implementar el updater.
+
+- Fuente única: GitHub Releases de `ParaSyteTwo/music-mhl`.
+- Cada release Android debe incluir `MHL-Music-Android.json` y `MHL-Music-{versionName}.apk`.
+- Identidad de build: `versionCode + versionName + SHA-256`.
+- Incrementar siempre `versionCode` en releases normales.
+- Conservar `applicationId = com.mhl.music` y el certificado de firma actual.
+- Un asset nuevo o reemplazado debe madurar 7 días desde `asset.updated_at`.
+- No permitir descarga o instalación durante ese periodo.
+- Validar digest, package, versión y certificado antes de instalar.
+- La instalación siempre requiere confirmación del sistema Android.
+- Implementar por slices en el orden definido por el contrato; no saltar directamente al instalador.
+
 ## Referencias
 
 - Requisitos completos: @PRD.md
 - Decisiones de arquitectura: @TECH_DESIGN.md
+- Contrato de compatibilidad Android: @ANDROID_UPDATE_CONTRACT.md
 - Reglas globales: ~/.Codex/AGENTS.md

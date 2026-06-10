@@ -1,8 +1,8 @@
 # Technical Design Document
 > Project: MHL Music
-> Stack: Multi-platform (React/Vite + FastAPI + Tauri + Capacitor)
+> Stack: Multi-platform (React/Vite + FastAPI + pywebview + Capacitor)
 > Version: 2.0
-> Last updated: 2026-04-21
+> Last updated: 2026-06-10
 
 ## 1. Tech Stack
 
@@ -297,3 +297,67 @@ VITE_SERVICE_API_KEY=...
 - Desktop: Tests manuales en Windows limpio (sin yt-dlp preinstalado)
 - Android: Ya tiene su propio ciclo de testing
 - Coverage target: 70% mínimo en src/lib/
+
+---
+
+## 12. Android Update Architecture
+
+La especificación canónica es `ANDROID_UPDATE_CONTRACT.md`. Cualquier implementación futura debe conservar ese contrato.
+
+### Componentes planeados
+
+| Componente | Responsabilidad |
+|---|---|
+| `AppUpdaterPlugin.java` | Identidad instalada, digest, certificado, descarga e instalación |
+| `githubAndroidRelease.ts` | Consulta y validación de la release oficial |
+| `appUpdatePolicy.ts` | Comparación de builds y periodo de seguridad |
+| `appUpdaterBridge.ts` | Contrato tipado con el plugin Capacitor |
+| `appUpdateStore.ts` | Estado aislado del updater |
+| `AppUpdateNotice.tsx` | Aviso Android no bloqueante |
+
+### Fuente y contrato
+
+```text
+GET https://api.github.com/repos/ParaSyteTwo/music-mhl/releases/latest
+```
+
+Assets obligatorios:
+
+```text
+MHL-Music-Android.json
+MHL-Music-{versionName}.apk
+```
+
+La identidad de build es:
+
+```text
+versionCode + versionName + SHA-256
+```
+
+### Flujo de seguridad
+
+```text
+release oficial
+  → validar manifest y asset
+  → comparar build instalada
+  → esperar asset.updated_at + 7 días
+  → descargar a almacenamiento privado
+  → validar SHA-256
+  → validar com.mhl.music
+  → validar versión sin downgrade
+  → validar certificado firmante
+  → reconsultar GitHub
+  → abrir instalador Android
+```
+
+Un cambio de `asset.id`, digest, tamaño o `updated_at` invalida cualquier descarga y reinicia los siete días.
+
+### Reglas de evolución
+
+- El updater de la aplicación permanece separado del updater de yt-dlp.
+- Cada release normal incrementa `versionCode`.
+- La detección de digest distinto con la misma versión es solo una recuperación excepcional.
+- La comprobación automática ocurre como máximo una vez cada 24 horas.
+- La comprobación manual permanece disponible en Ajustes.
+- Web y Desktop no inicializan este flujo.
+- Los errores son tipados y nunca bloquean búsqueda, reproducción o descargas.

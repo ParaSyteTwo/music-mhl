@@ -1,7 +1,7 @@
 # PRD — Product Requirements Document
 > Project: MHL Music
 > Version: 2.0
-> Last updated: 2026-04-21
+> Last updated: 2026-06-10
 
 ## 1. Overview
 
@@ -27,6 +27,7 @@ MHL Music es una app multi-plataforma para buscar, reproducir y descargar músic
 | App Desktop self-contained | Desktop | P0 | `.exe` instalable, todo bundleado (yt-dlp + ffmpeg), sin backend externo |
 | Historial / Playlists | Todos | P1 | Crear y gestionar playlists |
 | Settings | Todos | P2 | Configuración de calidad, rutas de descarga, idioma |
+| Auto-update asistido | Android | P1 | Detectar APK oficial, esperar 7 días de seguridad y abrir instalación confirmada |
 
 ## 4. Requisitos por Plataforma
 
@@ -41,6 +42,10 @@ MHL Music es una app multi-plataforma para buscar, reproducir y descargar músic
 ### Android
 - Ya funciona al 100% — NO tocar sin razón
 - Plugin nativo yt-dlp + ffmpeg bundleados
+- Las futuras builds deben conservar compatibilidad con `ANDROID_UPDATE_CONTRACT.md`
+- El updater solo puede consultar GitHub Releases de `ParaSyteTwo/music-mhl`
+- Una build nueva no será instalable hasta 7 días después del último cambio del asset APK
+- Toda instalación será confirmada por el usuario mediante Android
 
 ### Desktop (Windows — Tauri)
 - Tauri v2 con Rust para el proceso principal
@@ -76,6 +81,15 @@ MHL Music es una app multi-plataforma para buscar, reproducir y descargar músic
 ### Android (ya cumplido — mantener)
 - [ ] Descarga funciona con plugin nativo
 - [ ] No regresiones al tocar código compartido
+
+### Android Auto-update (planeado)
+- [ ] Solo acepta releases publicadas de `ParaSyteTwo/music-mhl`
+- [ ] Detecta builds mediante `versionCode`, `versionName` y SHA-256
+- [ ] Un APK reemplazado reinicia el periodo de seguridad de 7 días
+- [ ] Rechaza digest, package, versión o certificado inválidos
+- [ ] Nunca permite downgrade
+- [ ] No bloquea el uso normal de la aplicación ante errores
+- [ ] Requiere confirmación del instalador de Android
 
 ## 6. Out of Scope (v2.0)
 
