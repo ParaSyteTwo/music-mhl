@@ -146,23 +146,47 @@ class Bridge:
 
         from concurrent.futures import ThreadPoolExecutor, as_completed
         merged: dict[str, dict] = {}
-        with ThreadPoolExecutor(max_workers=max_workers) as ex:
-            futures = {ex.submit(self._yt_search_fast, q, limit_per_query): q for q in queries}
-            for fut in as_completed(futures):
-                for result in fut.result():
-                    vid = result['videoId']
-                    if vid in merged:
+        for result in self._yt_search_fast(queries[0], limit_per_query):
+            vid = result['videoId']
+            merged[vid] = {
+                **result,
+                'score': self._score_smart(result, title, artist, album, duration),
+                'label': self._label_fast(result),
+                'isrc_match': False,
+            }
+
+        primary_ranked = sorted(
+            merged.values(), key=lambda candidate: candidate['score'], reverse=True
+        )
+        needs_more = len(primary_ranked) < 2 or primary_ranked[0]['score'] < 120
+
+        if needs_more:
+            with ThreadPoolExecutor(max_workers=max_workers) as ex:
+                futures = {
+                    ex.submit(self._yt_search_fast, query, limit_per_query): query
+                    for query in queries[1:]
+                }
+                for fut in as_completed(futures):
+                    try:
+                        results = fut.result()
+                    except Exception:
                         continue
-                    merged[vid] = {
-                        **result,
-                        'score': 0,
-                        'label': self._label_fast(result),
-                        'isrc_match': False,
-                    }
+                    for result in results:
+                        vid = result['videoId']
+                        score = self._score_smart(result, title, artist, album, duration)
+                        existing = merged.get(vid)
+                        if existing and existing['score'] >= score:
+                            continue
+                        merged[vid] = {
+                            **result,
+                            'score': score,
+                            'label': self._label_fast(result),
+                            'isrc_match': False,
+                        }
 
         # Scoring para todos
         for vid, result in merged.items():
-            result['score'] = self._score_smart(result, title, artist, duration)
+            result['score'] = self._score_smart(result, title, artist, album, duration)
             result['isrc_match'] = False
 
         # ISRC check solo para top 1 — evitar slowdown de 4 yt-dlp calls
@@ -185,7 +209,7 @@ class Bridge:
             else:
                 result['confidence'] = 'baja'
 
-        candidates = sorted(merged.values(), key=lambda c: c['score'], reverse=True)[:4]
+        candidates = sorted(merged.values(), key=lambda c: c['score'], reverse=True)[:3]
         return {'success': True, 'candidates': candidates}
 
     def _get_yt_isrc(self, video_id: str) -> str:
@@ -356,7 +380,9 @@ class Bridge:
         s = re.sub(r'\s+', ' ', s).strip()
         return s
 
-    def _score_smart(self, c: dict, title: str, artist: str, duration: int) -> int:
+    def _score_smart(
+        self, c: dict, title: str, artist: str, album: str, duration: int
+    ) -> int:
         """
         Scoring inteligente con match 1:1 feat Deezer↔YouTube.
         - Si Deezer tiene ft → solo aceptar YouTube con ft
@@ -370,6 +396,7 @@ class Bridge:
         # Título base limpio
         wt_base = self._clean_query(title).lower()
         wa_base = self._clean_query(artist).lower()
+        walbum_base = self._clean_query(album).lower()
 
         # Detectar si es music video (para penalizar)
         yt_title_lower = c.get('title', '').lower()
@@ -401,14 +428,22 @@ class Bridge:
                 score += 22
             if wa_base in ch:
                 score += 15
+        if walbum_base and walbum_base in t:
+            score += 12
 
         # ── "official audio" / "official video" ─────────────────────────
         if 'official audio' in t:
-            score += 18
+            score += 25
+        if 'audio only' in t:
+            score += 20
+        if 'topic' in ch:
+            score += 14
+        if 'official' in ch:
+            score += 10
 
         # ── Penalizar music videos (tienen intro/outro) ───────────────
         if is_music_video:
-            score -= 25
+            score -= 35
 
         # ── Duración — match preciso = canción sin intro/outro ─────────
         if duration > 0 and cd > 0:
@@ -419,8 +454,12 @@ class Bridge:
                 score += 30
             elif diff_pct <= 0.10:
                 score += 15
-            elif diff_pct >= 0.50:
-                score -= 40  # Muy diferente = probablemente music video con intro/outro
+            elif diff_pct <= 0.20:
+                score -= 10
+            elif diff_pct <= 0.40:
+                score -= 30
+            else:
+                score -= 55
 
         # ── Boostear si duración match + título match ─────────────────
         if duration > 0 and cd > 0 and abs(cd - duration) / duration < 0.05 and wt_base and wt_base in t:
@@ -428,15 +467,19 @@ class Bridge:
 
         # ── Penalizadores ───────────────────────────────────────────────
         bad_patterns = ['karaoke', 'nightcore', 'sped up', 'slowed', 'reaction', 'amv',
-                        'instrumental', '8d', 'reverb', 'bass boost']
+                        '8d', 'reverb', 'bass boost']
         if any(b in t for b in bad_patterns):
-            score -= 28
+            score -= 35
+        if any(b in t for b in ('instrumental', 'extended', 'extended mix')):
+            score -= 25
+        if any(b in t for b in ('remix', 'bootleg', 'mashup')) and 'official remix' not in t:
+            score -= 24
         if 'cover' in t and wa_base and wa_base not in ch:
-            score -= 18
-        if 'live' in t and 'official' not in t:
-            score -= 12
+            score -= 30
+        if any(b in t for b in ('live', 'concert', 'en vivo')) and 'official audio' not in t:
+            score -= 25
         if any(b in t for b in ('lyrics', 'lyric video', 'sub esp', 'sub english')):
-            score -= 10
+            score -= 18
 
         return score
 

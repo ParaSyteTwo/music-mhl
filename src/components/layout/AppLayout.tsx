@@ -4,6 +4,7 @@ import { BottomPlayer } from './BottomPlayer';
 import { Search, Download, Settings } from 'lucide-react';
 import { useI18n } from '@/lib/useI18n';
 import { useMusicStore } from '@/store/musicStore';
+import { usesRemoteBackend } from '@/lib/platform';
 
 const RAILWAY_URL = (import.meta as { env: Record<string, string> }).env.VITE_RAILWAY_URL;
 
@@ -37,6 +38,10 @@ export function AppLayout() {
   // Poll /health para detectar mantenimiento proactivamente
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   useEffect(() => {
+    if (!usesRemoteBackend() || !RAILWAY_URL) {
+      setMaintenanceMode(false, null);
+      return;
+    }
     const check = async () => {
       try {
         const res = await fetch(`${RAILWAY_URL}/health`);

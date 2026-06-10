@@ -3,7 +3,7 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(__file__))
 
-from app import score_candidate
+from modules.search import build_candidate_queries, score_candidate
 
 
 def test_score_rejects_music_video():
@@ -61,6 +61,29 @@ def test_score_album_bonus():
     score_without = score_candidate(without_album, "Feel Good Inc", "Gorillaz", "Demon Days")
     assert score_with > score_without, f"Con álbum ({score_with}) debería superar sin álbum ({score_without})"
     print(f"PASS test_score_album_bonus: with_album={score_with} > without_album={score_without}")
+
+
+def test_score_rejects_altered_versions():
+    official = {
+        "title": "Artist - Song (Official Audio)",
+        "channel": "Artist - Topic",
+        "duration": 180,
+        "videoId": "official",
+    }
+    altered = {
+        "title": "Artist - Song sped up remix cover",
+        "channel": "Fan Channel",
+        "duration": 145,
+        "videoId": "altered",
+    }
+    assert score_candidate(official, "Song", "Artist", "", 180) > score_candidate(
+        altered, "Song", "Artist", "", 180
+    )
+
+
+def test_primary_query_is_official_audio_with_fallback():
+    queries = build_candidate_queries("Song", "Artist")
+    assert queries == ["song artist official audio", "song artist"]
 
 
 if __name__ == "__main__":

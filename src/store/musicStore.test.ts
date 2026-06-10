@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { useMusicStore } from './musicStore';
+import { getDownloadQueueDelayMs, useMusicStore } from './musicStore';
+import { searchDeezer } from '@/lib/api/musicApi';
 
 // Mock external dependencies
 vi.mock('@/lib/audioEngine', () => ({
@@ -232,6 +233,39 @@ describe('useMusicStore', () => {
 
       expect(state.searchOffset).toBe(0);
     });
+
+    it('keeps the newest search when an older request finishes later', async () => {
+      let resolveOld: ((tracks: Awaited<ReturnType<typeof searchDeezer>>) => void) | undefined;
+      const oldRequest = new Promise<Awaited<ReturnType<typeof searchDeezer>>>((resolve) => {
+        resolveOld = resolve;
+      });
+      vi.mocked(searchDeezer)
+        .mockReturnValueOnce(oldRequest)
+        .mockResolvedValueOnce([{
+          id: 'new',
+          title: 'New result',
+          artist: 'Artist',
+          album: 'Album',
+          duration: 180,
+          cover: '',
+        }]);
+
+      const first = useMusicStore.getState().performSearch('old');
+      const second = useMusicStore.getState().performSearch('new');
+      await second;
+      resolveOld?.([{
+        id: 'old',
+        title: 'Old result',
+        artist: 'Artist',
+        album: 'Album',
+        duration: 180,
+        cover: '',
+      }]);
+      await first;
+
+      expect(useMusicStore.getState().searchQuery).toBe('new');
+      expect(useMusicStore.getState().searchResults[0]?.id).toBe('new');
+    });
   });
 
   describe('Language Settings', () => {
@@ -250,6 +284,12 @@ describe('useMusicStore', () => {
       const state = useMusicStore.getState();
 
       expect(state.downloads).toEqual([]);
+    });
+
+    it('delays queued downloads only on web', () => {
+      expect(getDownloadQueueDelayMs('web')).toBe(3000);
+      expect(getDownloadQueueDelayMs('android')).toBe(0);
+      expect(getDownloadQueueDelayMs('pywebview')).toBe(0);
     });
 
     it('should remove download by id', () => {

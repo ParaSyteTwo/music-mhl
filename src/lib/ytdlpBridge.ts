@@ -127,12 +127,12 @@ export async function saveTaggedAudioToMusic(fileName: string, base64Data: strin
 export async function searchYouTubeNativeMulti(queries: string[]): Promise<YtDlpSearchResult[]> {
   if (!initialized) await initYtDlp();
   // Lanza todas las búsquedas en paralelo y combina, deduplicando por videoId
-  const results = await Promise.allSettled(queries.map((q) => YtDlp.search({ query: q })));
+  const results = await runSearchesWithConcurrency(queries, getNativeSearchConcurrency(queries.length));
   const seen = new Set<string>();
   const combined: YtDlpSearchResult[] = [];
-  for (const r of results) {
-    if (r.status === 'fulfilled') {
-      for (const item of r.value.results ?? []) {
+  for (const result of results) {
+    if (result) {
+      for (const item of result.results ?? []) {
         if (!seen.has(item.videoId)) {
           seen.add(item.videoId);
           combined.push(item);
@@ -142,6 +142,52 @@ export async function searchYouTubeNativeMulti(queries: string[]): Promise<YtDlp
   }
   return combined;
 }
+
+function getNativeSearchConcurrency(queryCount: number): number {
+  if (queryCount <= 1) return queryCount;
+  const cores = typeof navigator === 'undefined' ? 4 : navigator.hardwareConcurrency || 4;
+  const memory = typeof navigator === 'undefined'
+    ? undefined
+    : (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
+  const limit = cores <= 4 || (memory !== undefined && memory <= 4)
+    ? 2
+    : cores <= 8
+      ? 3
+      : 4;
+  return Math.min(queryCount, limit);
+}
+
+async function runSearchesWithConcurrency(
+  queries: string[],
+  concurrency: number,
+): Promise<Array<{ success: boolean; results: YtDlpSearchResult[] } | null>> {
+  const results: Array<{ success: boolean; results: YtDlpSearchResult[] } | null> =
+    Array.from({ length: queries.length }, () => null);
+  let nextIndex = 0;
+
+  const worker = async () => {
+    while (nextIndex < queries.length) {
+      const index = nextIndex++;
+      try {
+        results[index] = await YtDlp.search({ query: queries[index] });
+      } catch (error) {
+        console.error('[YtDlp] Parallel search failed:', error);
+      }
+    }
+  };
+
+  try {
+    await Promise.all(Array.from({ length: concurrency }, () => worker()));
+    return results;
+  } catch (error) {
+    console.error('[YtDlp] Search workers failed:', error);
+    return results;
+  }
+}
+
+export const __testing = {
+  getNativeSearchConcurrency,
+};
 
 /**
  * Escucha eventos de progreso de yt-dlp en tiempo real (solo Android).

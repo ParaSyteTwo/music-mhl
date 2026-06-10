@@ -20,6 +20,12 @@ export function detectPlatform(): 'android' | 'pywebview' | 'web' {
   return 'web';
 }
 
+export function usesRemoteBackend(
+  currentPlatform: ReturnType<typeof detectPlatform> = detectPlatform(),
+): boolean {
+  return currentPlatform === 'web';
+}
+
 // Hook reactivo — re-evalúa tras el mount
 export function usePlatform() {
   const [p, setP] = useState<'android' | 'pywebview' | 'web'>(() => detectPlatform());

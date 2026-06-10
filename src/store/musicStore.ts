@@ -21,6 +21,7 @@ import {
   isUiLanguageMode,
   resolveEffectiveLanguage,
 } from '@/lib/language';
+import { detectPlatform } from '@/lib/platform';
 
 function storeText(mode: UiLanguageMode, key: string, vars?: Record<string, string | number>): string {
   return translate(resolveEffectiveLanguage(mode), key, vars);
@@ -35,6 +36,14 @@ function getProgressLabel(progress: number, lang: Lang = 'es'): string {
 }
 
 export { getProgressLabel };
+
+let searchRequestId = 0;
+
+export function getDownloadQueueDelayMs(
+  currentPlatform: ReturnType<typeof detectPlatform> = detectPlatform(),
+): number {
+  return currentPlatform === 'web' ? 3000 : 0;
+}
 
 function cleanTrackTitleForFileName(title: string): string {
   const normalized = title
@@ -297,40 +306,60 @@ export const useMusicStore = create<MusicStore>()(
         isLoadingMore: false,
 
         performSearch: async (query) => {
-          if (!query.trim()) {
-            set({ searchResults: [], isSearching: false, searchQuery: '', searchOffset: 0, hasMoreResults: true });
-            document.title = 'MHL Music';
-            return;
-          }
-          set({ isSearching: true, searchQuery: query, searchOffset: 0, hasMoreResults: true });
+          const normalizedQuery = query.trim().replace(/\s+/g, ' ');
+          const requestId = ++searchRequestId;
           try {
-            const tracks = await searchDeezer(query, 0, 25);
+            if (!normalizedQuery) {
+              set({
+                searchResults: [],
+                isSearching: false,
+                isLoadingMore: false,
+                searchQuery: '',
+                searchOffset: 0,
+                hasMoreResults: true,
+              });
+              document.title = 'MHL Music';
+              return;
+            }
+            set({
+              isSearching: true,
+              isLoadingMore: false,
+              searchQuery: normalizedQuery,
+              searchOffset: 0,
+              hasMoreResults: true,
+            });
+            const tracks = await searchDeezer(normalizedQuery, 0, 25);
+            if (requestId !== searchRequestId) return;
             set({ searchResults: tracks, isSearching: false, hasMoreResults: tracks.length >= 25 });
             try {
               const stored = JSON.parse(localStorage.getItem('mhl-recent-searches') || '[]') as string[];
-              const updated = [query, ...stored.filter((s) => s.toLowerCase() !== query.toLowerCase())].slice(0, 5);
+              const updated = [normalizedQuery, ...stored.filter((s) => s.toLowerCase() !== normalizedQuery.toLowerCase())].slice(0, 5);
               localStorage.setItem('mhl-recent-searches', JSON.stringify(updated));
             } catch { /* ignore */ }
           } catch (error) {
             console.error('Search error:', error);
-            set({ isSearching: false });
+            if (requestId === searchRequestId) set({ isSearching: false });
           }
         },
 
         loadMoreResults: async () => {
           const { isLoadingMore, hasMoreResults, searchQuery, searchOffset, searchResults } = get();
           if (isLoadingMore || !hasMoreResults || !searchQuery.trim()) return;
+          const requestId = searchRequestId;
+          const requestedQuery = searchQuery;
           set({ isLoadingMore: true });
           try {
             const newOffset = searchOffset + 25;
-            const tracks = await searchDeezer(searchQuery, newOffset, 25);
+            const tracks = await searchDeezer(requestedQuery, newOffset, 25);
+            const current = get();
+            if (requestId !== searchRequestId || current.searchQuery !== requestedQuery) return;
             if (tracks.length < 25) set({ hasMoreResults: false });
             const existingIds = new Set(searchResults.map((t) => t.id));
             const newTracks = tracks.filter((t) => !existingIds.has(t.id));
             set({ searchResults: [...searchResults, ...newTracks], searchOffset: newOffset, isLoadingMore: false });
           } catch (error) {
             console.error('Load more error:', error);
-            set({ isLoadingMore: false });
+            if (requestId === searchRequestId) set({ isLoadingMore: false });
           }
         },
 
@@ -343,8 +372,10 @@ export const useMusicStore = create<MusicStore>()(
           const { downloadQueue, activeDownloads, downloads } = get();
           if (downloadQueue.length === 0 || activeDownloads >= 2) return;
 
-          // Delay de 3s entre descargas para no golpear rate limit
-          await new Promise((r) => setTimeout(r, 3000));
+          const queueDelayMs = getDownloadQueueDelayMs();
+          if (queueDelayMs > 0) {
+            await new Promise((resolve) => setTimeout(resolve, queueDelayMs));
+          }
 
           const [nextId, ...rest] = downloadQueue;
           set({ downloadQueue: rest });
@@ -369,6 +400,22 @@ export const useMusicStore = create<MusicStore>()(
           const maxAttempts = 3;
           const fileExtension = downloadFormat === 'aac' ? 'm4a' : 'mp3';
           const resolvedFileName = buildDownloadFileName(track, fileExtension);
+          const supplementalDataPromise = Promise.all([
+            track.deezerId
+              ? getDeezerTrackMeta(track.deezerId).catch(() => ({ genre: null, year: null, trackNumber: null }))
+              : Promise.resolve({ genre: null, year: null, trackNumber: null }),
+            getLyrics(
+              track.canonicalTitle?.trim() || track.title,
+              track.artist,
+              track.duration,
+              {
+                lyricOriginal: get().lyricOriginal,
+                lyricRomanization: get().lyricRomanization,
+                lyricTranslation: get().lyricTranslation,
+                deviceLang: resolveEffectiveLanguage(get().uiLanguageMode),
+              },
+            ).catch(() => ({ synced: null, plain: null })),
+          ]);
 
           // Listener de progreso real de yt-dlp (Android): conecta 0-100% nativo → 25-80% UI
           let progressHandle: { remove: () => void } | null = null;
@@ -385,22 +432,6 @@ export const useMusicStore = create<MusicStore>()(
           if ('pywebview' in window) {
             try {
               updateDl({ progress: 10 });
-              const [trackMeta, lyricsResult] = await Promise.all([
-                track.deezerId ? getDeezerTrackMeta(track.deezerId).catch(() => ({ genre: null, year: null, trackNumber: null })) : Promise.resolve({ genre: null, year: null, trackNumber: null }),
-                getLyrics(
-                  track.canonicalTitle?.trim() || track.title,
-                  track.artist,
-                  track.duration,
-                  {
-                    lyricOriginal: get().lyricOriginal,
-                    lyricRomanization: get().lyricRomanization,
-                    lyricTranslation: get().lyricTranslation,
-                    deviceLang: resolveEffectiveLanguage(get().uiLanguageMode),
-                  }
-                ).catch(() => ({ synced: null, plain: null })),
-              ]);
-              updateDl({ progress: 30 });
-              const lyrics = lyricsResult.synced || lyricsResult.plain || null;
               const queries = [
                 `${track.canonicalTitle?.trim() || track.title} ${track.artist}`,
                 `${track.canonicalTitle?.trim() || track.title} ${track.artist} official audio`,
@@ -409,15 +440,19 @@ export const useMusicStore = create<MusicStore>()(
               const api = (window as any).pywebview?.api;
               const settings = await api.get_settings();
               const outputDir = settings.download_folder || 'C:/Users/Paul/Music/MHL Music';
-              const rawResult = await api.get_raw_audio(
-                videoIdOverride ?? null,
-                track.canonicalTitle?.trim() || track.title,
-                track.artist,
-                queries,
-                downloadFormat,
-                mp3Quality,
-              );
+              const [rawResult, [trackMeta, lyricsResult]] = await Promise.all([
+                api.get_raw_audio(
+                  videoIdOverride ?? null,
+                  track.canonicalTitle?.trim() || track.title,
+                  track.artist,
+                  queries,
+                  downloadFormat,
+                  mp3Quality,
+                ),
+                supplementalDataPromise,
+              ]);
               if (!rawResult.success) throw new Error(rawResult.error || 'Error descargando audio');
+              const lyrics = lyricsResult.synced || lyricsResult.plain || null;
 
               updateDl({ progress: 50 });
               // Convertir hex a ArrayBuffer
@@ -485,26 +520,13 @@ export const useMusicStore = create<MusicStore>()(
                   : undefined,
               });
 
-              const audioBuffer = await downloadTrackAudio(track, (progress) => {
-                updateDl({ progress });
-              }, { format: downloadFormat, quality: mp3Quality }, videoIdOverride);
-              updateDl({ progress: 80 });
-
-              // Obtener metadatos extendidos y letra en paralelo
-              const [trackMeta, lyricsResult] = await Promise.all([
-                track.deezerId ? getDeezerTrackMeta(track.deezerId).catch(() => ({ genre: null, year: null, trackNumber: null })) : Promise.resolve({ genre: null, year: null, trackNumber: null }),
-                getLyrics(
-                  track.canonicalTitle?.trim() || track.title,
-                  track.artist,
-                  track.duration,
-                  {
-                    lyricOriginal: get().lyricOriginal,
-                    lyricRomanization: get().lyricRomanization,
-                    lyricTranslation: get().lyricTranslation,
-                    deviceLang: resolveEffectiveLanguage(get().uiLanguageMode),
-                  }
-                ).catch(() => ({ synced: null, plain: null })),
+              const [audioBuffer, [trackMeta, lyricsResult]] = await Promise.all([
+                downloadTrackAudio(track, (progress) => {
+                  updateDl({ progress });
+                }, { format: downloadFormat, quality: mp3Quality }, videoIdOverride),
+                supplementalDataPromise,
               ]);
+              updateDl({ progress: 80 });
               // Preferir synced (LRC con timestamps) — Retro Music lo sincroniza automáticamente
               const lyrics = lyricsResult.synced || lyricsResult.plain || null;
 
@@ -631,7 +653,7 @@ export const useMusicStore = create<MusicStore>()(
             } catch (error) {
               const msg = error instanceof Error ? error.message : 'Download failed';
 
-              if (msg === '__MAINTENANCE__') {
+              if (msg === '__MAINTENANCE__' && detectPlatform() === 'web') {
                 get().setMaintenanceMode(true);
                 updateDl({
                   status: 'error',

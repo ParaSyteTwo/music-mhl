@@ -1,118 +1,136 @@
-# 🎵 MHL Music
+# MHL Music
 
-## Tu música. Sin límites.
+## Your music. No limits.
 
-MHL Music es una aplicación de código abierto para buscar, reproducir, descargar y organizar música. Comparte una interfaz React entre Android y Windows y está pensada para funcionar sin cuentas, anuncios ni seguimiento.
+MHL Music is an open-source application for searching, previewing, downloading, and organizing music. It shares a React interface across Android, Windows, and the Web, with no required accounts, ads, or tracking.
 
-**[📱 Descargar para Android](../../releases/latest)** · **[💻 Descargar para Windows](../../releases/latest)**
+**[Download for Android](../../releases/latest)** | **[Download for Windows](../../releases/latest)**
 
-[![Latest Release](https://img.shields.io/github/v/release/ParaSyteTwo/music-mhl?label=versión&color=C8F04B)](../../releases/latest)
-[![License](https://img.shields.io/badge/licencia-MIT-green)](LICENSE)
-
----
-
-## ✨ Funciones
-
-- Búsqueda musical y reproducción de previews.
-- Descarga de audio con `yt-dlp` y conversión mediante `ffmpeg`.
-- Metadatos ID3 automáticos para los archivos descargados.
-- Letras sincronizadas con texto original, romanización y traducción.
-- Biblioteca local organizada por álbumes, artistas y géneros.
-- Historial de búsqueda y sugerencias personalizadas.
-- Apertura de canciones con reproductores externos compatibles.
-- Interfaz disponible en español e inglés.
-- Detección automática del idioma del dispositivo y selección manual.
+[![Latest Release](https://img.shields.io/github/v/release/ParaSyteTwo/music-mhl?label=version&color=C8F04B)](../../releases/latest)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 ---
 
-## 🚀 Plataformas
+## Features
 
-| Plataforma | Tecnología | Distribución | Estado |
+- Fast music search with request caching, deduplication, and stale-result protection.
+- A focused download picker with the three best unique candidates.
+- Candidate ranking based on title, artist, album, official channel, duration, and ISRC when available.
+- Strong filtering against covers, live recordings, remixes, altered-speed versions, instrumentals, and incorrect durations.
+- Audio downloads powered by `yt-dlp` and converted with `ffmpeg`.
+- Automatic ID3 metadata for downloaded files.
+- Synchronized lyrics with original text, romanization, and translation.
+- Local library organized by albums, artists, and genres.
+- Search history and personalized suggestions.
+- Support for opening songs in compatible external players.
+- Complete Spanish and English interface with automatic device-language detection and manual selection.
+
+---
+
+## Performance
+
+MHL Music 1.3.5 improves responsiveness without reducing audio quality, metadata accuracy, lyrics, or stability:
+
+- The most promising candidate query runs first; additional queries only run when confidence is insufficient.
+- Picker prefetching is reused when the picker opens, avoiding duplicate requests.
+- Search and candidate requests share bounded caches and reuse requests already in progress.
+- Audio, metadata, and lyrics start in parallel whenever the platform allows it.
+- Download concurrency remains capped at two to protect memory and system responsiveness.
+- Android candidate searches adapt between two and four workers depending on device resources.
+- Reduced animations and lazy-loaded artwork improve behavior on lower-end devices.
+- Windows and Android have no artificial delay between queued downloads.
+- Web/PWA keeps a protective delay because it depends on shared remote infrastructure.
+
+---
+
+## Platforms
+
+| Platform | Technology | Distribution | Status |
 |---|---|---|---|
-| Windows 10/11 x64 | React + pywebview | ZIP portable | ✅ Recomendada |
-| Android 7.0+ | React + Capacitor | APK | ✅ Recomendada |
-| Web / PWA | React + backend externo | Navegador | ⚠️ Disponibilidad limitada |
+| Windows 10/11 x64 | React + pywebview | Portable ZIP | Recommended |
+| Android 7.0+ | React + Capacitor | APK | Recommended |
+| Web / PWA | React + external backend | Browser | Limited availability |
 
 ### Windows Desktop
 
-La versión de escritorio es autónoma. Incluye Python embebido, pywebview, `yt-dlp.exe` y `ffmpeg.exe`; no necesita instalación, Node, Python ni permisos de administrador.
+The desktop edition is self-contained. It bundles embedded Python, pywebview, `yt-dlp.exe`, and `ffmpeg.exe`, so it does not require installation, Node.js, Python, or administrator privileges.
+
+Desktop processing is local and never calls the Web/Fly.io download backend.
 
 ### Android
 
-La aplicación Android usa Capacitor y un puente nativo para descargar audio, acceder a la biblioteca y abrir canciones con reproductores instalados.
+The Android application uses Capacitor and a native bridge for downloading audio, accessing the local library, and opening songs with installed players. Candidate lookup and download preparation are tuned for both lower-end and high-performance devices.
 
 ### Web / PWA
 
-La versión web depende de servicios externos. Algunas funciones pueden no estar disponibles si el backend está fuera de servicio.
+The Web edition depends on external services. Some functions may be unavailable while the backend is offline, and protective rate limiting remains enabled.
 
 ---
 
-## 📦 Instalación
+## Installation
 
 ### Windows
 
-1. Descarga el archivo `MHL-Music-Portable-X.X.X.zip` desde [Releases](../../releases/latest).
-2. Descomprime el ZIP.
-3. Ejecuta `MHL Music.exe`.
+1. Download `MHL-Music-Portable-X.X.X.zip` from [Releases](../../releases/latest).
+2. Extract the ZIP file.
+3. Run `MHL Music.exe`.
 
 ### Android
 
-1. Descarga `MHL-Music-X.X.X.apk` desde [Releases](../../releases/latest).
-2. Abre el archivo en el teléfono.
-3. Autoriza la instalación desde esa fuente si Android lo solicita.
+1. Download `MHL-Music-X.X.X.apk` from [Releases](../../releases/latest).
+2. Open the file on your phone.
+3. Allow installation from that source if Android requests permission.
 
 ---
 
-## 🎤 Letras
+## Lyrics
 
-MHL Music puede combinar tres capas:
+MHL Music can combine three lyric layers:
 
-- **Original:** texto escrito en el idioma de la canción.
-- **Romanización:** conversión de escrituras como japonés, coreano o chino a caracteres latinos.
-- **Traducción:** español o inglés según el idioma efectivo de la aplicación.
+- **Original:** lyrics in the song's original writing system.
+- **Romanization:** conversion of scripts such as Japanese, Korean, or Chinese into Latin characters.
+- **Translation:** Spanish or English according to the application's active language.
 
-Las capas pueden activarse individualmente. Cuando el idioma original coincide con el idioma elegido, la aplicación evita traducciones innecesarias. También puede guardar las letras sincronizadas en archivos `.lrc`.
+Each layer can be enabled independently. When the original language matches the selected language, the application avoids unnecessary translation. Synchronized lyrics can also be saved as `.lrc` files.
 
 ---
 
-## 🏗️ Arquitectura
+## Architecture
 
-| Capa | Tecnología |
+| Layer | Technology |
 |---|---|
-| Interfaz | React 18 + Vite + TypeScript |
-| Estado | Zustand |
+| Interface | React 18 + Vite + TypeScript |
+| State | Zustand |
 | Android | Capacitor |
 | Windows | pywebview + PyInstaller |
-| Backend Web | FastAPI |
-| Pruebas | Vitest + pytest |
+| Web backend | FastAPI |
+| Tests | Vitest + pytest |
 
 ```text
 music-mhl/
-├── src/                         # Frontend compartido
-│   ├── components/             # Componentes de interfaz
-│   ├── lib/                    # APIs, plataforma, idioma y letras
-│   ├── pages/                  # Búsqueda, biblioteca, descargas y ajustes
-│   └── store/                  # Estado global Zustand
-├── android/                    # Proyecto Capacitor Android
-├── mhl-desktop/                # Aplicación Windows con pywebview
-├── services/ytdlp-service/     # Backend para Web/PWA
-└── release/                    # Artefactos compilados locales
+|-- src/                         # Shared frontend
+|   |-- components/             # Interface components
+|   |-- lib/                    # APIs, platform, language, and lyrics
+|   |-- pages/                  # Search, library, downloads, and settings
+|   `-- store/                  # Global Zustand state
+|-- android/                    # Capacitor Android project
+|-- mhl-desktop/                # Windows pywebview application
+|-- services/ytdlp-service/     # Web/PWA backend
+`-- release/                    # Local build artifacts
 ```
 
-### Flujo de Windows
+### Windows flow
 
 ```text
-Búsqueda → Deezer API
-Audio    → yt-dlp.exe
-Proceso  → ffmpeg.exe
-Salida   → MP3 con metadatos y letras LRC
+Search   -> Deezer API
+Audio    -> yt-dlp.exe
+Process  -> ffmpeg.exe
+Output   -> MP3 with metadata and optional LRC lyrics
 ```
-
-La versión Desktop no llama al backend Web/Fly.io.
 
 ---
 
-## 🔧 Desarrollo
+## Development
 
 ### Frontend
 
@@ -128,7 +146,7 @@ npm run build
 
 ```bash
 cd mhl-desktop
-python -m pytest tests
+python -m pytest
 python -m PyInstaller MHLMusic.spec --noconfirm
 ```
 
@@ -142,20 +160,20 @@ gradlew assembleRelease
 
 ---
 
-## 🔒 Privacidad
+## Privacy
 
-- Sin registro obligatorio.
-- Sin cuentas de usuario.
-- Sin anuncios ni tracking.
-- Desktop y Android procesan el audio localmente.
-- Código abierto y auditable.
+- No mandatory registration.
+- No user accounts.
+- No ads or tracking.
+- Windows and Android process audio locally.
+- Open-source and auditable.
 
 ---
 
-## 👨‍💻 Autor
+## Author
 
-**Paul Antonio Díaz Talica**
+**Paul Antonio Diaz Talica**
 
 [paul-dev.vercel.app](https://paul-dev.vercel.app)
 
-¿Encontraste un problema? Abre un [issue](../../issues).
+Found a problem? Open an [issue](../../issues).

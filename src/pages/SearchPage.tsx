@@ -1,14 +1,12 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
-import { Download, Play, Pause, Search, Loader2, Music, CheckCircle, X, Clock } from 'lucide-react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { Download, Play, Pause, Search, Loader2, Music, CheckCircle, X } from 'lucide-react';
 import { useMusicStore } from '@/store/musicStore';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getDownloadCandidates, type DownloadCandidate } from '@/lib/api/musicApi';
+import { getDownloadCandidates } from '@/lib/api/musicApi';
 import type { Track } from '@/types/music';
 import { buildAffinityPool, artistColor } from '@/data/globalArtists';
-import { Capacitor } from '@capacitor/core';
-import { createPortal } from 'react-dom';
-import { toast } from 'sonner';
 import { useI18n } from '@/lib/useI18n';
+import { CandidatePicker } from '@/components/ui/CandidatePicker';
 
 function formatDuration(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -21,14 +19,14 @@ function useRecentSearches() {
   const [recent, setRecent] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem('mhl-recent-searches') || '[]'); } catch { return []; }
   });
-  const remove = (term: string) => {
+  const remove = useCallback((term: string) => {
     const updated = recent.filter((s) => s !== term);
     setRecent(updated);
     localStorage.setItem('mhl-recent-searches', JSON.stringify(updated));
-  };
-  const refresh = () => {
+  }, [recent]);
+  const refresh = useCallback(() => {
     try { setRecent(JSON.parse(localStorage.getItem('mhl-recent-searches') || '[]')); } catch { /* */ }
-  };
+  }, []);
   return { recent, remove, refresh };
 }
 
@@ -66,7 +64,15 @@ export default function SearchPage() {
   const { recent, remove: removeRecent, refresh: refreshRecent } = useRecentSearches();
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
-  const suggestedSearches = buildAffinityPool(mostDownloadedArtists, 6);
+  const suggestedSearches = useMemo(
+    () => buildAffinityPool(mostDownloadedArtists, 6),
+    [mostDownloadedArtists],
+  );
+  const reduceResultMotion = useMemo(() => {
+    if (typeof navigator === 'undefined') return false;
+    return (navigator.hardwareConcurrency || 4) <= 4
+      || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }, []);
 
   const handleSearch = () => {
     if (query.trim()) {
@@ -123,7 +129,7 @@ export default function SearchPage() {
     const timeout = window.setTimeout(() => {
       performSearch(trimmed);
       refreshRecent();
-    }, 350);
+    }, 200);
     return () => window.clearTimeout(timeout);
   }, [query, searchQuery, performSearch, refreshRecent]);
 
@@ -243,7 +249,7 @@ export default function SearchPage() {
                     key={track.id}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: Math.min(i, 8) * 0.05 }}
+                    transition={{ delay: reduceResultMotion ? 0 : Math.min(i, 6) * 0.035 }}
                     className={`group cursor-pointer rounded-xl overflow-hidden bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] hover:border-[rgba(255,255,255,0.12)] hover:bg-[rgba(255,255,255,0.05)] transition-all ${
                       isFeatured ? 'col-span-2 row-span-2' : ''
                     }`}
@@ -251,7 +257,13 @@ export default function SearchPage() {
                   >
                     <div className="relative aspect-square overflow-hidden">
                       {track.cover ? (
-                        <img src={track.cover} alt="" className="w-full h-full object-cover" />
+                        <img
+                          src={track.cover}
+                          alt=""
+                          loading={i === 0 ? 'eager' : 'lazy'}
+                          decoding="async"
+                          className="w-full h-full object-cover"
+                        />
                       ) : (
                         <div className="w-full h-full bg-gradient-to-br from-[#C8F04B]/20 to-[#8BC34A]/10 flex items-center justify-center">
                           <Music className={`text-[#666660] ${isFeatured ? 'w-12 h-12' : 'w-8 h-8'}`} />
@@ -316,7 +328,7 @@ export default function SearchPage() {
                     key={track.id}
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: Math.min(i, 10) * 0.03 }}
+                    transition={{ delay: reduceResultMotion ? 0 : Math.min(i, 6) * 0.02 }}
                     className={`flex items-center gap-2.5 px-2 py-2 rounded-lg transition-colors group ${
                       isCurrent ? 'bg-[rgba(200,240,75,0.08)]' : 'hover:bg-[rgba(255,255,255,0.04)] active:bg-[rgba(255,255,255,0.06)]'
                     }`}
@@ -324,7 +336,13 @@ export default function SearchPage() {
                   >
                     <div className="relative w-14 h-14 rounded-md overflow-hidden flex-shrink-0">
                       {track.cover ? (
-                        <img src={track.cover} alt="" className="w-full h-full object-cover" />
+                        <img
+                          src={track.cover}
+                          alt=""
+                          loading={i === 0 ? 'eager' : 'lazy'}
+                          decoding="async"
+                          className="w-full h-full object-cover"
+                        />
                       ) : (
                         <div className="w-full h-full bg-gradient-to-br from-[#C8F04B]/20 to-[#8BC34A]/10 flex items-center justify-center">
                           <Music className="w-5 h-5 text-[#666660]" />
@@ -420,184 +438,4 @@ export default function SearchPage() {
       </AnimatePresence>
     </motion.div>
   );
-}
-
-function CandidatePicker({
-  track,
-  onClose,
-  onSelect,
-}: {
-  track: Track;
-  onClose: () => void;
-  onSelect: (videoId: string) => void;
-}) {
-  const { t } = useI18n();
-  const [candidates, setCandidates] = useState<DownloadCandidate[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const isNativeMobile = Capacitor.isNativePlatform();
-
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [onClose]);
-
-  useEffect(() => {
-    setLoading(true);
-    setError(null);
-    console.log('[CandidatePicker] Fetching candidates for:', track.title);
-    getDownloadCandidates(track)
-      .then((cands) => {
-        console.log('[CandidatePicker] Got candidates:', cands);
-        setCandidates(cands);
-        if (cands.length === 0) {
-          toast.warning(t('noDownloadCandidates'));
-          setError(t('noResults'));
-        }
-      })
-      .catch((e) => {
-        const errorMsg = e instanceof Error ? e.message : t('noDownloadCandidates');
-        console.error('[CandidatePicker] Error:', e, errorMsg);
-        toast.error(errorMsg);
-        setError(errorMsg);
-      })
-      .finally(() => setLoading(false));
-  }, [track, t]);
-
-  function fmt(s: number) {
-    const m = Math.floor(s / 60);
-    const sec = Math.floor(s % 60);
-    return `${m}:${sec.toString().padStart(2, '0')}`;
-  }
-
-  const overlay = (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.2 }}
-      className={`fixed inset-0 z-[80] flex justify-center ${isNativeMobile ? 'items-start p-2 pt-3' : 'items-end sm:items-center p-0 sm:p-4'}`}
-      onClick={onClose}
-    >
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
-
-      <motion.div
-        initial={{ opacity: 0, y: 60 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: 60 }}
-        transition={{ type: 'spring', damping: 28, stiffness: 320 }}
-        onClick={(e) => e.stopPropagation()}
-        className={`relative z-10 w-full sm:max-w-lg flex flex-col bg-[#111] border border-[rgba(255,255,255,0.08)] overflow-hidden shadow-2xl ${isNativeMobile ? 'max-h-[92vh] min-h-[48vh] rounded-2xl' : 'max-h-[88vh] sm:max-h-[80vh] rounded-t-2xl sm:rounded-2xl'}`}
-      >
-        <div className="flex items-center gap-3 px-4 pb-3 border-b border-[rgba(255,255,255,0.06)] flex-shrink-0" style={{ paddingTop: 'calc(var(--sat) + 12px)' }}>
-          {track.cover && (
-            <img src={track.cover} alt="" className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
-          )}
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-[#F5F5F0] truncate">{track.title}</p>
-            <p className="text-xs text-[#555] truncate">{track.artist}</p>
-          </div>
-          <motion.button
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.9 }}
-            onClick={onClose}
-            className="w-8 h-8 rounded-full bg-[rgba(255,255,255,0.08)] hover:bg-[rgba(255,255,255,0.14)] flex items-center justify-center flex-shrink-0 transition-colors"
-          >
-            <X className="w-4 h-4 text-[#888]" />
-          </motion.button>
-        </div>
-
-        <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-[rgba(255,255,255,0.06)] flex-shrink-0">
-          <div>
-            <p className="text-xs font-medium text-[#F5F5F0]">{t('smartResults')}</p>
-            <p className="text-[11px] text-[#555]">{t('smartResultsHint')}</p>
-          </div>
-          <span className="text-[10px] text-[#444] text-right">{t('chooseExactSong')}</span>
-        </div>
-
-        <div className="overflow-y-auto flex-1 px-3 pb-4 overscroll-contain">
-          {loading ? (
-            <div className="space-y-2 mt-1">
-              {[...Array(5)].map((_, i) => (
-                <div key={i} className="h-14 rounded-xl bg-[rgba(255,255,255,0.04)] animate-pulse" style={{ animationDelay: `${i * 80}ms` }} />
-              ))}
-            </div>
-          ) : error ? (
-            <p className="text-center text-xs text-red-400 py-8">{error}</p>
-          ) : candidates.length === 0 ? (
-            <p className="text-center text-xs text-[#555] py-8">{t('noResults')}</p>
-          ) : (
-            <div className="space-y-1.5 mt-1">
-              {candidates.map((c, i) => {
-                const durationMatch = track.duration > 0 && c.duration > 0
-                  ? Math.abs(c.duration - track.duration) / track.duration
-                  : 1;
-                const isClose = durationMatch <= 0.15;
-                const isBest = i === 0;
-                const confidenceClass = c.confidence === 'alta'
-                  ? 'bg-[rgba(200,240,75,0.15)] text-[#C8F04B]'
-                  : c.confidence === 'media'
-                    ? 'bg-[rgba(255,255,255,0.08)] text-[#D5D5CE]'
-                    : 'bg-[rgba(255,255,255,0.06)] text-[#777]';
-
-                return (
-                  <motion.button
-                    key={c.videoId}
-                    initial={{ opacity: 0, x: -8 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: i * 0.04 }}
-                    onClick={() => onSelect(c.videoId)}
-                    className={`w-full px-3 py-2.5 rounded-xl text-left flex items-center gap-3 group transition-all ${
-                      isBest
-                        ? 'bg-[rgba(200,240,75,0.07)] border border-[rgba(200,240,75,0.2)] hover:bg-[rgba(200,240,75,0.12)]'
-                        : 'bg-[rgba(255,255,255,0.03)] border border-transparent hover:bg-[rgba(255,255,255,0.07)]'
-                    }`}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[13px] text-[#F5F5F0] leading-tight line-clamp-2">{c.title}</p>
-                      <p className="text-[11px] text-[#555] truncate mt-0.5">{c.channel}</p>
-                      <div className="flex flex-wrap gap-1.5 mt-1.5">
-                        {c.label && (
-                          <span className="text-[9px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-[rgba(255,255,255,0.06)] text-[#A9A99F]">
-                            {c.label}
-                          </span>
-                        )}
-                        {c.confidence && (
-                          <span className={`text-[9px] uppercase tracking-wide px-1.5 py-0.5 rounded ${confidenceClass}`}>
-                            {t('confidence', { value: c.confidence })}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                      {c.duration > 0 && (
-                        <span className={`flex items-center gap-1 text-[10px] tabular-nums px-1.5 py-0.5 rounded ${
-                          isClose
-                            ? 'bg-[rgba(200,240,75,0.15)] text-[#C8F04B]'
-                            : 'bg-[rgba(255,255,255,0.06)] text-[#555]'
-                        }`}>
-                          <Clock className="w-2.5 h-2.5" />
-                          {fmt(c.duration)}
-                        </span>
-                      )}
-                      {isBest && (
-                        <span className="text-[9px] text-[#C8F04B] font-medium">{t('bestMatch')}</span>
-                      )}
-                    </div>
-                  </motion.button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </motion.div>
-    </motion.div>
-  );
-
-  if (typeof document === 'undefined') {
-    return overlay;
-  }
-
-  return createPortal(overlay, document.body);
 }

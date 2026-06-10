@@ -21,8 +21,8 @@ export function CandidatePicker({
   const [candidates, setCandidates] = useState<DownloadCandidate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [visibleCount, setVisibleCount] = useState(4);
   const isNativeMobile = Capacitor.isNativePlatform();
+  const reduceMotion = typeof navigator !== 'undefined' && (navigator.hardwareConcurrency || 4) <= 4;
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -31,23 +31,32 @@ export function CandidatePicker({
   }, [onClose]);
 
   useEffect(() => {
+    let active = true;
     setLoading(true);
     setError(null);
-    setVisibleCount(4);
-    getDownloadCandidates(track)
-      .then((cands) => {
+    setCandidates([]);
+    const loadCandidates = async () => {
+      try {
+        const cands = await getDownloadCandidates(track);
+        if (!active) return;
         setCandidates(cands);
         if (cands.length === 0) {
           toast.warning(t('noDownloadCandidates'));
           setError(t('noResults'));
         }
-      })
-      .catch((e) => {
+      } catch (e) {
+        if (!active) return;
         const errorMsg = e instanceof Error ? e.message : t('noDownloadCandidates');
         toast.error(errorMsg);
         setError(errorMsg);
-      })
-      .finally(() => setLoading(false));
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    void loadCandidates();
+    return () => {
+      active = false;
+    };
   }, [track, t]);
 
   function fmt(s: number) {
@@ -77,7 +86,7 @@ export function CandidatePicker({
       >
         <div className="flex items-center gap-3 px-4 pb-3 border-b border-[rgba(255,255,255,0.06)] flex-shrink-0" style={{ paddingTop: 'calc(var(--sat) + 12px)' }}>
           {track.cover && (
-            <img src={track.cover} alt="" className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
+            <img src={track.cover} alt="" decoding="async" className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
           )}
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-[#F5F5F0] truncate">{track.title}</p>
@@ -104,7 +113,7 @@ export function CandidatePicker({
         <div className="overflow-y-auto flex-1 px-3 pb-4 overscroll-contain">
           {loading ? (
             <div className="space-y-2 mt-1">
-              {[...Array(5)].map((_, i) => (
+              {[0, 1, 2].map((i) => (
                 <div key={i} className="h-14 rounded-xl bg-[rgba(255,255,255,0.04)] animate-pulse" style={{ animationDelay: `${i * 80}ms` }} />
               ))}
             </div>
@@ -113,9 +122,8 @@ export function CandidatePicker({
           ) : candidates.length === 0 ? (
             <p className="text-center text-xs text-[#555] py-8">{t('noResults')}</p>
           ) : (
-            <>
-              <div className="space-y-1.5 mt-1">
-                {candidates.slice(0, visibleCount).map((c, i) => {
+            <div className="space-y-1.5 mt-1">
+              {candidates.slice(0, 3).map((c, i) => {
                 const isBest = i === 0;
                 const confidenceClass = c.confidence === 'alta'
                   ? 'bg-[rgba(200,240,75,0.15)] text-[#C8F04B]'
@@ -128,7 +136,7 @@ export function CandidatePicker({
                     key={c.videoId}
                     initial={{ opacity: 0, x: -8 }}
                     animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: i * 0.04 }}
+                    transition={{ delay: reduceMotion ? 0 : i * 0.025 }}
                     onClick={() => onSelect(c.videoId)}
                     className={`w-full px-3 py-2.5 rounded-xl text-left flex items-center gap-3 group transition-all ${
                       isBest
@@ -157,18 +165,7 @@ export function CandidatePicker({
                   </motion.button>
                 );
               })}
-              </div>
-              {visibleCount < candidates.length && (
-                <motion.button
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  onClick={() => setVisibleCount((v) => v + 4)}
-                  className="w-full mt-2 py-2.5 rounded-xl text-center text-xs text-[#888] bg-[rgba(255,255,255,0.04)] hover:bg-[rgba(255,255,255,0.08)] border border-[rgba(255,255,255,0.06)] transition-colors"
-                >
-                  {t('showMore', { count: Math.min(4, candidates.length - visibleCount) })}
-                </motion.button>
-              )}
-            </>
+            </div>
           )}
         </div>
       </motion.div>

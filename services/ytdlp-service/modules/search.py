@@ -45,6 +45,7 @@ def build_candidate_queries(title: str, artist: str, album: str = "") -> list[st
     clean_artist = normalize_search_term(artist)
     return [
         f"{clean_title} {clean_artist} official audio",
+        f"{clean_title} {clean_artist}",
     ]
 
 
@@ -79,19 +80,25 @@ def score_candidate(
     if wanted_artist and wanted_artist in channel:
         score += 18
     if wanted_album and wanted_album in title:
-        score += 8
+        score += 12
 
     # --- Duración: comparar con la duración conocida de Deezer ---
     if target_duration and target_duration > 0:
         yt_dur = int(candidate.get("duration") or 0)
         if yt_dur > 0:
             diff_pct = abs(yt_dur - target_duration) / target_duration
-            if diff_pct <= 0.10:
-                score += 25
+            if diff_pct <= 0.02:
+                score += 50
+            elif diff_pct <= 0.05:
+                score += 30
+            elif diff_pct <= 0.10:
+                score += 15
             elif diff_pct <= 0.20:
-                score += 10
-            elif diff_pct >= 0.40:
+                score -= 10
+            elif diff_pct <= 0.40:
                 score -= 30
+            else:
+                score -= 55
 
     # --- Bonus: versiones de audio limpio ---
     if "official audio" in title:
@@ -127,7 +134,7 @@ def score_candidate(
     ]
     for kw in MV_KEYWORDS:
         if kw in title:
-            score -= 25
+            score -= 35
             break
 
     # --- PENALIZACIONES: contenido no deseado ---
@@ -138,25 +145,25 @@ def score_candidate(
         or "sub english" in title
         or "subbed" in title
     ):
-        score -= 12
+        score -= 18
     if "karaoke" in title:
-        score -= 30
+        score -= 35
     if "reaction" in title:
-        score -= 15
+        score -= 35
     if "nightcore" in title or "sped up" in title or "slowed" in title or "8d" in title:
-        score -= 20
+        score -= 35
     if "cover" in title and wanted_artist not in channel:
-        score -= 12
+        score -= 30
     if "dub cover" in title or "english dub cover" in title or "fan dub" in title:
-        score -= 24
+        score -= 35
     if "live" in title or "en vivo" in title or "concert" in title:
-        score -= 10
+        score -= 25
     if "remix" in title and "official" not in title:
-        score -= 8
+        score -= 24
     if "instrumental" in title:
-        score -= 8
+        score -= 25
     if "extended" in title or "extended mix" in title:
-        score -= 5
+        score -= 25
 
     # --- Duración: 90-600 segundos (1:30-10 min) ---
     duration = int(candidate.get("duration") or 0)
