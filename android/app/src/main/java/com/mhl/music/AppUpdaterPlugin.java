@@ -348,7 +348,7 @@ public class AppUpdaterPlugin extends Plugin {
     }
 
     private void validateOfficialDownloadUrl(String url, String assetName) throws Exception {
-        if (!assetName.matches("MHL-Music-[0-9]+\\.[0-9]+\\.[0-9]+\\.apk")) {
+        if (!assetName.matches("MHL-Music-[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?\\.apk")) {
             throw new SecurityException("APK asset name does not match the release contract.");
         }
         URL parsed = new URL(url);

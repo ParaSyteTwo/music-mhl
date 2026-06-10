@@ -11,6 +11,7 @@ const installed: InstalledAndroidBuild = {
 
 function remote(overrides: Partial<RemoteAndroidBuild> = {}): RemoteAndroidBuild {
   return {
+    channel: 'stable',
     releaseId: 10,
     releaseTag: 'v1.3.6',
     releaseUrl: 'https://github.com/ParaSyteTwo/music-mhl/releases/tag/v1.3.6',
@@ -42,18 +43,16 @@ describe('app update policy', () => {
     });
   });
 
-  it('keeps a new version quarantined until seven complete days', () => {
+  it('makes a stable update available immediately', () => {
     const decision = evaluateAppUpdate(
       installed,
       remote(),
-      Date.parse('2026-06-17T11:59:59.999Z'),
-      Date.parse('2026-06-17T11:59:59.999Z'),
+      Date.parse('2026-06-10T12:00:01Z'),
+      0,
     );
     expect(decision).toMatchObject({
-      status: 'safetyPeriod',
+      status: 'available',
       replacementBuild: false,
-      remainingMs: 1,
-      remainingDays: 1,
     });
   });
 
@@ -104,25 +103,25 @@ describe('app update policy', () => {
     });
   });
 
-  it('uses the last trusted time when the device clock moves backwards', () => {
+  it('does not delay updates based on trusted time', () => {
     expect(evaluateAppUpdate(
       installed,
       remote(),
       Date.parse('2026-06-11T12:00:00Z'),
-      Date.parse('2026-06-18T12:00:00Z'),
+      0,
     )).toMatchObject({
       status: 'available',
     });
   });
 
-  it('does not shorten the safety period when the device clock moves forward', () => {
+  it('makes beta candidates available under the same validation policy', () => {
     expect(evaluateAppUpdate(
       installed,
-      remote(),
-      Date.parse('2030-06-20T12:00:00Z'),
-      Date.parse('2026-06-11T12:00:00Z'),
+      remote({ channel: 'beta', versionName: '1.4.0-beta.1', versionCode: 15 }),
+      Date.parse('2026-06-10T12:00:01Z'),
+      0,
     )).toMatchObject({
-      status: 'safetyPeriod',
+      status: 'available',
     });
   });
 });

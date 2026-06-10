@@ -93,7 +93,7 @@ describe('official GitHub Android release', () => {
         headers: { 'content-type': 'application/json' },
       }));
 
-    const result = await fetchLatestOfficialAndroidRelease(fetchMock);
+    const result = await fetchLatestOfficialAndroidRelease('stable', fetchMock);
     expect(result).toMatchObject({
       success: true,
       data: {
@@ -107,6 +107,35 @@ describe('official GitHub Android release', () => {
     expect(fetchMock.mock.calls[1][0]).toBe(
       'https://github.com/ParaSyteTwo/music-mhl/releases/download/v1.3.6/MHL-Music-Android.json',
     );
+  });
+
+  it('selects a published prerelease for beta testers', async () => {
+    const betaRelease = { ...createRelease(), prerelease: true };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify([betaRelease]), {
+        status: 200,
+        headers: { date: 'Wed, 10 Jun 2026 12:00:00 GMT' },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(createManifest()), { status: 200 }));
+
+    const result = await fetchLatestOfficialAndroidRelease('beta', fetchMock);
+    expect(result).toMatchObject({
+      success: true,
+      data: { build: { channel: 'beta', versionName: '1.3.6' } },
+    });
+    expect(fetchMock.mock.calls[0][0]).toContain('/releases?per_page=20');
+  });
+
+  it('lets beta testers receive a newer stable release', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify([createRelease()]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(createManifest()), { status: 200 }));
+
+    const result = await fetchLatestOfficialAndroidRelease('beta', fetchMock);
+    expect(result).toMatchObject({
+      success: true,
+      data: { build: { channel: 'stable' } },
+    });
   });
 
   it('rejects drafts, prereleases, and mismatched tags', () => {

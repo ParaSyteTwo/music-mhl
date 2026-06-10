@@ -341,7 +341,7 @@ versionCode + versionName + SHA-256
 release oficial
   → validar manifest y asset
   → comparar build instalada
-  → esperar asset.updated_at + 7 días
+  → resolver canal estable o beta elegido
   → descargar a almacenamiento privado
   → validar SHA-256
   → validar com.mhl.music
@@ -351,7 +351,7 @@ release oficial
   → abrir instalador Android
 ```
 
-Un cambio de `asset.id`, digest, tamaño o `updated_at` invalida cualquier descarga y reinicia los siete días.
+Un cambio de `asset.id`, digest, tamaño o `updated_at` invalida cualquier descarga. Estable usa `/latest`; beta selecciona la prerelease válida más reciente.
 
 ### Reglas de evolución
 

@@ -1,5 +1,4 @@
 import {
-  UPDATE_SAFETY_PERIOD_MS,
   type AppUpdateDecision,
   type InstalledAndroidBuild,
   type RemoteAndroidBuild,
@@ -8,8 +7,8 @@ import {
 export function evaluateAppUpdate(
   installed: InstalledAndroidBuild,
   remote: RemoteAndroidBuild,
-  deviceNowMs: number,
-  lastTrustedTimeMs = 0,
+  _deviceNowMs: number,
+  _lastTrustedTimeMs = 0,
 ): AppUpdateDecision {
   if (remote.versionCode < installed.versionCode) {
     return {
@@ -52,25 +51,11 @@ export function evaluateAppUpdate(
     };
   }
 
-  const eligibleAtMs = updatedAtMs + UPDATE_SAFETY_PERIOD_MS;
-  const eligibleAt = new Date(eligibleAtMs).toISOString();
   const replacementBuild = sameVersion && !sameDigest;
-
-  if (lastTrustedTimeMs < eligibleAtMs) {
-    const displayNowMs = Math.min(deviceNowMs, eligibleAtMs - 1);
-    const remainingMs = Math.max(1, eligibleAtMs - displayNowMs);
-    return {
-      status: 'safetyPeriod',
-      replacementBuild,
-      eligibleAt,
-      remainingMs,
-      remainingDays: Math.ceil(remainingMs / 86_400_000),
-    };
-  }
 
   return {
     status: 'available',
     replacementBuild,
-    eligibleAt,
+    eligibleAt: new Date(0).toISOString(),
   };
 }

@@ -9,10 +9,14 @@ This document is the canonical compatibility contract for the future MHL Music A
 ## Immutable Source
 
 - Updates may originate only from `ParaSyteTwo/music-mhl`.
-- The only discovery endpoint is:
+- Stable discovery endpoint:
   `https://api.github.com/repos/ParaSyteTwo/music-mhl/releases/latest`
+- Beta discovery endpoint:
+  `https://api.github.com/repos/ParaSyteTwo/music-mhl/releases?per_page=20`
 - Do not make the owner, repository, API URL, or download host remotely configurable.
-- Accept only published releases. Reject drafts and prereleases.
+- Stable accepts published non-prereleases.
+- Beta accepts published prereleases only and is explicitly enabled by the user.
+- Drafts are always rejected.
 - Do not use Fly.io, mirrors, URL shorteners, or third-party update services.
 
 ## Release Assets
@@ -66,20 +70,14 @@ Comparison policy:
 
 Replacing an APK while retaining the same version is an exceptional recovery mechanism, not the normal release workflow. Prefer a new `versionCode`.
 
-## Seven-Day Safety Period
+## Update Channels
 
-No APK may be downloaded or installed through the updater until:
-
-```text
-trusted UTC time >= APK asset.updated_at + 7 complete days
-```
-
-- Use the APK asset's `updated_at`, not the release publication date.
-- A change to asset ID, digest, size, or `updated_at` restarts the seven-day period.
-- During the safety period, the UI may show the candidate and remaining time, but must not expose Download or Install actions.
+- Stable is the default and offers the latest public release immediately.
+- Beta is opt-in and offers the newest valid GitHub prerelease.
+- Users skip intermediate releases because each channel resolves only its newest candidate.
 - Re-query GitHub immediately before downloading and immediately before installing.
-- Persist the last trusted time observed from GitHub's HTTP `Date` header.
-- A device clock rollback must never shorten the safety period.
+- A changed asset ID, digest, size, or `updated_at` invalidates any downloaded APK.
+- Never weaken digest, package, version, downgrade, or signing-certificate validation by channel.
 
 ## Mandatory Validation
 
@@ -91,7 +89,7 @@ Before installation, perform these checks in order:
 4. The APK package is `com.mhl.music`.
 5. The version/digest comparison allows an update and never a downgrade.
 6. The downloaded APK signing certificate equals the installed app certificate.
-7. The seven-day safety period has elapsed.
+7. The selected stable/beta channel still contains the same asset.
 8. Re-query GitHub and confirm the asset did not change.
 9. Open the Android system installer for explicit user confirmation.
 
@@ -158,8 +156,8 @@ remains authoritative for the updater.
 - [ ] Place APK and manifest in `release/`.
 - [ ] Publish exactly one matching APK asset.
 - [ ] Confirm GitHub exposes a `sha256:` digest.
-- [ ] Do not replace a published APK unless intentionally restarting the seven-day safety period.
-- [ ] Verify the updater reports safety-period state after publication.
+- [ ] Do not replace a published APK; publish a higher `versionCode`.
+- [ ] Verify stable and beta channel behavior after publication.
 
 ## Related Documentation
 

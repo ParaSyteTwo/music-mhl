@@ -14,6 +14,7 @@ import {
 import { fetchLatestOfficialAndroidRelease } from '@/lib/githubAndroidRelease';
 import type {
   AppUpdateDecision,
+  AppUpdateChannel,
   AppUpdateError,
   AppUpdateStatus,
   InstalledAndroidBuild,
@@ -33,6 +34,8 @@ interface AppUpdateState {
   dismissedDigest: string | null;
   downloadProgress: number;
   downloadedApkPath: string | null;
+  updateChannel: AppUpdateChannel;
+  setUpdateChannel: (channel: AppUpdateChannel) => Promise<void>;
   checkForUpdate: (force?: boolean) => Promise<void>;
   downloadAvailableUpdate: () => Promise<void>;
   cancelAvailableUpdateDownload: () => Promise<void>;
@@ -54,6 +57,19 @@ export const useAppUpdateStore = create<AppUpdateState>()(
       dismissedDigest: null,
       downloadProgress: 0,
       downloadedApkPath: null,
+      updateChannel: 'stable',
+
+      setUpdateChannel: async (channel) => {
+        set({
+          updateChannel: channel,
+          lastCheckedAt: 0,
+          remoteBuild: null,
+          decision: null,
+          downloadedApkPath: null,
+          status: 'idle',
+        });
+        await get().checkForUpdate(true);
+      },
 
       checkForUpdate: async (force = false) => {
         if (Capacitor.getPlatform() !== 'android') return;
@@ -64,7 +80,7 @@ export const useAppUpdateStore = create<AppUpdateState>()(
         try {
           const [installedResult, releaseResult] = await Promise.all([
             getInstalledAppIdentity(),
-            fetchLatestOfficialAndroidRelease(),
+            fetchLatestOfficialAndroidRelease(get().updateChannel),
           ]);
           if (!installedResult.success) {
             set({ status: 'error', error: installedResult.error });
@@ -135,7 +151,7 @@ export const useAppUpdateStore = create<AppUpdateState>()(
         set({ status: 'downloading', downloadProgress: 0, error: null });
         let progressListener: Awaited<ReturnType<typeof addUpdateDownloadProgressListener>> = null;
         try {
-          const refreshedRelease = await fetchLatestOfficialAndroidRelease();
+          const refreshedRelease = await fetchLatestOfficialAndroidRelease(state.updateChannel);
           if (!refreshedRelease.success) {
             set({ status: 'error', error: refreshedRelease.error });
             return;
@@ -178,7 +194,7 @@ export const useAppUpdateStore = create<AppUpdateState>()(
           );
           if (refreshedDecision.status !== 'available') {
             set({
-              status: refreshedDecision.status === 'safetyPeriod' ? 'safetyPeriod' : 'error',
+              status: 'error',
               decision: refreshedDecision,
               error: refreshedDecision.status === 'rejected' ? refreshedDecision.error : null,
             });
@@ -270,7 +286,7 @@ export const useAppUpdateStore = create<AppUpdateState>()(
         }
 
         try {
-          const refreshedRelease = await fetchLatestOfficialAndroidRelease();
+          const refreshedRelease = await fetchLatestOfficialAndroidRelease(state.updateChannel);
           if (!refreshedRelease.success) {
             set({ status: 'error', error: refreshedRelease.error });
             return;
@@ -370,6 +386,7 @@ export const useAppUpdateStore = create<AppUpdateState>()(
         lastCheckedAt: state.lastCheckedAt,
         lastTrustedTimeMs: state.lastTrustedTimeMs,
         dismissedDigest: state.dismissedDigest,
+        updateChannel: state.updateChannel,
       }),
     },
   ),

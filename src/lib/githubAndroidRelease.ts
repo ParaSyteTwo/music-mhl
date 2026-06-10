@@ -4,6 +4,7 @@ import {
   OFFICIAL_GITHUB_OWNER,
   OFFICIAL_GITHUB_REPOSITORY,
   type AndroidReleaseManifest,
+  type AppUpdateChannel,
   type FetchedAndroidRelease,
   type AppUpdateResult,
   type RemoteAndroidBuild,
@@ -148,11 +149,15 @@ function isOfficialAssetUrl(url: string, tag: string, assetName: string): boolea
 }
 
 export async function fetchLatestOfficialAndroidRelease(
+  channel: AppUpdateChannel = 'stable',
   fetchImpl: typeof fetch = fetch,
 ): Promise<AppUpdateResult<FetchedAndroidRelease>> {
   try {
+    const releaseApi = channel === 'stable'
+      ? 'https://api.github.com/repos/ParaSyteTwo/music-mhl/releases/latest'
+      : 'https://api.github.com/repos/ParaSyteTwo/music-mhl/releases?per_page=20';
     const releaseResponse = await fetchImpl(
-      'https://api.github.com/repos/ParaSyteTwo/music-mhl/releases/latest',
+      releaseApi,
       {
         headers: { Accept: 'application/vnd.github+json' },
         cache: 'no-store',
@@ -168,9 +173,22 @@ export async function fetchLatestOfficialAndroidRelease(
       };
     }
 
-    const releaseValue: unknown = await releaseResponse.json();
+    const responseValue: unknown = await releaseResponse.json();
+    const releaseValue = channel === 'stable'
+      ? responseValue
+      : Array.isArray(responseValue)
+        ? responseValue.find((value) => {
+            const candidate = parseRelease(value);
+            return candidate && !candidate.draft;
+          })
+        : null;
     const release = parseRelease(releaseValue);
-    if (!release || release.draft || release.prerelease) {
+    const resolvedChannel: AppUpdateChannel = release?.prerelease ? 'beta' : 'stable';
+    if (
+      !release ||
+      release.draft ||
+      (channel === 'stable' && release.prerelease)
+    ) {
       return {
         success: false,
         error: { code: 'INVALID_RELEASE', detail: 'Latest GitHub release is not valid for Android updates.' },
@@ -211,7 +229,7 @@ export async function fetchLatestOfficialAndroidRelease(
     }
 
     const manifestValue: unknown = await manifestResponse.json();
-    const parsedRelease = parseOfficialAndroidRelease(releaseValue, manifestValue);
+    const parsedRelease = parseOfficialAndroidRelease(releaseValue, manifestValue, resolvedChannel);
     if (!parsedRelease.success) return parsedRelease;
 
     const githubDate = Date.parse(releaseResponse.headers.get('date') ?? '');
@@ -236,9 +254,10 @@ export async function fetchLatestOfficialAndroidRelease(
 export function parseOfficialAndroidRelease(
   releaseValue: unknown,
   manifestValue: unknown,
+  channel: AppUpdateChannel = 'stable',
 ): AppUpdateResult<RemoteAndroidBuild> {
   const release = parseRelease(releaseValue);
-  if (!release || release.draft || release.prerelease) {
+  if (!release || release.draft || release.prerelease !== (channel === 'beta')) {
     return {
       success: false,
       error: { code: 'INVALID_RELEASE', detail: 'Release is invalid, draft, or prerelease.' },
@@ -291,6 +310,7 @@ export function parseOfficialAndroidRelease(
   return {
     success: true,
     data: {
+      channel,
       releaseId: release.id,
       releaseTag: release.tag_name,
       releaseUrl: release.html_url,

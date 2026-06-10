@@ -34,7 +34,6 @@ export default function SettingsPage() {
   const appUpdateStatus = useAppUpdateStore((state) => state.status);
   const installedBuild = useAppUpdateStore((state) => state.installedBuild);
   const remoteBuild = useAppUpdateStore((state) => state.remoteBuild);
-  const appUpdateDecision = useAppUpdateStore((state) => state.decision);
   const checkForAppUpdate = useAppUpdateStore((state) => state.checkForUpdate);
   const downloadAvailableUpdate = useAppUpdateStore((state) => state.downloadAvailableUpdate);
   const cancelAvailableUpdateDownload = useAppUpdateStore(
@@ -43,6 +42,8 @@ export default function SettingsPage() {
   const appUpdateProgress = useAppUpdateStore((state) => state.downloadProgress);
   const installReadyUpdate = useAppUpdateStore((state) => state.installReadyUpdate);
   const openInstallPermission = useAppUpdateStore((state) => state.openInstallPermission);
+  const updateChannel = useAppUpdateStore((state) => state.updateChannel);
+  const setUpdateChannel = useAppUpdateStore((state) => state.setUpdateChannel);
 
   useEffect(() => {
     if (!isAndroid) return;
@@ -386,21 +387,17 @@ export default function SettingsPage() {
             } ${appUpdateStatus === 'checking' ? 'animate-spin' : ''}`} />
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-[#F5F5F0]">
-                {t('installedVersion', { version: installedBuild?.versionName ?? '1.4.0' })}
+                {t('installedVersion', { version: installedBuild?.versionName ?? '1.4.1' })}
+              </p>
+              <p className="text-xs text-[#8A8A8A] mt-1">
+                {t('updateChannelActive', {
+                  channel: updateChannel === 'beta' ? t('updateChannelBeta') : t('updateChannelStable'),
+                })}
+                {remoteBuild ? ` · ${t('remoteVersion', { version: remoteBuild.versionName })}` : ''}
               </p>
               {appUpdateStatus === 'upToDate' && (
                 <p className="text-xs text-[#8A8A8A] mt-1">{t('appUpToDate')}</p>
               )}
-              {appUpdateStatus === 'safetyPeriod' &&
-                remoteBuild &&
-                appUpdateDecision?.status === 'safetyPeriod' && (
-                  <p className="text-xs text-[#C8F04B] mt-1">
-                    {t('appUpdateSafetyDetail', {
-                      version: remoteBuild.versionName,
-                      days: appUpdateDecision.remainingDays,
-                    })}
-                  </p>
-                )}
               {appUpdateStatus === 'available' && remoteBuild && (
                 <p className="text-xs text-[#C8F04B] mt-1">
                   {t('appUpdateReady', { version: remoteBuild.versionName })}
@@ -474,6 +471,26 @@ export default function SettingsPage() {
               </button>
             </div>
           </div>
+          <div className="grid grid-cols-2 gap-2 mt-2">
+            {(['stable', 'beta'] as const).map((channel) => (
+              <button
+                key={channel}
+                type="button"
+                onClick={() => void setUpdateChannel(channel)}
+                disabled={appUpdateStatus === 'downloading' || appUpdateStatus === 'installing'}
+                className={`px-3 py-2 rounded-md text-xs font-semibold transition-colors ${
+                  updateChannel === channel
+                    ? 'bg-[#C8F04B] text-[#18181A]'
+                    : 'bg-[#18181A] border border-[#232325] text-[#8A8A8A]'
+                }`}
+              >
+                {channel === 'stable' ? t('updateChannelStable') : t('updateChannelBeta')}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-[#666660] mt-2">
+            {updateChannel === 'beta' ? t('updateChannelBetaHelp') : t('updateChannelStableHelp')}
+          </p>
         </section>
       )}
 

@@ -27,7 +27,7 @@ MHL Music es una app multi-plataforma para buscar, reproducir y descargar músic
 | App Desktop self-contained | Desktop | P0 | `.exe` instalable, todo bundleado (yt-dlp + ffmpeg), sin backend externo |
 | Historial / Playlists | Todos | P1 | Crear y gestionar playlists |
 | Settings | Todos | P2 | Configuración de calidad, rutas de descarga, idioma |
-| Auto-update asistido | Android | P1 | Detectar APK oficial, esperar 7 días de seguridad y abrir instalación confirmada |
+| Auto-update asistido | Android | P1 | Detectar APK oficial por canal y abrir instalación confirmada |
 
 ## 4. Requisitos por Plataforma
 
@@ -44,7 +44,7 @@ MHL Music es una app multi-plataforma para buscar, reproducir y descargar músic
 - Plugin nativo yt-dlp + ffmpeg bundleados
 - Las futuras builds deben conservar compatibilidad con `ANDROID_UPDATE_CONTRACT.md`
 - El updater solo puede consultar GitHub Releases de `ParaSyteTwo/music-mhl`
-- Una build nueva no será instalable hasta 7 días después del último cambio del asset APK
+- Estable recibe la última release pública; beta puede recibir prereleases y releases estables
 - Toda instalación será confirmada por el usuario mediante Android
 
 ### Desktop (Windows — Tauri)
@@ -85,7 +85,7 @@ MHL Music es una app multi-plataforma para buscar, reproducir y descargar músic
 ### Android Auto-update (implementado)
 - [x] Solo acepta releases publicadas de `ParaSyteTwo/music-mhl`
 - [x] Detecta builds mediante `versionCode`, `versionName` y SHA-256
-- [x] Un APK reemplazado reinicia el periodo de seguridad de 7 días
+- [x] Canal estable inmediato y canal beta opcional
 - [x] Rechaza digest, package, versión o certificado inválidos
 - [x] Nunca permite downgrade
 - [x] No bloquea el uso normal de la aplicación ante errores

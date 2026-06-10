@@ -39,6 +39,7 @@ const installed = {
 };
 
 const build = {
+  channel: 'stable',
   releaseId: 10,
   releaseTag: 'v1.3.6',
   releaseUrl: 'https://github.com/ParaSyteTwo/music-mhl/releases/tag/v1.3.6',
@@ -69,6 +70,7 @@ beforeEach(() => {
     dismissedDigest: null,
     downloadProgress: 0,
     downloadedApkPath: null,
+    updateChannel: 'stable',
   });
   mocks.identity.mockResolvedValue({ success: true, data: installed });
   mocks.release.mockResolvedValue({
@@ -109,7 +111,7 @@ describe('app update store', () => {
     expect(mocks.identity).not.toHaveBeenCalled();
   });
 
-  it('shows a candidate in the safety period without download actions', async () => {
+  it('shows a stable candidate immediately', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-06-11T12:00:00Z'));
     mocks.release.mockResolvedValue({
       success: true,
@@ -120,7 +122,7 @@ describe('app update store', () => {
     });
     await useAppUpdateStore.getState().checkForUpdate(true);
     expect(useAppUpdateStore.getState()).toMatchObject({
-      status: 'safetyPeriod',
+      status: 'available',
       remoteBuild: { versionName: '1.3.6' },
       error: null,
     });
@@ -200,7 +202,13 @@ describe('app update store', () => {
 
     await useAppUpdateStore.getState().downloadAvailableUpdate();
     expect(mocks.download).not.toHaveBeenCalled();
-    expect(useAppUpdateStore.getState().status).toBe('safetyPeriod');
+    expect(useAppUpdateStore.getState().status).toBe('available');
+  });
+
+  it('switches to beta and checks prereleases immediately', async () => {
+    await useAppUpdateStore.getState().setUpdateChannel('beta');
+    expect(mocks.release).toHaveBeenCalledWith('beta');
+    expect(useAppUpdateStore.getState().updateChannel).toBe('beta');
   });
 
   it('cancels an active download and restores the available state', async () => {

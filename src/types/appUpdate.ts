@@ -4,7 +4,7 @@ export const OFFICIAL_GITHUB_RELEASE_API =
   `https://api.github.com/repos/${OFFICIAL_GITHUB_OWNER}/${OFFICIAL_GITHUB_REPOSITORY}/releases/latest`;
 export const ANDROID_RELEASE_MANIFEST_NAME = 'MHL-Music-Android.json';
 export const ANDROID_PACKAGE_NAME = 'com.mhl.music';
-export const UPDATE_SAFETY_PERIOD_MS = 7 * 24 * 60 * 60 * 1000;
+export type AppUpdateChannel = 'stable' | 'beta';
 
 export type Sha256Digest = `sha256:${string}`;
 
@@ -48,6 +48,7 @@ export interface AndroidReleaseManifest {
 }
 
 export interface RemoteAndroidBuild {
+  channel: AppUpdateChannel;
   releaseId: number;
   releaseTag: string;
   releaseUrl: string;
@@ -71,7 +72,6 @@ export type AppUpdateStatus =
   | 'idle'
   | 'checking'
   | 'upToDate'
-  | 'safetyPeriod'
   | 'available'
   | 'downloading'
   | 'validating'
@@ -106,13 +106,6 @@ export type AppUpdateDecision =
   | {
       status: 'rejected';
       error: AppUpdateError;
-    }
-  | {
-      status: 'safetyPeriod';
-      replacementBuild: boolean;
-      eligibleAt: string;
-      remainingMs: number;
-      remainingDays: number;
     }
   | {
       status: 'available';

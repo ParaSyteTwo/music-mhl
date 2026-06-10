@@ -7,24 +7,18 @@ export function AppUpdateNotice() {
   const { t } = useI18n();
   const status = useAppUpdateStore((state) => state.status);
   const remoteBuild = useAppUpdateStore((state) => state.remoteBuild);
-  const decision = useAppUpdateStore((state) => state.decision);
   const dismissedDigest = useAppUpdateStore((state) => state.dismissedDigest);
   const dismissCurrentBuild = useAppUpdateStore((state) => state.dismissCurrentBuild);
 
   if (
     !remoteBuild ||
     dismissedDigest === remoteBuild.digest ||
-    (status !== 'safetyPeriod' && status !== 'available')
+    status !== 'available'
   ) {
     return null;
   }
 
-  const message = status === 'safetyPeriod' && decision?.status === 'safetyPeriod'
-    ? t('appUpdateSafetyNotice', {
-        version: remoteBuild.versionName,
-        days: decision.remainingDays,
-      })
-    : t('appUpdateAvailableNotice', { version: remoteBuild.versionName });
+  const message = t('appUpdateAvailableNotice', { version: remoteBuild.versionName });
 
   return (
     <div className="relative z-40 flex items-center gap-3 border-b border-[#C8F04B]/20 bg-[#C8F04B]/10 px-4 py-2.5">

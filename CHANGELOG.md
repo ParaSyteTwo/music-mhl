@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.4.1 - 2026-06-10
+
+### 📱 Canales de actualización
+
+- El canal estable ofrece inmediatamente la última release pública.
+- Nuevo canal **Beta tester** opcional para recibir prereleases oficiales.
+- El canal elegido queda guardado y se comprueba al cambiarlo.
+- Ajustes muestra el canal activo y la versión remota detectada.
+- Se mantienen SHA-256, package, versión, certificado, bloqueo de downgrade y reconsulta antes de instalar.
+- Las versiones intermedias no se descargan: cada canal resuelve únicamente su candidato más reciente.
+
+### 🔧 Compatibilidad
+
+- Los APK beta admiten versiones como `1.4.2-beta.1`.
+- `versionCode` incrementado a `15`.
+- La actualización desde `1.4.0` requiere instalar `1.4.1` manualmente o esperar la cuarentena que ya estaba compilada en `1.4.0`. Desde `1.4.1`, las siguientes versiones estables son inmediatas.
+
 ## v1.4.0 - 2026-06-10
 
 ### 📱 Auto-update Android

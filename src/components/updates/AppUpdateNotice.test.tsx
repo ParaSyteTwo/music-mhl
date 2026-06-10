@@ -3,15 +3,12 @@ import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 
 const updateState = vi.hoisted(() => ({
-  status: 'safetyPeriod',
+  status: 'available',
   remoteBuild: {
     versionName: '1.3.6',
     digest: `sha256:${'a'.repeat(64)}`,
   },
-  decision: {
-    status: 'safetyPeriod',
-    remainingDays: 4,
-  },
+  decision: { status: 'available' },
   dismissedDigest: null,
   dismissCurrentBuild: vi.fn(),
 }));
@@ -23,8 +20,8 @@ vi.mock('@/store/appUpdateStore', () => ({
 vi.mock('@/lib/useI18n', () => ({
   useI18n: () => ({
     t: (key: string, vars?: Record<string, string | number>) =>
-      key === 'appUpdateSafetyNotice'
-        ? `MHL Music ${vars?.version} estará disponible en ${vars?.days} día(s).`
+      key === 'appUpdateAvailableNotice'
+        ? `MHL Music ${vars?.version} ya está disponible.`
         : key,
   }),
 }));
@@ -32,14 +29,14 @@ vi.mock('@/lib/useI18n', () => ({
 import { AppUpdateNotice } from './AppUpdateNotice';
 
 describe('AppUpdateNotice', () => {
-  it('shows safety information without download or install actions', () => {
+  it('shows an available update without downloading automatically', () => {
     render(
       <MemoryRouter>
         <AppUpdateNotice />
       </MemoryRouter>,
     );
 
-    expect(screen.getByText(/estará disponible en 4/)).toBeInTheDocument();
+    expect(screen.getByText(/ya está disponible/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /descargar|download/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /instalar|install/i })).not.toBeInTheDocument();
   });
