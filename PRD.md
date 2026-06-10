@@ -82,14 +82,14 @@ MHL Music es una app multi-plataforma para buscar, reproducir y descargar músic
 - [ ] Descarga funciona con plugin nativo
 - [ ] No regresiones al tocar código compartido
 
-### Android Auto-update (planeado)
-- [ ] Solo acepta releases publicadas de `ParaSyteTwo/music-mhl`
-- [ ] Detecta builds mediante `versionCode`, `versionName` y SHA-256
-- [ ] Un APK reemplazado reinicia el periodo de seguridad de 7 días
-- [ ] Rechaza digest, package, versión o certificado inválidos
-- [ ] Nunca permite downgrade
-- [ ] No bloquea el uso normal de la aplicación ante errores
-- [ ] Requiere confirmación del instalador de Android
+### Android Auto-update (implementado)
+- [x] Solo acepta releases publicadas de `ParaSyteTwo/music-mhl`
+- [x] Detecta builds mediante `versionCode`, `versionName` y SHA-256
+- [x] Un APK reemplazado reinicia el periodo de seguridad de 7 días
+- [x] Rechaza digest, package, versión o certificado inválidos
+- [x] Nunca permite downgrade
+- [x] No bloquea el uso normal de la aplicación ante errores
+- [x] Requiere confirmación del instalador de Android
 
 ## 6. Out of Scope (v2.0)
 

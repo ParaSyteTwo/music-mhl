@@ -36,6 +36,7 @@ android/.gradle/
 *.jks
 *.keystore
 *.apk
+android/keystore.properties
 
 # Claude Code - datos de sesión (privado)
 memory.md

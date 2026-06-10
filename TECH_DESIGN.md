@@ -304,7 +304,7 @@ VITE_SERVICE_API_KEY=...
 
 La especificación canónica es `ANDROID_UPDATE_CONTRACT.md`. Cualquier implementación futura debe conservar ese contrato.
 
-### Componentes planeados
+### Componentes implementados
 
 | Componente | Responsabilidad |
 |---|---|
@@ -314,6 +314,7 @@ La especificación canónica es `ANDROID_UPDATE_CONTRACT.md`. Cualquier implemen
 | `appUpdaterBridge.ts` | Contrato tipado con el plugin Capacitor |
 | `appUpdateStore.ts` | Estado aislado del updater |
 | `AppUpdateNotice.tsx` | Aviso Android no bloqueante |
+| `scripts/android/release-contract.mjs` | Verificación de identidad, firma y generación del manifiesto |
 
 ### Fuente y contrato
 
@@ -361,3 +362,4 @@ Un cambio de `asset.id`, digest, tamaño o `updated_at` invalida cualquier desca
 - La comprobación manual permanece disponible en Ajustes.
 - Web y Desktop no inicializan este flujo.
 - Los errores son tipados y nunca bloquean búsqueda, reproducción o descargas.
+- `npm run android:prepare-release -- --apk <ruta>` prepara los assets canónicos y bloquea certificados o versiones incompatibles.

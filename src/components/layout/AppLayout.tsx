@@ -5,6 +5,7 @@ import { Search, Download, Settings } from 'lucide-react';
 import { useI18n } from '@/lib/useI18n';
 import { useMusicStore } from '@/store/musicStore';
 import { usesRemoteBackend } from '@/lib/platform';
+import { AppUpdateNotice } from '@/components/updates/AppUpdateNotice';
 
 const RAILWAY_URL = (import.meta as { env: Record<string, string> }).env.VITE_RAILWAY_URL;
 
@@ -104,6 +105,8 @@ export function AppLayout() {
           <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
         </div>
       )}
+
+      <AppUpdateNotice />
 
       {/* Mobile top bar — only visible on mobile, shows app name + settings icon */}
       <header

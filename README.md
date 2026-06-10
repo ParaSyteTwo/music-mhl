@@ -35,6 +35,10 @@ Sin cuentas obligatorias, sin anuncios y sin seguimiento.
 ### 📱 Android — Descargas y biblioteca local
 
 - Descargas procesadas directamente en el dispositivo
+- Actualizaciones desde las releases oficiales del proyecto, sin compartir el APK manualmente
+- Verificación de versión, SHA-256, paquete y certificado antes de instalar
+- Periodo de seguridad de siete días para cada APK nuevo o reemplazado
+- Instalación asistida mediante la confirmación nativa de Android
 - Biblioteca organizada por canciones, artistas, álbumes y géneros
 - Apertura en **VLC, Retro Music, Music Player** y otros reproductores
 - Detección automática de aplicaciones de audio instaladas
@@ -102,7 +106,7 @@ La edición Web/PWA depende del backend remoto desplegado en Fly.io. Cuando ese 
 
 **Portable (recomendada):**
 
-1. Descarga [`MHL-Music-Portable-1.3.5.zip`](../../releases/latest)
+1. Descarga [`MHL-Music-Portable-1.4.0.zip`](../../releases/latest)
 2. Descomprime el ZIP en cualquier carpeta
 3. Ejecuta `MHL Music.exe`
 
@@ -110,7 +114,7 @@ La edición Web/PWA depende del backend remoto desplegado en Fly.io. Cuando ese 
 
 ### 📱 Android
 
-1. Descarga [`MHL-Music-1.3.5.apk`](../../releases/latest)
+1. Descarga [`MHL-Music-1.4.0.apk`](../../releases/latest)
 2. Abre el archivo en tu dispositivo
 3. Autoriza la instalación desde esa fuente si Android lo solicita
 
@@ -140,6 +144,7 @@ MP3 con portada, metadatos ID3 y letras opcionales
 | Estado | Zustand |
 | Windows | pywebview + PyInstaller |
 | Android | Capacitor + puente nativo |
+| Actualizaciones Android | GitHub Releases + validación nativa |
 | Backend Web/PWA | FastAPI |
 | Audio | yt-dlp + ffmpeg |
 | Metadatos | browser-id3-writer |

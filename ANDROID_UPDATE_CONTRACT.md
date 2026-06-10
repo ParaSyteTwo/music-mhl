@@ -1,6 +1,6 @@
 # Android Update Contract
 
-> Status: architecture contract, implementation pending
+> Status: implemented architecture contract
 > Applies to: every Android build and release after `1.3.5`
 > Last updated: 2026-06-10
 
@@ -128,6 +128,25 @@ Any failed or unavailable validation must block installation without affecting n
 7. Automate manifest generation and release verification.
 
 Do not skip directly to APK installation before the preceding validation slices exist.
+
+## Release Command
+
+Prepare and verify an Android release with:
+
+```text
+npm run android:prepare-release -- --apk path/to/signed-release.apk
+```
+
+The command blocks output unless all of these agree:
+
+- `package.json` version
+- Android `versionName` and `versionCode`
+- APK package, version, and version code
+- The preserved official signing certificate
+
+On success it writes the canonical APK name and `MHL-Music-Android.json` to
+`release/`. The printed APK SHA-256 is diagnostic only; GitHub's asset digest
+remains authoritative for the updater.
 
 ## Release Checklist
 

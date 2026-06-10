@@ -30,6 +30,12 @@ const App = () => {
         });
       });
 
+      import("@/store/appUpdateStore").then(({ useAppUpdateStore }) => {
+        void useAppUpdateStore.getState().checkForUpdate(false);
+      }).catch(() => {
+        // Update checks are optional and must never block app startup.
+      });
+
       // Also verify downloaded files still exist (cleanup if deleted externally)
       const { downloads } = useMusicStore.getState();
       if (downloads.length > 0) {

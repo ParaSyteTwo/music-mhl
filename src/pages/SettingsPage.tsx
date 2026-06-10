@@ -7,6 +7,7 @@ import type { UiLanguageMode } from '@/lib/language';
 import { Capacitor } from '@capacitor/core';
 import { isPyWebView } from '@/lib/platform';
 import type { AudioPlayer } from '@/lib/openFileBridge';
+import { useAppUpdateStore } from '@/store/appUpdateStore';
 
 const isAndroid = Capacitor.getPlatform() === 'android';
 
@@ -30,6 +31,18 @@ export default function SettingsPage() {
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'done' | 'skipped' | 'error'>('idle');
   const [audioPlayers, setAudioPlayers] = useState<AudioPlayer[]>([]);
   const [loadingPlayers, setLoadingPlayers] = useState(false);
+  const appUpdateStatus = useAppUpdateStore((state) => state.status);
+  const installedBuild = useAppUpdateStore((state) => state.installedBuild);
+  const remoteBuild = useAppUpdateStore((state) => state.remoteBuild);
+  const appUpdateDecision = useAppUpdateStore((state) => state.decision);
+  const checkForAppUpdate = useAppUpdateStore((state) => state.checkForUpdate);
+  const downloadAvailableUpdate = useAppUpdateStore((state) => state.downloadAvailableUpdate);
+  const cancelAvailableUpdateDownload = useAppUpdateStore(
+    (state) => state.cancelAvailableUpdateDownload,
+  );
+  const appUpdateProgress = useAppUpdateStore((state) => state.downloadProgress);
+  const installReadyUpdate = useAppUpdateStore((state) => state.installReadyUpdate);
+  const openInstallPermission = useAppUpdateStore((state) => state.openInstallPermission);
 
   useEffect(() => {
     if (!isAndroid) return;
@@ -362,6 +375,108 @@ export default function SettingsPage() {
       )}
 
       {/* yt-dlp — solo visible en Android, con diseño coherente */}
+      {isAndroid && (
+        <section className="mb-8">
+          <h2 className="text-xs font-semibold uppercase tracking-widest text-[#8A8A8A] mb-2">
+            {t('appUpdates')}
+          </h2>
+          <div className="p-4 rounded-lg bg-[#18181A] border border-[#232325] flex items-center gap-3">
+            <RefreshCw className={`w-6 h-6 flex-shrink-0 ${
+              appUpdateStatus === 'available' ? 'text-[#C8F04B]' : 'text-[#8A8A8A]'
+            } ${appUpdateStatus === 'checking' ? 'animate-spin' : ''}`} />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-[#F5F5F0]">
+                {t('installedVersion', { version: installedBuild?.versionName ?? '1.4.0' })}
+              </p>
+              {appUpdateStatus === 'upToDate' && (
+                <p className="text-xs text-[#8A8A8A] mt-1">{t('appUpToDate')}</p>
+              )}
+              {appUpdateStatus === 'safetyPeriod' &&
+                remoteBuild &&
+                appUpdateDecision?.status === 'safetyPeriod' && (
+                  <p className="text-xs text-[#C8F04B] mt-1">
+                    {t('appUpdateSafetyDetail', {
+                      version: remoteBuild.versionName,
+                      days: appUpdateDecision.remainingDays,
+                    })}
+                  </p>
+                )}
+              {appUpdateStatus === 'available' && remoteBuild && (
+                <p className="text-xs text-[#C8F04B] mt-1">
+                  {t('appUpdateReady', { version: remoteBuild.versionName })}
+                </p>
+              )}
+              {appUpdateStatus === 'downloading' && (
+                <p className="text-xs text-[#C8F04B] mt-1">
+                  {t('appUpdateDownloading', { progress: appUpdateProgress })}
+                </p>
+              )}
+              {appUpdateStatus === 'validating' && (
+                <p className="text-xs text-[#C8F04B] mt-1">{t('appUpdateValidating')}</p>
+              )}
+              {appUpdateStatus === 'readyToInstall' && (
+                <p className="text-xs text-[#C8F04B] mt-1">{t('appUpdateValidated')}</p>
+              )}
+              {appUpdateStatus === 'permissionRequired' && (
+                <p className="text-xs text-amber-400 mt-1">{t('appUpdatePermissionRequired')}</p>
+              )}
+              {appUpdateStatus === 'installing' && (
+                <p className="text-xs text-[#C8F04B] mt-1">{t('appUpdateInstallerOpened')}</p>
+              )}
+              {appUpdateStatus === 'error' && (
+                <p className="text-xs text-[#8A8A8A] mt-1">{t('appUpdateCheckFailed')}</p>
+              )}
+            </div>
+            <div className="flex flex-col gap-2">
+              {appUpdateStatus === 'available' && (
+                <button
+                  type="button"
+                  onClick={() => void downloadAvailableUpdate()}
+                  className="px-3 py-2 rounded-md text-xs font-semibold bg-[#C8F04B] text-[#18181A]"
+                >
+                  {t('downloadUpdate')}
+                </button>
+              )}
+              {appUpdateStatus === 'readyToInstall' && (
+                <button
+                  type="button"
+                  onClick={() => void installReadyUpdate()}
+                  className="px-3 py-2 rounded-md text-xs font-semibold bg-[#C8F04B] text-[#18181A]"
+                >
+                  {t('installUpdate')}
+                </button>
+              )}
+              {appUpdateStatus === 'downloading' && (
+                <button
+                  type="button"
+                  onClick={() => void cancelAvailableUpdateDownload()}
+                  className="px-3 py-2 rounded-md text-xs font-semibold bg-[#232325] text-[#F5F5F0]"
+                >
+                  {t('cancelUpdateDownload')}
+                </button>
+              )}
+              {appUpdateStatus === 'permissionRequired' && (
+                <button
+                  type="button"
+                  onClick={() => void openInstallPermission()}
+                  className="px-3 py-2 rounded-md text-xs font-semibold bg-amber-400 text-[#18181A]"
+                >
+                  {t('allowInstallations')}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => void checkForAppUpdate(true)}
+                disabled={appUpdateStatus === 'checking' || appUpdateStatus === 'downloading' || appUpdateStatus === 'validating' || appUpdateStatus === 'installing'}
+                className="px-3 py-2 rounded-md text-xs font-semibold bg-[#232325] text-[#B0B0B0] hover:text-[#F5F5F0] disabled:opacity-50"
+              >
+                {t('checkUpdates')}
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
+
       {isAndroid && (
         <section className="mb-8">
           <h2 className="text-xs font-semibold uppercase tracking-widest text-[#8A8A8A] mb-2 flex items-center gap-2">

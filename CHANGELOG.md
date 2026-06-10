@@ -1,47 +1,93 @@
 # Changelog
 
+## v1.4.0 - 2026-06-10
+
+### 📱 Auto-update Android
+
+- Detección automática de nuevas versiones publicadas únicamente en `ParaSyteTwo/music-mhl`.
+- Comprobación manual desde Ajustes y comprobación no bloqueante cada 24 horas.
+- Identidad de compilación mediante `versionCode`, `versionName` y SHA-256 del APK.
+- Periodo de seguridad de siete días desde el último cambio del asset APK.
+- La hora confiable de GitHub impide acortar la espera modificando el reloj del dispositivo.
+- Descarga privada con progreso, cancelación y prevención de descargas duplicadas.
+- Validación de digest, paquete `com.mhl.music`, versión y certificado firmante.
+- Reconsulta de GitHub antes de descargar y antes de instalar.
+- Instalación asistida mediante el instalador del sistema y permiso de fuente desconocida.
+- Compatibilidad de firma para Android API 24-27 y API 28+.
+
+### 🔍 Selector de candidatos
+
+- Nueva presentación visual para coincidencias exactas, muy altas, revisables y alternativas.
+- Porcentaje, etiquetas y explicación individual basados en canal, versión y duración.
+- Avisos claros para covers, directos, remixes, instrumentales, videos con letras y duraciones incorrectas.
+- Los visualizers y videos musicales dejan de mostrarse como coincidencia exacta.
+
+### 🔒 Release y firma
+
+- Credenciales de firma eliminadas de la configuración versionada.
+- Verificación obligatoria del certificado release antes de compilar.
+- Generación automática de `MHL-Music-Android.json`.
+- Validación contractual del APK antes de preparar los assets de GitHub.
+
+### ✅ Verificación
+
+- Pruebas unitarias del parser de releases, política de seguridad, bridge, store, UI y contrato de publicación.
+- TypeScript, ESLint, build de producción y compilación Android debug/release superados.
+- Certificado Android preservado sin rotación de clave.
+
 ## v1.3.5 - 2026-06-09
 
-### Added
+### 💻 Windows Desktop
 
-- Complete Spanish and English interface with device-language detection and manual selection.
-- Language controls in Settings across Web, Android, and Windows.
-- Romanization and translation for supported lyric languages and writing systems.
-- A unified candidate-quality model using title, artist, album, official channel, duration, and ISRC when available.
-- Adaptive Android candidate-search concurrency, using two workers on modest devices and up to four on more capable devices.
+- Aplicación portable autocontenida con `yt-dlp.exe`, `ffmpeg.exe`, entorno Python y pywebview incluidos.
+- Búsqueda directa en Deezer y descargas locales sin utilizar el backend de Fly.io.
+- Marco nativo de Windows y ventanas de comandos ocultas durante las descargas.
 
-### Improved
+### 🌐 English Update
 
-- Search responsiveness through short-lived caching, in-flight request reuse, debouncing, and stale-response protection.
-- Candidate picker prefetching so opening the picker reuses the request started on the initial tap.
-- Candidate selection now returns no more than the three best unique, ordered results.
-- Official audio and correct-duration results rank above covers, live recordings, remixes, altered-speed versions, instrumentals, and music videos.
-- Additional candidate queries only run when the first query does not reach the required confidence.
-- Picker rendering is limited to three rows, with lazy artwork loading and reduced animation on lower-end devices.
-- Audio, metadata, and lyrics begin in parallel while preserving metadata, lyric, and audio-quality behavior.
-- Windows and Android proceed to the next queued download without an artificial three-second delay.
-- Web/PWA retains protective pacing for its shared remote backend.
-- Translation logic is decoupled from React and Zustand.
-- Language consistency across Library, Downloads, Search, Settings, notifications, counters, actions, and the player.
+- Interfaz completa en español e inglés con detección del idioma del dispositivo y selección manual.
+- Modos de idioma `Sistema`, `Español` e `Inglés`.
+- Biblioteca, Descargas, Búsqueda, Ajustes, reproductor, avisos, estados y acciones respetan el idioma seleccionado.
+- Migración automática de la preferencia de idioma anterior.
 
-### Fixed
+### 🎤 Letras sincronizadas multicapa
 
-- Lyrics are no longer translated when their original language matches the application's effective language.
-- `letras.com` only supplies its Spanish translation when Spanish is the requested target.
-- Existing language preferences migrate correctly to the new `system`, `es`, or `en` modes.
-- Older search responses can no longer overwrite newer results.
-- Duplicate picker requests and duplicate candidate rows are eliminated.
-- Windows health checks no longer contact the Web/Fly.io backend.
+- Capas sincronizadas de letra original, romanizada y traducida.
+- Archivos `.lrc` opcionales guardados junto a los MP3 descargados.
+- La traducción se omite cuando el idioma original ya coincide con el idioma de destino.
 
-### Platform notes
+### 📱 Android
 
-- Windows remains fully local for candidate lookup, downloads, metadata, and lyrics.
-- Android keeps its existing native transport and does not require native project changes for these optimizations.
-- Download concurrency remains capped at two across supported platforms.
+- Detección de reproductores externos y reproductor predeterminado configurable.
+- La reproducción comienza en `00:00` al abrir canciones externamente.
+- Fases de descarga, velocidad y tiempo estimado en directo.
+- Búsqueda adaptativa de candidatos con entre dos y cuatro trabajadores.
 
-### Verification
+### 🔍 Búsqueda y picker de candidatos
 
-- TypeScript checks, focused linting, frontend unit tests, Python scoring tests, desktop bridge tests, and the production PWA build passed.
+- Caché de búsqueda, reutilización de peticiones en curso, debounce y protección contra respuestas antiguas.
+- El precalentado del picker reutiliza la petición iniciada con el primer toque.
+- Un máximo de tres candidatos únicos ordenados por calidad.
+- Clasificación basada en título, artista, álbum, canal oficial, duración e ISRC cuando está disponible.
+- Porcentaje, estado, etiquetas y explicación individual para cada candidato.
+- Colores semánticos: lima para coincidencia exacta, cian para muy alta, ámbar para revisar y rojo suave para versiones alternativas.
+- Los visualizers y videos de letras ya no aparecen como coincidencia exacta solo por ocupar la primera posición.
+- Penalizaciones mayores para covers, directos, remixes, versiones alteradas, instrumentales, videos musicales y duraciones incorrectas.
+- Las consultas adicionales solo se ejecutan cuando el resultado principal no tiene confianza suficiente.
+- Animaciones reducidas y carga diferida de portadas en dispositivos modestos.
+
+### ⚡ Rendimiento de descargas
+
+- Audio, metadatos y letras comienzan en paralelo.
+- Windows y Android ya no esperan tres segundos entre descargas en cola.
+- Web/PWA conserva una pausa protectora para la infraestructura remota compartida.
+- La concurrencia de descargas se mantiene limitada a dos.
+
+### ✅ Verificación
+
+- Pruebas frontend del ranking, caché, concurrencia y presentación visual superadas.
+- Pruebas Python de candidatos, puntuación y empaquetado Desktop superadas.
+- TypeScript, lint, PWA, compilación Android release y portable de Windows superados.
 
 ## v1.2.3 - 2026-03-31
 

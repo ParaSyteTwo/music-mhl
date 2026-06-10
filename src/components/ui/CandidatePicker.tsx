@@ -1,12 +1,50 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { X, Clock } from 'lucide-react';
+import { X, Clock, CheckCircle2, ShieldCheck, AlertTriangle, Sparkles } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { Capacitor } from '@capacitor/core';
 import { toast } from 'sonner';
 import { getDownloadCandidates, type DownloadCandidate } from '@/lib/api/musicApi';
+import { getCandidateMatchPresentation, type CandidateMatchTone } from '@/lib/candidateMatch';
 import type { Track } from '@/types/music';
 import { useI18n } from '@/lib/useI18n';
+
+const toneStyles: Record<CandidateMatchTone, {
+  card: string;
+  rank: string;
+  percent: string;
+  badge: string;
+  detail: string;
+}> = {
+  exact: {
+    card: 'bg-[linear-gradient(110deg,rgba(200,240,75,0.12),rgba(200,240,75,0.035))] border-[rgba(200,240,75,0.38)] hover:border-[rgba(200,240,75,0.6)]',
+    rank: 'bg-[#C8F04B] text-[#111]',
+    percent: 'bg-[rgba(200,240,75,0.16)] text-[#C8F04B]',
+    badge: 'bg-[rgba(200,240,75,0.12)] text-[#D8FF61]',
+    detail: 'text-[#B7D957]',
+  },
+  high: {
+    card: 'bg-[linear-gradient(110deg,rgba(56,189,248,0.11),rgba(56,189,248,0.025))] border-[rgba(56,189,248,0.28)] hover:border-[rgba(56,189,248,0.5)]',
+    rank: 'bg-[#38BDF8] text-[#07151C]',
+    percent: 'bg-[rgba(56,189,248,0.14)] text-[#7DD3FC]',
+    badge: 'bg-[rgba(56,189,248,0.11)] text-[#7DD3FC]',
+    detail: 'text-[#68BCE2]',
+  },
+  review: {
+    card: 'bg-[linear-gradient(110deg,rgba(245,158,11,0.08),rgba(255,255,255,0.025))] border-[rgba(245,158,11,0.18)] hover:border-[rgba(245,158,11,0.36)]',
+    rank: 'bg-[rgba(245,158,11,0.2)] text-[#FBBF24]',
+    percent: 'bg-[rgba(245,158,11,0.12)] text-[#FBBF24]',
+    badge: 'bg-[rgba(245,158,11,0.1)] text-[#F3C65C]',
+    detail: 'text-[#B89149]',
+  },
+  alternate: {
+    card: 'bg-[linear-gradient(110deg,rgba(244,63,94,0.075),rgba(255,255,255,0.02))] border-[rgba(244,63,94,0.16)] hover:border-[rgba(244,63,94,0.32)]',
+    rank: 'bg-[rgba(244,63,94,0.16)] text-[#FB7185]',
+    percent: 'bg-[rgba(244,63,94,0.12)] text-[#FB7185]',
+    badge: 'bg-[rgba(244,63,94,0.1)] text-[#FDA4AF]',
+    detail: 'text-[#C27480]',
+  },
+};
 
 export function CandidatePicker({
   track,
@@ -104,8 +142,11 @@ export function CandidatePicker({
 
         <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-[rgba(255,255,255,0.06)] flex-shrink-0">
           <div>
-            <p className="text-xs font-medium text-[#F5F5F0]">{t('smartResults')}</p>
-            <p className="text-[11px] text-[#555]">{t('smartResultsHint')}</p>
+            <p className="text-xs font-semibold text-[#F5F5F0] flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-[#C8F04B]" />
+              {t('candidateResultsTitle')}
+            </p>
+            <p className="text-[11px] text-[#666]">{t('candidateResultsHint')}</p>
           </div>
           <span className="text-[10px] text-[#444] text-right">{t('chooseExactSong')}</span>
         </div>
@@ -124,12 +165,13 @@ export function CandidatePicker({
           ) : (
             <div className="space-y-1.5 mt-1">
               {candidates.slice(0, 3).map((c, i) => {
-                const isBest = i === 0;
-                const confidenceClass = c.confidence === 'alta'
-                  ? 'bg-[rgba(200,240,75,0.15)] text-[#C8F04B]'
-                  : c.confidence === 'media'
-                    ? 'bg-[rgba(255,255,255,0.08)] text-[#D5D5CE]'
-                    : 'bg-[rgba(255,255,255,0.06)] text-[#777]';
+                const match = getCandidateMatchPresentation(track, c);
+                const styles = toneStyles[match.tone];
+                const StatusIcon = match.tone === 'exact'
+                  ? CheckCircle2
+                  : match.tone === 'high'
+                    ? ShieldCheck
+                    : AlertTriangle;
 
                 return (
                   <motion.button
@@ -138,29 +180,39 @@ export function CandidatePicker({
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: reduceMotion ? 0 : i * 0.025 }}
                     onClick={() => onSelect(c.videoId)}
-                    className={`w-full px-3 py-2.5 rounded-xl text-left flex items-center gap-3 group transition-all ${
-                      isBest
-                        ? 'bg-[rgba(200,240,75,0.07)] border border-[rgba(200,240,75,0.2)] hover:bg-[rgba(200,240,75,0.12)]'
-                        : 'bg-[rgba(255,255,255,0.03)] border border-transparent hover:bg-[rgba(255,255,255,0.07)]'
-                    }`}
+                    className={`w-full px-3 py-3 rounded-xl text-left flex items-start gap-3 group transition-all border ${styles.card}`}
                   >
+                    <span className={`mt-0.5 w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${styles.rank}`}>
+                      {i + 1}
+                    </span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-[13px] text-[#F5F5F0] leading-tight line-clamp-2">{c.title}</p>
-                      <p className="text-[11px] text-[#555] truncate mt-0.5">{c.channel}</p>
+                      <p className="text-[13px] font-medium text-[#F5F5F0] leading-tight line-clamp-2">{c.title}</p>
+                      <p className="text-[11px] text-[#777] truncate mt-1">{c.channel}</p>
+                      <div className="flex flex-wrap items-center gap-1 mt-2">
+                        {match.badgeKeys.map((key) => (
+                          <span key={key} className={`text-[9px] leading-4 px-1.5 rounded-md font-medium ${styles.badge}`}>
+                            {t(key)}
+                          </span>
+                        ))}
+                        {c.duration > 0 && (
+                          <span className="flex items-center gap-1 text-[9px] leading-4 tabular-nums px-1.5 rounded-md bg-[rgba(255,255,255,0.055)] text-[#777]">
+                            <Clock className="w-2.5 h-2.5" />
+                            {fmt(c.duration)}
+                          </span>
+                        )}
+                      </div>
+                      <p className={`text-[9px] mt-1.5 flex items-center gap-1 ${styles.detail}`}>
+                        <StatusIcon className="w-2.5 h-2.5" />
+                        {t(match.detailKey)}
+                      </p>
                     </div>
-                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                      {c.label && c.label !== 'original probable' && (
-                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-[rgba(255,255,255,0.06)] text-[#777] capitalize">{c.label}</span>
-                      )}
-                      {c.duration > 0 && (
-                        <span className="flex items-center gap-1 text-[10px] tabular-nums px-1.5 py-0.5 rounded bg-[rgba(255,255,255,0.06)] text-[#555]">
-                          <Clock className="w-2.5 h-2.5" />
-                          {fmt(c.duration)}
-                        </span>
-                      )}
-                      {isBest && (
-                        <span className="text-[9px] text-[#C8F04B] font-medium">{t('bestMatch')}</span>
-                      )}
+                    <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                      <span className={`text-[11px] font-bold tabular-nums px-2 py-1 rounded-lg ${styles.percent}`}>
+                        {match.percent}%
+                      </span>
+                      <span className={`text-[8px] font-semibold uppercase tracking-[0.08em] ${styles.detail}`}>
+                        {t(match.statusKey)}
+                      </span>
                     </div>
                   </motion.button>
                 );
