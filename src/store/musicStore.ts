@@ -146,6 +146,10 @@ interface MusicStore {
   setLyricTranslation: (v: boolean) => void;
   setSaveLrcFile: (v: boolean) => void;
 
+  // ─── Anime search (opt-in, off by default) ───
+  animeSearchEnabled: boolean;
+  setAnimeSearchEnabled: (v: boolean) => void;
+
   // ─── yt-dlp status ───
   ytDlpVersion: string | null;
   ytDlpUpdateAvailable: boolean;
@@ -778,6 +782,10 @@ export const useMusicStore = create<MusicStore>()(
         setLyricTranslation: (v) => set({ lyricTranslation: v }),
         setSaveLrcFile: (v) => set({ saveLrcFile: v }),
 
+        // ─── Anime search (opt-in, off by default) ───
+        animeSearchEnabled: false,
+        setAnimeSearchEnabled: (v) => set({ animeSearchEnabled: v }),
+
         // ─── Reproductor externo preferido (Android) ───
         preferredPlayerPackage: null as string | null,
         setPreferredPlayerPackage: (pkg: string | null) => set({ preferredPlayerPackage: pkg }),
@@ -1104,6 +1112,7 @@ export const useMusicStore = create<MusicStore>()(
         lyricRomanization: state.lyricRomanization,
         lyricTranslation: state.lyricTranslation,
         saveLrcFile: state.saveLrcFile,
+        animeSearchEnabled: state.animeSearchEnabled,
         mostDownloadedArtists: state.mostDownloadedArtists,
         preferredPlayerPackage: state.preferredPlayerPackage,
         // localFileRefs excluded — File objects cannot be serialized
@@ -1128,6 +1137,7 @@ export const useMusicStore = create<MusicStore>()(
         lyricRomanization: persisted?.lyricRomanization ?? true,
         lyricTranslation: persisted?.lyricTranslation ?? true,
         saveLrcFile: persisted?.saveLrcFile ?? true,
+        animeSearchEnabled: persisted?.animeSearchEnabled ?? false,
         mostDownloadedArtists: persisted?.mostDownloadedArtists ?? [],
         preferredPlayerPackage: persisted?.preferredPlayerPackage ?? null,
         localFileRefs: new Map(),

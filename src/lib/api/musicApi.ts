@@ -2,6 +2,9 @@ import { Track } from '@/types/music';
 import { Capacitor } from '@capacitor/core';
 import { useMusicStore } from '@/store/musicStore';
 import type { Anime, AnimeTheme } from '@/types/anime';
+import { looksAnimeLike } from '@/lib/util/animeDetector';
+
+export { looksAnimeLike };
 
 interface PyWebViewApi {
   anime_search?: (query: string, limit: number) => Promise<{ success: boolean; error?: string; results?: Anime[] }>
@@ -417,11 +420,6 @@ function getPreferredTrackTitle(track: Track): string {
 
 function getPreferredAlbumName(track: Track): string {
   return track.canonicalAlbum?.trim() || track.album;
-}
-
-function looksAnimeLike(track: Track): boolean {
-  const source = `${getPreferredTrackTitle(track)} ${track.title} ${track.artist} ${getPreferredAlbumName(track)}`.toLowerCase();
-  return /(anime|opening|ending|\bop\b|\bed\b|theme|ost|project|isekai)/.test(source);
 }
 
 function buildCandidateQueries(track: Track): string[] {
