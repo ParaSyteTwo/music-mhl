@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from modules.cookies import cookie_checker_loop
+from routes.anime import register_anime_routes
 from routes.deezer import register_deezer_routes
 from routes.download import register_download_routes
 from routes.health import register_health_routes
@@ -45,6 +46,7 @@ register_search_routes(app)
 register_resolve_routes(app)
 register_download_routes(app)
 register_deezer_routes(app)
+register_anime_routes(app)
 register_internal_routes(app)
 register_telegram_routes(app)
 

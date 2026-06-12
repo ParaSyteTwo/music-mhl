@@ -82,4 +82,5 @@ Types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`
 - Requisitos completos: @PRD.md
 - Decisiones de arquitectura: @TECH_DESIGN.md
 - Contrato de compatibilidad Android: @ANDROID_UPDATE_CONTRACT.md
+- Convenciones backend (FastAPI routes, rate-limit, tests): @docs/backend-conventions.md
 - Reglas globales: ~/.Codex/AGENTS.md

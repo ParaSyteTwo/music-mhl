@@ -46,6 +46,280 @@ def _safe(s: str) -> str:
     return re.sub(r'[/\\?%*:|"<>]', '', s).strip()
 
 
+# ── Anime client (AniList + animethemes.moe) ─────────────────────────────────
+# Replica la misma forma de respuesta que el backend (services/ytdlp-service/modules/anime_client.py)
+# para que el frontend pueda cambiar de plataforma sin diferencias. Implementación
+# síncrona con `requests` (no `httpx`) porque `requests` ya está en requirements.txt.
+
+_ANILIST_ENDPOINT = 'https://graphql.anilist.co'
+_ANIMETHEMES_ENDPOINT = 'https://api.animethemes.moe/graphql'
+_ANIME_HEADERS = {
+    'Content-Type': 'application/json',
+    'User-Agent': 'MHLMusic/1.4.2',
+}
+_ANIME_TIMEOUT = 10
+
+_ANILIST_SEARCH_QUERY = """
+query ($search: String!, $perPage: Int!) {
+  Page(perPage: $perPage) {
+    media(search: $search, type: ANIME, sort: SEARCH_MATCH) {
+      id
+      title { romaji english native }
+      coverImage { extraLarge large color }
+      type
+      episodes
+      startDate { year }
+      description
+    }
+  }
+}
+"""
+
+_ANILIST_BY_ID_QUERY = """
+query ($id: Int!) {
+  Media(id: $id, type: ANIME) {
+    id
+    title { romaji english native }
+  }
+}
+"""
+
+_ANIMETHEMES_SEARCH_QUERY = """
+query ($search: String!) {
+  search(limit: 1, page: 1, search: { name: $search }) {
+    anime { id name slug }
+  }
+}
+"""
+
+_ANIMETHEMES_THEMES_QUERY = """
+query ($id: Int!) {
+  findAnimeById(id: $id) {
+    id
+    slug
+    name
+    themes {
+      id
+      type
+      sequence
+      entries {
+        id
+        version
+        episodes { name }
+        videos {
+          id
+          basename
+          audio { id basename }
+        }
+      }
+    }
+  }
+}
+"""
+
+_HTML_TAG_RE = re.compile(r'<[^>]+>')
+
+
+def _strip_html(text):
+    if not text:
+        return None
+    cleaned = _HTML_TAG_RE.sub('', str(text))
+    cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+    return cleaned or None
+
+
+def _anime_cover(cover):
+    if not isinstance(cover, dict):
+        return ''
+    return (
+        cover.get('extraLarge')
+        or cover.get('large')
+        or cover.get('medium')
+        or cover.get('color')
+        or ''
+    )
+
+
+def _anime_titles(title):
+    title = title or {}
+    romaji = (title.get('romaji') or title.get('english') or title.get('native') or '').strip()
+    english = title.get('english') or None
+    native = title.get('native') or None
+    return romaji, english, native
+
+
+def _anime_episode_range(entries):
+    if not entries:
+        return None, None
+    numbers = []
+    for ep in entries:
+        if not isinstance(ep, dict):
+            continue
+        name = ep.get('name')
+        if not name:
+            continue
+        match = re.search(r'\d+', str(name))
+        if match:
+            try:
+                numbers.append(int(match.group(0)))
+            except (TypeError, ValueError):
+                continue
+    if not numbers:
+        return None, None
+    return min(numbers), max(numbers)
+
+
+def _anime_video_id(basename):
+    """animethemes almacena el basename como 'watch?v=ABC' o 'ABC'."""
+    if not basename:
+        return None
+    value = str(basename).strip()
+    if not value:
+        return None
+    if 'watch?v=' in value:
+        value = value.split('watch?v=', 1)[1]
+    value = value.split('&', 1)[0]
+    return value.strip() or None
+
+
+def _anime_graphql_post(url, query, variables):
+    """POST síncrono con timeout duro. Devuelve el dict 'data' o lanza excepción."""
+    payload = {'query': query, 'variables': variables}
+    response = requests.post(url, json=payload, headers=_ANIME_HEADERS, timeout=_ANIME_TIMEOUT)
+    response.raise_for_status()
+    data = response.json()
+    if not isinstance(data, dict):
+        raise ValueError(f'Respuesta inválida de {url}: no es un objeto JSON')
+    if data.get('errors'):
+        first = data['errors'][0]
+        msg = first.get('message') if isinstance(first, dict) else str(first)
+        raise RuntimeError(f'GraphQL error: {msg}')
+    return data.get('data') or {}
+
+
+def _anime_search(query, limit=10):
+    if not query or not str(query).strip():
+        raise ValueError('query must not be empty')
+    per_page = max(1, min(int(limit), 25))
+    data = _anime_graphql_post(
+        _ANILIST_ENDPOINT, _ANILIST_SEARCH_QUERY, {'search': query, 'perPage': per_page}
+    )
+    media = ((data.get('Page') or {}).get('media')) or []
+    results = []
+    for item in media:
+        if not isinstance(item, dict):
+            continue
+        romaji, english, native = _anime_titles(item.get('title'))
+        if not romaji:
+            continue
+        start_date = item.get('startDate') or {}
+        year_raw = start_date.get('year')
+        year = int(year_raw) if isinstance(year_raw, int) else None
+        episodes_raw = item.get('episodes')
+        episodes = int(episodes_raw) if isinstance(episodes_raw, int) else None
+        results.append({
+            'id': int(item.get('id') or 0),
+            'titleRomaji': romaji,
+            'titleEnglish': english,
+            'titleNative': native,
+            'cover': _anime_cover(item.get('coverImage')),
+            'type': str(item.get('type') or 'TV'),
+            'episodes': episodes,
+            'year': year,
+            'synopsis': _strip_html(item.get('description')),
+        })
+    return results
+
+
+def _anime_fetch_meta(anilist_id):
+    data = _anime_graphql_post(
+        _ANILIST_ENDPOINT, _ANILIST_BY_ID_QUERY, {'id': anilist_id}
+    )
+    return data.get('Media') or None
+
+
+def _anime_search_animethemes(name):
+    data = _anime_graphql_post(
+        _ANIMETHEMES_ENDPOINT, _ANIMETHEMES_SEARCH_QUERY, {'search': name}
+    )
+    results = ((data.get('search') or {}).get('anime')) or []
+    if not results:
+        return None
+    first = results[0]
+    return first if isinstance(first, dict) else None
+
+
+def _anime_fetch_themes(anime_id):
+    data = _anime_graphql_post(
+        _ANIMETHEMES_ENDPOINT, _ANIMETHEMES_THEMES_QUERY, {'id': anime_id}
+    )
+    anime = data.get('findAnimeById') or {}
+    themes = anime.get('themes') or []
+    return [t for t in themes if isinstance(t, dict)]
+
+
+def _anime_shape_themes(raw_themes, anilist_id):
+    shaped = []
+    for theme in raw_themes:
+        theme_type = str(theme.get('type') or '').upper()
+        if theme_type not in {'OP', 'ED'}:
+            continue
+        try:
+            sequence = int(theme.get('sequence') or 0)
+        except (TypeError, ValueError):
+            sequence = 0
+        entries = theme.get('entries') or []
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            videos = entry.get('videos') or []
+            for video in videos:
+                if not isinstance(video, dict):
+                    continue
+                # Sólo con audio link (audio = mirror de YouTube)
+                if not video.get('audio'):
+                    continue
+                video_id = _anime_video_id(video.get('basename'))
+                if not video_id:
+                    continue
+                eps_from, eps_to = _anime_episode_range(entry.get('episodes'))
+                shaped.append({
+                    'animeId': anilist_id,
+                    'type': theme_type,
+                    'sequence': sequence,
+                    'title': theme.get('title') or f'{theme_type} {sequence}',
+                    'artist': entry.get('version') or '',
+                    'episodesFrom': eps_from,
+                    'episodesTo': eps_to,
+                    'videoId': video_id,
+                    'videoUrl': f'https://www.youtube.com/watch?v={video_id}',
+                })
+    return shaped
+
+
+def _anime_get_themes(anilist_id):
+    if not isinstance(anilist_id, int) or anilist_id <= 0:
+        raise ValueError('anilist_id must be a positive integer')
+
+    meta = _anime_fetch_meta(anilist_id)
+    if meta is None:
+        return []
+    romaji, english, _native = _anime_titles(meta.get('title'))
+    search_name = english or romaji
+    if not search_name:
+        return []
+
+    anime_node = _anime_search_animethemes(search_name)
+    if anime_node is None:
+        return []
+    anime_id = anime_node.get('id')
+    if not isinstance(anime_id, int):
+        return []
+
+    raw_themes = _anime_fetch_themes(anime_id)
+    return _anime_shape_themes(raw_themes, anilist_id)
+
+
 
 # ── Bridge ────────────────────────────────────────────────────────────────────
 
@@ -98,6 +372,35 @@ class Bridge:
                 ]
             ]
             return {'success': True, 'info': info, 'top': top, 'albums': albums, 'related': related}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    # ── Anime (AniList + animethemes.moe, llamadas directas desde Python) ────
+
+    def anime_search(self, query: str, limit: int = 10) -> dict:
+        """
+        Busca anime en AniList via GraphQL.
+        Devuelve {"success": True, "results": [...]} o {"success": False, "error": str}.
+        """
+        try:
+            results = _anime_search(query=query, limit=limit)
+            return {'success': True, 'results': results}
+        except ValueError as e:
+            # Input inválido (query vacía, etc.) — no es un error de red
+            return {'success': False, 'error': str(e)}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def anime_get_themes(self, anilist_id: int) -> dict:
+        """
+        Devuelve la lista de OP/ED de un anime (anilist_id) usando animethemes.moe.
+        Devuelve {"success": True, "themes": [...]} o {"success": False, "error": str}.
+        """
+        try:
+            themes = _anime_get_themes(anilist_id=anilist_id)
+            return {'success': True, 'themes': themes}
+        except ValueError as e:
+            return {'success': False, 'error': str(e)}
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
