@@ -219,9 +219,9 @@ def _anime_search(query, limit=10):
         episodes = int(episodes_raw) if isinstance(episodes_raw, int) else None
         results.append({
             'id': int(item.get('id') or 0),
-            'title_romaji': romaji,
-            'title_english': english,
-            'title_native': native,
+            'titleRomaji': romaji,
+            'titleEnglish': english,
+            'titleNative': native,
             'cover': _anime_cover(item.get('coverImage')),
             'type': str(item.get('type') or 'TV'),
             'episodes': episodes,
@@ -284,15 +284,15 @@ def _anime_shape_themes(raw_themes, anilist_id):
                     continue
                 eps_from, eps_to = _anime_episode_range(entry.get('episodes'))
                 shaped.append({
-                    'anime_id': anilist_id,
+                    'animeId': anilist_id,
                     'type': theme_type,
                     'sequence': sequence,
                     'title': theme.get('title') or f'{theme_type} {sequence}',
                     'artist': entry.get('version') or '',
-                    'episodes_from': eps_from,
-                    'episodes_to': eps_to,
-                    'video_id': video_id,
-                    'video_url': f'https://www.youtube.com/watch?v={video_id}',
+                    'episodesFrom': eps_from,
+                    'episodesTo': eps_to,
+                    'videoId': video_id,
+                    'videoUrl': f'https://www.youtube.com/watch?v={video_id}',
                 })
     return shaped
 

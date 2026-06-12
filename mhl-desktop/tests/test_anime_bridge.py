@@ -106,10 +106,24 @@ def test_anime_search_calls_anilist_and_parses_results():
     assert len(result["results"]) == 1
 
     item = result["results"][0]
+    # Cross-track contract: the JS AnimeCard consumer (src/types/anime.ts:Anime)
+    # reads camelCase keys. The bridge must emit exactly the keys declared in
+    # that interface, not the Python dataclass snake_case fields.
+    assert set(item.keys()) == {
+        "id",
+        "titleRomaji",
+        "titleEnglish",
+        "titleNative",
+        "cover",
+        "type",
+        "episodes",
+        "year",
+        "synopsis",
+    }
     assert item["id"] == 20
-    assert item["title_romaji"] == "Naruto"
-    assert item["title_english"] == "Naruto"
-    assert item["title_native"] == "ナルト"
+    assert item["titleRomaji"] == "Naruto"
+    assert item["titleEnglish"] == "Naruto"
+    assert item["titleNative"] == "ナルト"
     assert item["cover"] == "https://img.anilist.co/large/naruto.jpg"
     assert item["type"] == "TV"
     assert item["episodes"] == 220
@@ -139,7 +153,7 @@ def test_anime_search_handles_multiple_results_and_falls_back_through_cover_size
         result = bridge.anime_search("n", 10)
 
     assert result["success"] is True
-    assert [r["title_romaji"] for r in result["results"]] == ["Naruto", "Bleach"]
+    assert [r["titleRomaji"] for r in result["results"]] == ["Naruto", "Bleach"]
     assert result["results"][1]["cover"] == "https://img/bleach-medium.jpg"
 
 
@@ -360,18 +374,32 @@ def test_anime_get_themes_walks_three_step_resolution_and_parses_themes():
     assert len(result["themes"]) == 2
 
     op1, ed1 = result["themes"]
-    assert op1["anime_id"] == 20
+    # Cross-track contract: the JS ThemeRow consumer (src/types/anime.ts:AnimeTheme)
+    # reads camelCase keys. The bridge must emit exactly the keys declared in
+    # that interface, not the Python dataclass snake_case fields.
+    assert set(op1.keys()) == {
+        "animeId",
+        "type",
+        "sequence",
+        "title",
+        "artist",
+        "episodesFrom",
+        "episodesTo",
+        "videoId",
+        "videoUrl",
+    }
+    assert op1["animeId"] == 20
     assert op1["type"] == "OP"
     assert op1["sequence"] == 1
     assert op1["title"] == "OP 1"  # default fallback when theme.title is None
-    assert op1["video_id"] == "AAAA1111"
-    assert op1["video_url"] == "https://www.youtube.com/watch?v=AAAA1111"
-    assert op1["episodes_from"] == 1
-    assert op1["episodes_to"] == 25
+    assert op1["videoId"] == "AAAA1111"
+    assert op1["videoUrl"] == "https://www.youtube.com/watch?v=AAAA1111"
+    assert op1["episodesFrom"] == 1
+    assert op1["episodesTo"] == 25
 
     assert ed1["type"] == "ED"
     assert ed1["artist"] == "v2"
-    assert ed1["video_id"] == "BBBB2222"
+    assert ed1["videoId"] == "BBBB2222"
 
 
 def test_anime_get_themes_drops_videos_without_audio():
@@ -415,7 +443,7 @@ def test_anime_get_themes_drops_videos_without_audio():
 
     assert result["success"] is True
     assert len(result["themes"]) == 1
-    assert result["themes"][0]["video_id"] == "LIVE1111"
+    assert result["themes"][0]["videoId"] == "LIVE1111"
 
 
 def test_anime_get_themes_returns_empty_list_when_anilist_id_unknown():
@@ -549,6 +577,130 @@ def test_anime_requests_always_have_timeout():
         bridge.anime_search("naruto", 5)
 
     assert mock_post.call_args.kwargs.get("timeout") == 10
+
+
+# ---------------------------------------------------------------------------
+# Cross-track contract regression tests
+#
+# These pin the public Anime / AnimeTheme response shape to the keys declared
+# in src/types/anime.ts. If anyone re-introduces snake_case keys (or drops a
+# field) on the Python side, the JS AnimeCard / ThemeRow consumers will render
+# ``undefined`` and the bug will be silently visible to the user. These tests
+# fail loudly the moment a key drifts.
+#
+# Why this is the E2E guarantee:
+#   * The slice-level unit tests in this file mock the public dict shape, so a
+#     snake_case regression in the underlying ``_anime_search`` /
+#     ``_anime_shape_themes`` helpers would slip through them.
+#   * The TS animeApi.test.ts mocks fetch with hand-built fixtures, so a wire
+#     drift between Python and TS would not surface there either.
+#   * The test below calls the real ``Bridge.anime_search`` and
+#     ``Bridge.anime_get_themes`` against mocked AniList/animethemes responses
+#     and asserts the EXACT key set returned to JS. A regression in either
+#     helper fails these tests before the change ships.
+# ---------------------------------------------------------------------------
+
+
+_TS_ANIME_KEYS = {
+    "id",
+    "titleRomaji",
+    "titleEnglish",
+    "titleNative",
+    "cover",
+    "type",
+    "episodes",
+    "year",
+    "synopsis",
+}
+
+_TS_THEME_KEYS = {
+    "animeId",
+    "type",
+    "sequence",
+    "title",
+    "artist",
+    "episodesFrom",
+    "episodesTo",
+    "videoId",
+    "videoUrl",
+}
+
+
+def test_anime_search_response_shape_matches_ts_anime_interface():
+    """``Bridge.anime_search`` must return results whose keys match
+    ``src/types/anime.ts:Anime`` exactly (camelCase, no snake_case leakage).
+
+    Regression guard for the cross-track contract: the JS AnimeCard component
+    reads ``item.titleRomaji`` / ``item.titleEnglish`` directly. If the bridge
+    ever emits ``title_romaji`` (Python dataclass field name), AnimeCard
+    renders with empty title strings and the user sees blank cards. This test
+    fails the moment a snake_case key sneaks back into the dict literal in
+    ``_anime_search``.
+    """
+    response = _mock_response(_anilist_search_payload([_naruto_media()]))
+    bridge = Bridge()
+
+    with patch("bridge.requests.post", return_value=response):
+        result = bridge.anime_search("naruto", 5)
+
+    assert result["success"] is True
+    assert len(result["results"]) == 1
+    assert set(result["results"][0].keys()) == _TS_ANIME_KEYS
+
+
+def test_anime_get_themes_response_shape_matches_ts_animetheme_interface():
+    """``Bridge.anime_get_themes`` must return themes whose keys match
+    ``src/types/anime.ts:AnimeTheme`` exactly.
+
+    Regression guard for the cross-track contract: the JS ThemeRow component
+    reads ``theme.animeId`` / ``theme.episodesFrom`` / ``theme.videoId``
+    directly. If the bridge ever emits ``anime_id`` / ``episodes_from`` /
+    ``video_id`` (Python dataclass field names), the download button is
+    broken. This test fails the moment a snake_case key sneaks back into the
+    dict literal in ``_anime_shape_themes``.
+    """
+    naruto_meta = {
+        "id": 20,
+        "title": {"romaji": "Naruto", "english": "Naruto", "native": "ナルト"},
+    }
+    animethemes_anime = [{"id": 1, "name": "Naruto", "slug": "naruto"}]
+    themes_node = {
+        "id": 1,
+        "slug": "naruto",
+        "name": "Naruto",
+        "themes": [
+            {
+                "id": 100,
+                "type": "OP",
+                "sequence": 1,
+                "entries": [
+                    {
+                        "id": 1000,
+                        "version": None,
+                        "episodes": [{"name": "1"}],
+                        "videos": [
+                            {
+                                "id": 1,
+                                "basename": "watch?v=AAAA1111",
+                                "audio": {"id": 1, "basename": "watch?v=AAAA1111"},
+                            }
+                        ],
+                    }
+                ],
+            }
+        ],
+    }
+
+    bridge = Bridge()
+    with patch(
+        "bridge.requests.post",
+        side_effect=_make_themes_post_mock(naruto_meta, animethemes_anime, themes_node),
+    ):
+        result = bridge.anime_get_themes(20)
+
+    assert result["success"] is True
+    assert len(result["themes"]) == 1
+    assert set(result["themes"][0].keys()) == _TS_THEME_KEYS
 
 
 if __name__ == "__main__":
