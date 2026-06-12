@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Download, Play, Pause, Search, Loader2, Music, CheckCircle, X } from 'lucide-react';
+import { Download, Play, Pause, Search, Loader2, Music, CheckCircle, X, ArrowLeft, Tv } from 'lucide-react';
 import { useMusicStore } from '@/store/musicStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getDownloadCandidates } from '@/lib/api/musicApi';
@@ -7,6 +7,13 @@ import type { Track } from '@/types/music';
 import { buildAffinityPool, artistColor } from '@/data/globalArtists';
 import { useI18n } from '@/lib/useI18n';
 import { CandidatePicker } from '@/components/ui/CandidatePicker';
+import { AnimeCard } from '@/components/ui/AnimeCard';
+import { ThemeRow } from '@/components/ui/ThemeRow';
+import { AnimeModeBadge } from '@/components/ui/AnimeModeBadge';
+import { searchAnime, getAnimeThemes, downloadAnimeTheme } from '@/lib/api/animeApi';
+import { looksAnimeLikeQuery } from '@/lib/util/animeDetector';
+import type { Anime, AnimeTheme } from '@/types/anime';
+import { toast } from 'sonner';
 
 function formatDuration(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -46,10 +53,21 @@ export default function SearchPage() {
     startDownloadWithVideoId,
     downloads,
     mostDownloadedArtists,
+    animeSearchEnabled,
   } = useMusicStore();
 
   const [query, setQuery] = useState(searchQuery);
   const [pickerTrack, setPickerTrack] = useState<Track | null>(null);
+
+  // ─── Anime mode state ───
+  const [animeMode, setAnimeMode] = useState(false);
+  const [animeResults, setAnimeResults] = useState<Anime[]>([]);
+  const [isSearchingAnime, setIsSearchingAnime] = useState(false);
+  const [selectedAnime, setSelectedAnime] = useState<Anime | null>(null);
+  const [animeThemes, setAnimeThemes] = useState<AnimeTheme[]>([]);
+  const [isLoadingThemes, setIsLoadingThemes] = useState(false);
+  const [downloadingThemeKey, setDownloadingThemeKey] = useState<string | null>(null);
+  const animeRequestId = useRef(0);
 
   const handleDownloadClick = (e: React.MouseEvent, track: Track) => {
     e.stopPropagation();
@@ -60,6 +78,66 @@ export default function SearchPage() {
   const handleDownloadPrefetch = useCallback((track: Track) => {
     getDownloadCandidates(track).catch(() => {});
   }, []);
+
+  // ─── Anime mode handlers ───
+  const handleAnimeCardClick = useCallback(async (anime: Anime) => {
+    setSelectedAnime(anime);
+    setAnimeThemes([]);
+    setIsLoadingThemes(true);
+    const response = await getAnimeThemes(anime.id);
+    setIsLoadingThemes(false);
+    if (response.success && response.themes) {
+      setAnimeThemes(response.themes);
+    } else {
+      setAnimeThemes([]);
+      const errMsg = response.error ?? 'Unknown themes fetch error';
+      toast.error(errMsg);
+    }
+  }, []);
+
+  const handleAnimeModeToggle = useCallback(() => {
+    const trimmed = query.trim();
+    setAnimeMode(false);
+    setAnimeResults([]);
+    setSelectedAnime(null);
+    setAnimeThemes([]);
+    animeRequestId.current++;
+    if (trimmed) {
+      performSearch(trimmed);
+      refreshRecent();
+    }
+  }, [query, performSearch, refreshRecent]);
+
+  const handleBackToAnimeResults = useCallback(() => {
+    setSelectedAnime(null);
+    setAnimeThemes([]);
+  }, []);
+
+  const handleThemeDownload = useCallback(
+    (theme: AnimeTheme, animeTitle: string) => {
+      const key = `${theme.animeId}-${theme.type}-${theme.sequence}`;
+      if (downloadingThemeKey === key) return;
+      setDownloadingThemeKey(key);
+      downloadAnimeTheme(theme, animeTitle)
+        .then((response) => {
+          if (response.success) {
+            toast.success(`${animeTitle} ${theme.type} ${theme.sequence}`);
+          } else if (response.candidates && response.candidates.length > 0) {
+            toast(t('animeThemesDeadVideo'));
+          } else {
+            toast.error(response.error ?? 'Download failed');
+          }
+        })
+        .catch((error) => {
+          const message = error instanceof Error ? error.message : 'Download failed';
+          toast.error(message);
+        })
+        .finally(() => {
+          setDownloadingThemeKey((current) => (current === key ? null : current));
+        });
+    },
+    [downloadingThemeKey, t],
+  );
   const [inputFocused, setInputFocused] = useState(false);
   const { recent, remove: removeRecent, refresh: refreshRecent } = useRecentSearches();
   const loadMoreRef = useRef<HTMLDivElement>(null);
@@ -125,13 +203,56 @@ export default function SearchPage() {
       }
       return;
     }
-    if (trimmed.length < 2 || trimmed === searchQuery) return;
+    if (trimmed.length < 2) return;
+
+    // Anime mode (opt-in): if the toggle is on and the query smells like anime,
+    // call searchAnime() and render the anime grid instead of the songs grid.
+    if (animeSearchEnabled && looksAnimeLikeQuery(trimmed)) {
+      const myRequest = ++animeRequestId.current;
+      const timeout = window.setTimeout(() => {
+        if (myRequest !== animeRequestId.current) return;
+        setIsSearchingAnime(true);
+        setSelectedAnime(null);
+        setAnimeThemes([]);
+        searchAnime(trimmed, 25).then((response) => {
+          if (myRequest !== animeRequestId.current) return;
+          if (response.success && response.results) {
+            setAnimeResults(response.results);
+            setAnimeMode(true);
+          } else {
+            setAnimeResults([]);
+            setAnimeMode(true);
+            if (response.error && response.error !== 'Empty query') {
+              toast.error(t('animeEmpty'));
+            }
+          }
+        }).catch(() => {
+          if (myRequest !== animeRequestId.current) return;
+          setAnimeResults([]);
+        }).finally(() => {
+          if (myRequest !== animeRequestId.current) return;
+          setIsSearchingAnime(false);
+        });
+      }, 200);
+      return () => window.clearTimeout(timeout);
+    }
+
+    // If we were in anime mode and the user toggled it off or changed the query
+    // to no longer match, clear anime state so the badge hides.
+    if (animeMode) {
+      setAnimeMode(false);
+      setAnimeResults([]);
+      setSelectedAnime(null);
+      setAnimeThemes([]);
+    }
+
+    if (trimmed === searchQuery) return;
     const timeout = window.setTimeout(() => {
       performSearch(trimmed);
       refreshRecent();
     }, 200);
     return () => window.clearTimeout(timeout);
-  }, [query, searchQuery, performSearch, refreshRecent]);
+  }, [query, searchQuery, performSearch, refreshRecent, animeSearchEnabled, animeMode, t]);
 
   const showEmpty = !query.trim() && searchResults.length === 0 && !isSearching;
 
@@ -227,8 +348,140 @@ export default function SearchPage() {
         </p>
       )}
 
+      <AnimatePresence>
+        {animeMode && (
+          <motion.div
+            key="anime-mode"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+            className="mb-4"
+          >
+            <div className="flex items-center gap-2 mb-3 flex-wrap">
+              <AnimeModeBadge active onToggle={handleAnimeModeToggle} />
+              {query.trim() && (
+                <span className="text-[11px] text-[#555]">
+                  {t('resultsFor', { count: animeResults.length, query: query.trim() })}
+                </span>
+              )}
+            </div>
+
+            {selectedAnime ? (
+              <div className="rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] p-4 sm:p-5">
+                <button
+                  type="button"
+                  onClick={handleBackToAnimeResults}
+                  className="inline-flex items-center gap-1.5 text-[11px] text-[#999] hover:text-[#C8F04B] transition-colors mb-3"
+                >
+                  <ArrowLeft className="w-3 h-3" />
+                  {t('search')}
+                </button>
+                <div className="flex gap-4 items-start">
+                  {selectedAnime.cover ? (
+                    <img
+                      src={selectedAnime.cover}
+                      alt=""
+                      className="w-20 h-28 sm:w-28 sm:h-40 object-cover rounded-lg flex-shrink-0"
+                    />
+                  ) : (
+                    <div className="w-20 h-28 sm:w-28 sm:h-40 rounded-lg bg-[rgba(255,255,255,0.05)] flex items-center justify-center flex-shrink-0">
+                      <Tv className="w-8 h-8 text-[#666660]" />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <h2 className="text-base sm:text-lg font-semibold text-[#F5F5F0] font-[family-name:Syne]">
+                      {selectedAnime.titleEnglish || selectedAnime.titleRomaji}
+                    </h2>
+                    <p className="text-[11px] text-[#666660] mt-1">
+                      {[
+                        selectedAnime.year != null ? t('animeDetailYear', { year: selectedAnime.year }) : null,
+                        t(`animeDetailType${selectedAnime.type}` as const),
+                        selectedAnime.episodes != null
+                          ? t('animeDetailEpisodes', { n: selectedAnime.episodes })
+                          : null,
+                      ].filter(Boolean).join(' · ')}
+                    </p>
+                    {selectedAnime.synopsis ? (
+                      <p className="text-xs text-[#888] mt-2 line-clamp-4 sm:line-clamp-6">
+                        {selectedAnime.synopsis}
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="mt-5 space-y-4">
+                  {(['OP', 'ED'] as const).map((kind) => {
+                    const section = animeThemes.filter((th) => th.type === kind);
+                    if (section.length === 0) return null;
+                    return (
+                      <div key={kind}>
+                        <h3 className="text-[10px] font-mono uppercase tracking-widest text-[#666660] mb-2">
+                          {kind === 'OP' ? t('animeThemesOpening') : t('animeThemesEnding')}
+                        </h3>
+                        <div className="space-y-1.5">
+                          {section.map((theme) => {
+                            const key = `${theme.animeId}-${theme.type}-${theme.sequence}`;
+                            const downloaded = downloads.some(
+                              (d) => d.track.id === `anime-${key}` && d.status === 'completed',
+                            );
+                            return (
+                              <ThemeRow
+                                key={key}
+                                theme={theme}
+                                animeTitle={selectedAnime.titleEnglish || selectedAnime.titleRomaji}
+                                onDownload={() => handleThemeDownload(theme, selectedAnime.titleEnglish || selectedAnime.titleRomaji)}
+                                downloading={downloadingThemeKey === key}
+                                downloaded={downloaded}
+                              />
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {isLoadingThemes && (
+                    <div className="flex justify-center py-4">
+                      <Loader2 className="w-5 h-5 text-[#C8F04B] animate-spin" />
+                    </div>
+                  )}
+
+                  {!isLoadingThemes && animeThemes.length === 0 && (
+                    <p className="text-xs text-[#666660] text-center py-4">{t('animeEmpty')}</p>
+                  )}
+                </div>
+              </div>
+            ) : isSearchingAnime ? (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="rounded-xl bg-[rgba(255,255,255,0.05)] animate-pulse aspect-square"
+                  />
+                ))}
+              </div>
+            ) : animeResults.length > 0 ? (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {animeResults.map((anime) => (
+                  <AnimeCard
+                    key={anime.id}
+                    anime={anime}
+                    onClick={() => handleAnimeCardClick(anime)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <p className="text-center text-sm text-[#666660] py-8">
+                {t('animeEmpty')}
+              </p>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <AnimatePresence mode="wait">
-        {searchResults.length > 0 ? (
+        {!animeMode && searchResults.length > 0 ? (
           <>
             <motion.div
               key="results-grid"

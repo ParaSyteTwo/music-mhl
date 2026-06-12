@@ -26,6 +26,7 @@ export default function SettingsPage() {
     lyricTranslation, setLyricTranslation,
     saveLrcFile, setSaveLrcFile,
     uiLanguageMode, setUiLanguageMode,
+    animeSearchEnabled, setAnimeSearchEnabled,
   } = useMusicStore();
 
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'done' | 'skipped' | 'error'>('idle');
@@ -149,6 +150,25 @@ export default function SettingsPage() {
             ))}
           </div>
           <p className="text-xs text-[#666660] mt-3">{t('languageHelp')}</p>
+        </div>
+      </section>
+
+      {/* Búsqueda — toggle anime (off por default) */}
+      <section className="mb-8">
+        <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">{t('animeToggleTitle')}</h2>
+        <div className="p-4 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)]">
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={animeSearchEnabled}
+              onChange={(e) => setAnimeSearchEnabled(e.target.checked)}
+              className="mt-0.5"
+            />
+            <div>
+              <p className="text-sm text-[#F5F5F0]">{t('animeToggleTitle')}</p>
+              <p className="text-xs text-[#666660] mt-0.5">{t('animeToggleDescription')}</p>
+            </div>
+          </label>
         </div>
       </section>
 
