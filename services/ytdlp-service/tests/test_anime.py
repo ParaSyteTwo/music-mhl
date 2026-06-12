@@ -35,12 +35,20 @@ from modules.anime_client import (
 
 @pytest.fixture
 def allow_request(monkeypatch):
-    """Bypass auth + rate-limit in route tests (same as test_costly_routes)."""
+    """Bypass auth + rate-limit in route tests.
+
+    Both shims use a 1-arg ``(ip)`` signature to match
+    ``modules.rate_limit.check_rate_limit`` and ``modules.auth.require_service_key``
+    — using the wrong shape would silently let a real production bug
+    slip through (the route would TypeError on the real call but the
+    mock would still pass). See ``test_anime_routes_use_real_rate_limit``
+    for the explicit un-patched regression test.
+    """
     monkeypatch.setattr(anime_routes, "require_service_key", lambda _: None)
     monkeypatch.setattr(
         anime_routes,
         "check_rate_limit",
-        lambda ip, scope: (True, "", None),
+        lambda ip: (True, "", None),
     )
 
 
@@ -589,3 +597,96 @@ def test_themes_endpoint_returns_502_when_upstream_fails(
     body = response.json()
     assert body["success"] is False
     assert "animethemes 500" in body["error"]
+
+
+# ---------------------------------------------------------------------------
+# Regression: the route must call the REAL check_rate_limit, not a stub with
+# the wrong signature. Earlier the route called check_rate_limit(ip, "anime")
+# while the real function took a single (ip) argument — a 2-arg mock would
+# silently accept both shapes, hiding the bug. This test runs the real
+# function and confirms the call shape matches.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def bypass_auth_only(monkeypatch):
+    """Bypass service-key auth but keep check_rate_limit REAL (un-patched)."""
+    monkeypatch.setattr(anime_routes, "require_service_key", lambda _: None)
+
+
+@pytest.fixture
+def fresh_rate_store(monkeypatch):
+    """Reset the in-memory rate-limit store so the real function is
+    deterministic across tests."""
+    import modules.rate_limit as rl
+
+    monkeypatch.setattr(rl, "_rate_store", {})
+
+
+def test_anime_search_routes_use_real_check_rate_limit_signature(
+    bypass_auth_only, fresh_rate_store, app, monkeypatch
+):
+    """Calling the real ``check_rate_limit`` from a route must NOT raise
+    TypeError. If the route ever calls it with a wrong signature, this
+    test fails — the prior bug was that the route passed a second ``scope``
+    arg that the real function doesn't accept.
+    """
+    async def fake_search_anime(query: str, limit: int = 10):
+        return []
+
+    monkeypatch.setattr(anime_routes, "search_anime", fake_search_anime)
+    _register_routes(app)
+
+    response = TestClient(app).post("/anime/search", json={"query": "naruto"})
+
+    # If the route called the real check_rate_limit with the wrong shape,
+    # FastAPI would have returned 500 with a TypeError. Either way the
+    # response proves the real function completed without crashing.
+    assert response.status_code == 200
+    assert response.json() == {"success": True, "results": []}
+
+
+def test_anime_themes_routes_use_real_check_rate_limit_signature(
+    bypass_auth_only, fresh_rate_store, app, monkeypatch
+):
+    """Same as the search test, but for /anime/themes."""
+    async def fake_get_themes(anilist_id: int):
+        return []
+
+    monkeypatch.setattr(anime_routes, "get_anime_themes", fake_get_themes)
+    _register_routes(app)
+
+    response = TestClient(app).post("/anime/themes", json={"anilist_id": 20})
+
+    assert response.status_code == 200
+    assert response.json() == {"success": True, "themes": []}
+
+
+def test_anime_routes_observe_real_rate_limit_burst(
+    bypass_auth_only, fresh_rate_store, app, monkeypatch
+):
+    """Hammer the route and confirm the real rate limiter eventually 429s.
+
+    This exercises the *real* function with its real (ip) signature — if
+    the route called it with two args, the first call would TypeError.
+    """
+    async def fake_search_anime(query: str, limit: int = 10):
+        return []
+
+    monkeypatch.setattr(anime_routes, "search_anime", fake_search_anime)
+    _register_routes(app)
+
+    client = TestClient(app)
+    statuses = []
+    for _ in range(20):
+        r = client.post("/anime/search", json={"query": "naruto"})
+        statuses.append(r.status_code)
+        if r.status_code == 429:
+            break
+
+    # We should see at least one 429 somewhere in 20 calls (burst limit
+    # is 8 per the project's RATE_LIMIT_BURST default), proving the real
+    # function is being invoked end-to-end.
+    assert 429 in statuses, (
+        f"Expected the real rate limiter to 429 within 20 calls, got {statuses}"
+    )

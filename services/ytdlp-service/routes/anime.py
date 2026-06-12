@@ -34,13 +34,6 @@ class AnimeThemesRequest(BaseModel):
     anilist_id: int = Field(ge=1, le=2_000_000_000)
 
 
-def _enforce_rate_limit(request: Request, scope: str) -> None:
-    ok, message, retry_after = check_rate_limit(get_client_ip(request), scope)
-    if not ok:
-        headers = {"Retry-After": str(retry_after)} if retry_after else None
-        raise HTTPException(status_code=429, detail=message, headers=headers)
-
-
 def _anime_to_dict(anime: Anime) -> dict[str, Any]:
     return asdict(anime)
 
@@ -60,7 +53,10 @@ def register_anime_routes(app: FastAPI) -> None:
     ) -> dict[str, Any]:
         """Search anime metadata on AniList."""
         require_service_key(authorization)
-        _enforce_rate_limit(request, "anime")
+        ok, message, retry_after = check_rate_limit(get_client_ip(request))
+        if not ok:
+            headers = {"Retry-After": str(retry_after)} if retry_after else None
+            raise HTTPException(status_code=429, detail=message, headers=headers)
 
         query = payload.query.strip()
         if not query:
@@ -88,7 +84,10 @@ def register_anime_routes(app: FastAPI) -> None:
     ) -> dict[str, Any]:
         """Fetch OP/ED themes (with YouTube videoId) for an AniList anime."""
         require_service_key(authorization)
-        _enforce_rate_limit(request, "anime")
+        ok, message, retry_after = check_rate_limit(get_client_ip(request))
+        if not ok:
+            headers = {"Retry-After": str(retry_after)} if retry_after else None
+            raise HTTPException(status_code=429, detail=message, headers=headers)
 
         anilist_id = payload.anilist_id
         if anilist_id <= 0:
