@@ -1,0 +1,108 @@
+param(
+    [switch]$SkipFrontendBuild
+)
+
+$ErrorActionPreference = 'Stop'
+
+$desktopDir = Split-Path -Parent $PSScriptRoot
+$projectDir = Split-Path -Parent $desktopDir
+$buildDir = Join-Path $desktopDir 'build'
+$desktopDistDir = Join-Path $desktopDir 'dist'
+$appDir = Join-Path $desktopDistDir 'MHL Music'
+$exePath = Join-Path $appDir 'MHL Music.exe'
+$pythonPath = Join-Path $desktopDir '.venv\Scripts\python.exe'
+$packagePath = Join-Path $projectDir 'package.json'
+$releaseDir = Join-Path $projectDir 'release'
+
+if (-not (Test-Path -LiteralPath $pythonPath)) {
+    throw "Desktop virtual environment not found: $pythonPath"
+}
+
+$pythonVersion = & $pythonPath -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"
+if ($pythonVersion -ne '3.12') {
+    throw "Desktop portable must be built with Python 3.12, found $pythonVersion"
+}
+
+if (-not $SkipFrontendBuild) {
+    & npm --prefix $projectDir run build
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Frontend build failed'
+    }
+}
+
+foreach ($required in @(
+    (Join-Path $desktopDir 'assets\yt-dlp.exe'),
+    (Join-Path $desktopDir 'assets\ffmpeg.exe'),
+    (Join-Path $projectDir 'dist\index.html')
+)) {
+    if (-not (Test-Path -LiteralPath $required)) {
+        throw "Required build input is missing: $required"
+    }
+}
+
+if (Test-Path -LiteralPath $buildDir) {
+    Remove-Item -LiteralPath $buildDir -Recurse -Force
+}
+if (Test-Path -LiteralPath $desktopDistDir) {
+    Remove-Item -LiteralPath $desktopDistDir -Recurse -Force
+}
+
+Push-Location $desktopDir
+try {
+    & $pythonPath -m pytest -q
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Desktop tests failed'
+    }
+
+    & $pythonPath -m PyInstaller MHLMusic.spec --noconfirm --clean
+    if ($LASTEXITCODE -ne 0) {
+        throw 'PyInstaller build failed'
+    }
+} finally {
+    Pop-Location
+}
+
+foreach ($required in @(
+    $exePath,
+    (Join-Path $appDir '_internal\pythonnet\runtime\Python.Runtime.dll'),
+    (Join-Path $appDir '_internal\clr_loader\ffi\dlls\amd64\ClrLoader.dll')
+)) {
+    if (-not (Test-Path -LiteralPath $required)) {
+        throw "Portable output is incomplete: $required"
+    }
+}
+
+$process = Start-Process -FilePath $exePath -PassThru
+$started = $false
+try {
+    $deadline = (Get-Date).AddSeconds(20)
+    while ((Get-Date) -lt $deadline) {
+        Start-Sleep -Milliseconds 250
+        $process.Refresh()
+        if ($process.HasExited) {
+            throw "Portable smoke test exited with code $($process.ExitCode)"
+        }
+        if ($process.MainWindowTitle -eq 'MHL Music') {
+            $started = $true
+            break
+        }
+    }
+    if (-not $started) {
+        throw 'Portable smoke test did not open the MHL Music window'
+    }
+} finally {
+    if (-not $process.HasExited) {
+        Stop-Process -Id $process.Id -Force
+        $process.WaitForExit()
+    }
+}
+
+$version = (Get-Content -Raw -LiteralPath $packagePath | ConvertFrom-Json).version
+$zipPath = Join-Path $releaseDir "MHL-Music-Portable-$version.zip"
+New-Item -ItemType Directory -Path $releaseDir -Force | Out-Null
+if (Test-Path -LiteralPath $zipPath) {
+    Remove-Item -LiteralPath $zipPath -Force
+}
+Compress-Archive -Path (Join-Path $appDir '*') -DestinationPath $zipPath -CompressionLevel Optimal
+
+Write-Host "Portable verified: $zipPath"

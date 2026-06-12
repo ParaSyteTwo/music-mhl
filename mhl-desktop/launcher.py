@@ -54,16 +54,15 @@ class _SpaHandler(SimpleHTTPRequestHandler):
         super().end_headers()
 
 
-def _start_server():
-    server = HTTPServer(('127.0.0.1', PORT), _SpaHandler)
+def _start_server(server: HTTPServer):
     server.serve_forever()
 
 
-def _wait_for_server(timeout=10.0):
+def _wait_for_server(port: int, timeout=10.0):
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
-            with socket.create_connection(('127.0.0.1', PORT), timeout=0.3):
+            with socket.create_connection(('127.0.0.1', port), timeout=0.3):
                 return True
         except OSError:
             time.sleep(0.1)
@@ -89,17 +88,23 @@ def main():
 
     from bridge import Bridge
 
-    t = threading.Thread(target=_start_server, daemon=True)
+    try:
+        server = HTTPServer(('127.0.0.1', 0), _SpaHandler)
+    except OSError as exc:
+        _fatal(f'No se pudo iniciar el servidor interno:\n{exc}')
+
+    port = server.server_port
+    t = threading.Thread(target=_start_server, args=(server,), daemon=True)
     t.start()
 
-    if not _wait_for_server():
-        _fatal('El servidor interno no respondió. Puede que el puerto 8765 esté ocupado.')
+    if not _wait_for_server(port):
+        _fatal('El servidor interno no respondió.')
 
     bridge = Bridge()
 
     window = webview.create_window(
         title='MHL Music',
-        url=f'http://127.0.0.1:{PORT}?platform=pywebview',
+        url=f'http://127.0.0.1:{port}?platform=pywebview',
         js_api=bridge,
         width=1280,
         height=820,

@@ -43,11 +43,13 @@ memory.md
 
 # Python cache
 __pycache__/
+.pytest_cache/
 *.pyc
 *.pyo
 
 # Temp files
 .tmp-*
+.worktrees/
 
 # Claude Code
 .claude/worktrees/

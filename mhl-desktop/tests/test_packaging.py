@@ -4,20 +4,34 @@ from pathlib import Path
 DESKTOP_DIR = Path(__file__).resolve().parents[1]
 
 
-def test_pyinstaller_spec_bundles_pythonnet_runtime():
+def test_pyinstaller_spec_uses_official_pythonnet_hooks():
     spec = (DESKTOP_DIR / 'MHLMusic.spec').read_text(encoding='utf-8')
 
-    assert "collect_data_files('pythonnet'" in spec
-    assert "runtime/*.dll" in spec
-    assert "'pythonnet'" in spec
-    assert 'CLR_LOADER_BINARIES' in spec
+    assert "collect_data_files('pythonnet'" not in spec
+    assert 'collect_dynamic_libs' not in spec
+    assert "'Python.Runtime.dll'" in spec
+    assert "'ClrLoader.dll'" in spec
 
 
-def test_desktop_requirements_pin_winforms_runtime_dependencies():
+def test_desktop_requirements_pin_reproducible_versions():
     requirements = (DESKTOP_DIR / 'requirements.txt').read_text(encoding='utf-8')
 
-    assert 'pythonnet>=' in requirements
-    assert 'clr-loader>=' in requirements
+    for line in requirements.splitlines():
+        if line.strip():
+            assert '==' in line
+    assert 'pythonnet==3.0.5' in requirements
+    assert 'clr-loader==0.2.10' in requirements
+    assert 'pyinstaller==6.20.0' in requirements
+
+
+def test_portable_build_script_performs_clean_build_and_smoke_test():
+    script = (DESKTOP_DIR / 'scripts' / 'build-portable.ps1').read_text(encoding='utf-8')
+
+    assert 'Remove-Item -LiteralPath $buildDir -Recurse -Force' in script
+    assert 'Remove-Item -LiteralPath $desktopDistDir -Recurse -Force' in script
+    assert "MainWindowTitle -eq 'MHL Music'" in script
+    assert 'Compress-Archive' in script
+    assert '"MHL-Music-Portable-$version.zip"' in script
 
 
 def test_packaging_sources_do_not_pin_developer_machine_paths():

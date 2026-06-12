@@ -1,7 +1,7 @@
-pywebview>=4.4.0
-pythonnet>=3.0.5
-clr-loader>=0.2.7
-requests>=2.31.0
-yt-dlp>=2024.0.0
-pillow>=10.0.0
-pyinstaller>=6.0.0
+pywebview==6.2.1
+pythonnet==3.0.5
+clr-loader==0.2.10
+requests==2.34.2
+yt-dlp==2026.3.17
+pillow==12.2.0
+pyinstaller==6.20.0

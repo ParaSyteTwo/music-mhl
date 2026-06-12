@@ -5,22 +5,13 @@ Ejecutar desde mhl-desktop/:
     pyinstaller MHLMusic.spec --noconfirm
 El .exe resultante estará en dist/MHL Music/MHL Music.exe
 """
-import sys
 from pathlib import Path
-
-from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs, copy_metadata
 
 ROOT = Path(SPECPATH)          # mhl-desktop/
 DIST  = ROOT.parent / 'dist'  # ../dist  (React build)
 APP_ICON = ROOT.parent / 'public' / 'MHL.ico'
 
 block_cipher = None
-
-PYTHONNET_DATAS = (
-    collect_data_files('pythonnet', includes=['runtime/*.dll', 'runtime/*.json'])
-    + copy_metadata('pythonnet')
-)
-CLR_LOADER_BINARIES = collect_dynamic_libs('clr_loader')
 
 a = Analysis(
     [str(ROOT / 'launcher.py')],
@@ -29,22 +20,17 @@ a = Analysis(
         # yt-dlp y ffmpeg bundleados
         (str(ROOT / 'assets' / 'yt-dlp.exe'), 'assets'),
         (str(ROOT / 'assets' / 'ffmpeg.exe'), 'assets'),
-        *CLR_LOADER_BINARIES,
     ],
     datas=[
         # React build completo
         (str(DIST), 'dist'),
         # Ícono (embebido en el exe por PyInstaller, también disponible en assets/)
         (str(APP_ICON), 'assets'),
-        *PYTHONNET_DATAS,
     ],
     hiddenimports=[
         'webview',
         'webview.platforms.winforms',
         'clr',
-        'pythonnet',
-        'clr_loader',
-        'clr_loader.ffi',
         'requests',
     ],
     hookspath=[],
@@ -84,6 +70,6 @@ coll = COLLECT(
     a.datas,
     strip=False,
     upx=True,
-    upx_exclude=[],
+    upx_exclude=['Python.Runtime.dll', 'ClrLoader.dll'],
     name='MHL Music',
 )
