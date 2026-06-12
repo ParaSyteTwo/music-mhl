@@ -2,15 +2,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Anime, AnimeTheme } from '@/types/anime';
 
 // Hoisted mocks must be declared before importing the SUT.
-const { startDownloadWithVideoIdMock, getDownloadCandidatesMock } = vi.hoisted(() => ({
-  startDownloadWithVideoIdMock: vi.fn(),
+const { startDownloadWithSourceUrlMock, getDownloadCandidatesMock } = vi.hoisted(() => ({
+  startDownloadWithSourceUrlMock: vi.fn(),
   getDownloadCandidatesMock: vi.fn(),
 }));
 
 vi.mock('@/store/musicStore', () => ({
   useMusicStore: {
     getState: () => ({
-      startDownloadWithVideoId: startDownloadWithVideoIdMock,
+      startDownloadWithSourceUrl: startDownloadWithSourceUrlMock,
     }),
   },
 }));
@@ -40,13 +40,13 @@ const sampleAnime: Anime = {
 const sampleTheme: AnimeTheme = {
   animeId: 20,
   type: 'OP',
-  sequence: 1,
+  sequence: 2,
   title: 'Haruka Kanata',
   artist: 'Asian Kung-Fu Generation',
-  episodesFrom: 1,
-  episodesTo: 25,
-  videoId: 'dQw4w9WgXcQ',
-  videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+  episodesFrom: 26,
+  episodesTo: 53,
+  audioUrl: 'https://a.animethemes.moe/Naruto-OP2.ogg',
+  videoUrl: 'https://v.animethemes.moe/Naruto-OP2.webm',
 };
 
 function clearPlatform(): void {
@@ -56,7 +56,7 @@ function clearPlatform(): void {
   delete (window as { Capacitor?: unknown }).Capacitor;
   __animeApiTesting.clearCaches();
   vi.restoreAllMocks();
-  startDownloadWithVideoIdMock.mockReset();
+  startDownloadWithSourceUrlMock.mockReset();
   getDownloadCandidatesMock.mockReset();
 }
 
@@ -109,12 +109,42 @@ describe('searchAnime', () => {
     expect(result).toEqual({ success: true, results: [sampleAnime] });
   });
 
-  it('returns UNSUPPORTED_PLATFORM on android', async () => {
+  it('strips opening keywords before calling the desktop bridge', async () => {
+    const animeSearch = vi.fn().mockResolvedValue({ success: true, results: [sampleAnime] });
+    const animeGetThemes = vi.fn();
+    setPyWebViewPlatform({ anime_search: animeSearch, anime_get_themes: animeGetThemes });
+
+    await searchAnime('naruto opening 1');
+
+    expect(animeSearch).toHaveBeenCalledWith('naruto', 10);
+  });
+
+  it('searches AniList directly on android and strips opening keywords', async () => {
     setAndroidPlatform();
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({
+        data: {
+          Page: {
+            media: [{
+              id: 20,
+              title: { romaji: 'Naruto', english: 'Naruto', native: null },
+              coverImage: { large: 'cover.jpg' },
+              format: 'TV',
+              episodes: 220,
+              startDate: { year: 2002 },
+              description: '<b>Ninja</b> story',
+            }],
+          },
+        },
+      }), { status: 200 }),
+    );
 
-    const result = await searchAnime('naruto');
+    const result = await searchAnime('naruto opening 1');
 
-    expect(result).toEqual({ success: false, error: 'UNSUPPORTED_PLATFORM' });
+    expect(result.success).toBe(true);
+    expect(result.results?.[0]).toMatchObject({ id: 20, type: 'TV', synopsis: 'Ninja story' });
+    const body = JSON.parse(fetchMock.mock.calls[0][1]?.body as string);
+    expect(body.variables.search).toBe('naruto');
   });
 
   it('returns Unauthorized when the backend responds 401', async () => {
@@ -168,12 +198,38 @@ describe('getAnimeThemes', () => {
     expect(result).toEqual({ success: true, themes: [sampleTheme] });
   });
 
-  it('returns UNSUPPORTED_PLATFORM on android', async () => {
+  it('loads curated AnimeThemes REST metadata directly on android', async () => {
     setAndroidPlatform();
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        data: { Media: { title: { english: 'Naruto', romaji: 'Naruto' } } },
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        anime: [{ name: 'Naruto', slug: 'naruto' }],
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        anime: {
+          animethemes: [{
+            type: 'OP',
+            sequence: 2,
+            song: {
+              title: 'Haruka Kanata',
+              artists: [{ name: 'Asian Kung-Fu Generation' }],
+            },
+            animethemeentries: [{
+              episodes: '26-53',
+              videos: [{
+                link: sampleTheme.videoUrl,
+                audio: { link: sampleTheme.audioUrl },
+              }],
+            }],
+          }],
+        },
+      }), { status: 200 }));
 
     const result = await getAnimeThemes(20);
 
-    expect(result).toEqual({ success: false, error: 'UNSUPPORTED_PLATFORM' });
+    expect(result).toEqual({ success: true, themes: [sampleTheme] });
   });
 
   it.each([0, -1, Number.NaN, 1.5])(
@@ -195,22 +251,21 @@ describe('getAnimeThemes', () => {
 });
 
 describe('downloadAnimeTheme', () => {
-  it('builds a virtual track and triggers startDownloadWithVideoId', async () => {
+  it('builds a virtual track and queues the curated audio URL', async () => {
     const result = await downloadAnimeTheme(sampleTheme, 'Naruto');
 
-    expect(startDownloadWithVideoIdMock).toHaveBeenCalledTimes(1);
-    const [track, videoId] = startDownloadWithVideoIdMock.mock.calls[0];
-    expect(videoId).toBe(sampleTheme.videoId);
+    expect(startDownloadWithSourceUrlMock).toHaveBeenCalledTimes(1);
+    const [track, sourceUrl] = startDownloadWithSourceUrlMock.mock.calls[0];
+    expect(sourceUrl).toBe(sampleTheme.audioUrl);
     expect(track).toEqual({
-      id: 'anime-20-OP-1',
-      title: 'Naruto OP 1',
+      id: 'anime-20-OP-2',
+      title: 'Naruto OP 2',
       artist: sampleTheme.artist,
       album: 'Naruto',
       duration: 0,
       cover: '',
-      youtubeId: sampleTheme.videoId,
     });
     expect(result.success).toBe(true);
-    expect(result.videoId).toBe(sampleTheme.videoId);
+    expect(result.sourceUrl).toBe(sampleTheme.audioUrl);
   });
 });

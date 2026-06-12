@@ -15,6 +15,7 @@ CREATE_NO_WINDOW = 0x08000000 if sys.platform == 'win32' else 0
 import tempfile
 import threading
 from pathlib import Path
+from urllib.parse import urlparse
 
 import requests
 
@@ -52,7 +53,7 @@ def _safe(s: str) -> str:
 # síncrona con `requests` (no `httpx`) porque `requests` ya está en requirements.txt.
 
 _ANILIST_ENDPOINT = 'https://graphql.anilist.co'
-_ANIMETHEMES_ENDPOINT = 'https://api.animethemes.moe/graphql'
+_ANIMETHEMES_ENDPOINT = 'https://api.animethemes.moe'
 _ANIME_HEADERS = {
     'Content-Type': 'application/json',
     'User-Agent': 'MHLMusic/1.4.2',
@@ -66,7 +67,7 @@ query ($search: String!, $perPage: Int!) {
       id
       title { romaji english native }
       coverImage { extraLarge large color }
-      type
+      format
       episodes
       startDate { year }
       description
@@ -80,39 +81,6 @@ query ($id: Int!) {
   Media(id: $id, type: ANIME) {
     id
     title { romaji english native }
-  }
-}
-"""
-
-_ANIMETHEMES_SEARCH_QUERY = """
-query ($search: String!) {
-  search(limit: 1, page: 1, search: { name: $search }) {
-    anime { id name slug }
-  }
-}
-"""
-
-_ANIMETHEMES_THEMES_QUERY = """
-query ($id: Int!) {
-  findAnimeById(id: $id) {
-    id
-    slug
-    name
-    themes {
-      id
-      type
-      sequence
-      entries {
-        id
-        version
-        episodes { name }
-        videos {
-          id
-          basename
-          audio { id basename }
-        }
-      }
-    }
   }
 }
 """
@@ -151,6 +119,11 @@ def _anime_titles(title):
 def _anime_episode_range(entries):
     if not entries:
         return None, None
+    if isinstance(entries, str):
+        numbers = [int(value) for value in re.findall(r'\d+', entries)]
+        if not numbers:
+            return None, None
+        return min(numbers), max(numbers)
     numbers = []
     for ep in entries:
         if not isinstance(ep, dict):
@@ -167,19 +140,6 @@ def _anime_episode_range(entries):
     if not numbers:
         return None, None
     return min(numbers), max(numbers)
-
-
-def _anime_video_id(basename):
-    """animethemes almacena el basename como 'watch?v=ABC' o 'ABC'."""
-    if not basename:
-        return None
-    value = str(basename).strip()
-    if not value:
-        return None
-    if 'watch?v=' in value:
-        value = value.split('watch?v=', 1)[1]
-    value = value.split('&', 1)[0]
-    return value.strip() or None
 
 
 def _anime_graphql_post(url, query, variables):
@@ -223,7 +183,7 @@ def _anime_search(query, limit=10):
             'titleEnglish': english,
             'titleNative': native,
             'cover': _anime_cover(item.get('coverImage')),
-            'type': str(item.get('type') or 'TV'),
+            'type': str(item.get('format') or item.get('type') or 'SPECIAL'),
             'episodes': episodes,
             'year': year,
             'synopsis': _strip_html(item.get('description')),
@@ -239,22 +199,44 @@ def _anime_fetch_meta(anilist_id):
 
 
 def _anime_search_animethemes(name):
-    data = _anime_graphql_post(
-        _ANIMETHEMES_ENDPOINT, _ANIMETHEMES_SEARCH_QUERY, {'search': name}
+    response = requests.get(
+        f'{_ANIMETHEMES_ENDPOINT}/anime',
+        params={'filter[name]': name, 'page[size]': 15},
+        headers=_ANIME_HEADERS,
+        timeout=_ANIME_TIMEOUT,
     )
-    results = ((data.get('search') or {}).get('anime')) or []
+    response.raise_for_status()
+    payload = response.json()
+    results = payload.get('anime') if isinstance(payload, dict) else []
     if not results:
         return None
+    normalized_name = re.sub(r'\W+', '', name).casefold()
+    for result in results:
+        if not isinstance(result, dict):
+            continue
+        candidate = re.sub(r'\W+', '', str(result.get('name') or '')).casefold()
+        if candidate == normalized_name:
+            return result
     first = results[0]
     return first if isinstance(first, dict) else None
 
 
-def _anime_fetch_themes(anime_id):
-    data = _anime_graphql_post(
-        _ANIMETHEMES_ENDPOINT, _ANIMETHEMES_THEMES_QUERY, {'id': anime_id}
+def _anime_fetch_themes(anime_slug):
+    response = requests.get(
+        f'{_ANIMETHEMES_ENDPOINT}/anime/{anime_slug}',
+        params={
+            'include': (
+                'animethemes.song.artists,'
+                'animethemes.animethemeentries.videos.audio'
+            )
+        },
+        headers=_ANIME_HEADERS,
+        timeout=_ANIME_TIMEOUT,
     )
-    anime = data.get('findAnimeById') or {}
-    themes = anime.get('themes') or []
+    response.raise_for_status()
+    payload = response.json()
+    anime = payload.get('anime') if isinstance(payload, dict) else {}
+    themes = anime.get('animethemes') if isinstance(anime, dict) else []
     return [t for t in themes if isinstance(t, dict)]
 
 
@@ -268,7 +250,15 @@ def _anime_shape_themes(raw_themes, anilist_id):
             sequence = int(theme.get('sequence') or 0)
         except (TypeError, ValueError):
             sequence = 0
-        entries = theme.get('entries') or []
+        song = theme.get('song') or {}
+        title = str(song.get('title') or f'{theme_type} {sequence}')
+        artists = song.get('artists') or []
+        artist = ', '.join(
+            str(item.get('name')).strip()
+            for item in artists
+            if isinstance(item, dict) and item.get('name')
+        )
+        entries = theme.get('animethemeentries') or []
         for entry in entries:
             if not isinstance(entry, dict):
                 continue
@@ -276,24 +266,24 @@ def _anime_shape_themes(raw_themes, anilist_id):
             for video in videos:
                 if not isinstance(video, dict):
                     continue
-                # Sólo con audio link (audio = mirror de YouTube)
-                if not video.get('audio'):
-                    continue
-                video_id = _anime_video_id(video.get('basename'))
-                if not video_id:
+                audio = video.get('audio') or {}
+                audio_url = audio.get('link') if isinstance(audio, dict) else None
+                video_url = video.get('link')
+                if not audio_url:
                     continue
                 eps_from, eps_to = _anime_episode_range(entry.get('episodes'))
                 shaped.append({
                     'animeId': anilist_id,
                     'type': theme_type,
                     'sequence': sequence,
-                    'title': theme.get('title') or f'{theme_type} {sequence}',
-                    'artist': entry.get('version') or '',
+                    'title': title,
+                    'artist': artist,
                     'episodesFrom': eps_from,
                     'episodesTo': eps_to,
-                    'videoId': video_id,
-                    'videoUrl': f'https://www.youtube.com/watch?v={video_id}',
+                    'audioUrl': audio_url,
+                    'videoUrl': video_url,
                 })
+                break
     return shaped
 
 
@@ -312,11 +302,11 @@ def _anime_get_themes(anilist_id):
     anime_node = _anime_search_animethemes(search_name)
     if anime_node is None:
         return []
-    anime_id = anime_node.get('id')
-    if not isinstance(anime_id, int):
+    anime_slug = anime_node.get('slug')
+    if not isinstance(anime_slug, str) or not anime_slug:
         return []
 
-    raw_themes = _anime_fetch_themes(anime_id)
+    raw_themes = _anime_fetch_themes(anime_slug)
     return _anime_shape_themes(raw_themes, anilist_id)
 
 
@@ -429,6 +419,8 @@ class Bridge:
         album = track_info.get('album', '')
         duration = track_info.get('duration', 0)
         deezer_isrc = track_info.get('isrc') or ''
+        anime_search_enabled = track_info.get('animeSearchEnabled') is True
+        use_anime_queries = anime_search_enabled and self._is_anime_like(title, artist, album)
 
         # Limpiar para el query — sin feat
         clean_title = self._clean_query(title)
@@ -440,12 +432,12 @@ class Bridge:
         ]
 
         # Si parece anime, agregar queries numeradas para Opening/Ending
-        if self._is_anime_like(title, artist, album):
+        if use_anime_queries:
             queries.extend(self._build_anime_queries(clean_title, clean_artist))
 
         # Más queries en paralelo para anime
-        max_workers = 4 if self._is_anime_like(title, artist, album) else 2
-        limit_per_query = 4 if self._is_anime_like(title, artist, album) else 6
+        max_workers = 4 if use_anime_queries else 2
+        limit_per_query = 4 if use_anime_queries else 6
 
         from concurrent.futures import ThreadPoolExecutor, as_completed
         merged: dict[str, dict] = {}
@@ -889,12 +881,26 @@ class Bridge:
             except Exception:
                 pass
 
-    def get_raw_audio(self, video_id: str | None, title: str, artist: str, queries: list, audio_format: str = 'mp3', quality: str = 'alta') -> dict:
+    def get_raw_audio(
+        self,
+        video_id: str | None,
+        title: str,
+        artist: str,
+        queries: list,
+        audio_format: str = 'mp3',
+        quality: str = 'alta',
+        source_url: str | None = None,
+    ) -> dict:
         """
         Descarga audio y retorna bytes en base64 + metadata al frontend.
         El frontend escribe los ID3 tags con browser-id3-writer.
         """
-        if not video_id:
+        if source_url:
+            parsed = urlparse(source_url)
+            if parsed.scheme != 'https' or parsed.hostname != 'a.animethemes.moe':
+                return {'success': False, 'error': 'Unsupported source URL'}
+
+        if not video_id and not source_url:
             for q in queries:
                 results = self._yt_search(q, limit=5)
                 if results:
@@ -902,7 +908,7 @@ class Bridge:
                     video_id = scored[0]['videoId']
                     break
 
-        if not video_id:
+        if not video_id and not source_url:
             return {'success': False, 'error': 'No se encontró el video en YouTube'}
 
         ext = 'mp3' if audio_format == 'mp3' else 'm4a'
@@ -910,9 +916,10 @@ class Bridge:
         tmppath = os.path.join(tmpdir, f'audio.{ext}')
 
         try:
+            input_url = source_url or f'https://www.youtube.com/watch?v={video_id}'
             args = [
                 _bin('yt-dlp.exe'),
-                f'https://www.youtube.com/watch?v={video_id}',
+                input_url,
                 '-x', '--audio-format', audio_format,
                 '--audio-quality', _quality_arg(quality),
                 '-o', tmppath,
@@ -928,6 +935,17 @@ class Bridge:
                 if files:
                     result_path = str(files[0])
 
+            if (proc.returncode != 0 or not os.path.exists(result_path)) and source_url:
+                return self.get_raw_audio(
+                    None,
+                    title,
+                    artist,
+                    queries,
+                    audio_format,
+                    quality,
+                    None,
+                )
+
             if proc.returncode != 0 or not os.path.exists(result_path):
                 err_detail = (proc.stderr or '').strip()
                 return {'success': False, 'error': f'yt-dlp error {proc.returncode}: {err_detail}'}
@@ -938,6 +956,7 @@ class Bridge:
                 'success': True,
                 'data_b64': b64,
                 'videoId': video_id,
+                'sourceUrl': source_url,
                 'ext': ext,
             }
 

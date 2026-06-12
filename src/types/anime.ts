@@ -18,8 +18,8 @@ export interface AnimeTheme {
   artist: string;
   episodesFrom: number | null;
   episodesTo: number | null;
-  videoId: string;
-  videoUrl: string;
+  audioUrl: string | null;
+  videoUrl: string | null;
 }
 
 export interface AnimeSearchResult {

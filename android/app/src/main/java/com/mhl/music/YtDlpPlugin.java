@@ -36,6 +36,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.net.URI;
 
 @CapacitorPlugin(name = "YtDlp")
 public class YtDlpPlugin extends Plugin {
@@ -291,10 +292,15 @@ public class YtDlpPlugin extends Plugin {
     @PluginMethod
     public void downloadAudio(PluginCall call) {
         String videoId = call.getString("videoId");
+        String sourceUrl = call.getString("sourceUrl");
         String format = call.getString("format");
         String quality = call.getString("quality");
-        if (videoId == null || videoId.isEmpty()) {
-            call.reject("Missing videoId parameter");
+        if ((videoId == null || videoId.isEmpty()) && (sourceUrl == null || sourceUrl.isEmpty())) {
+            call.reject("Missing videoId or sourceUrl parameter");
+            return;
+        }
+        if (sourceUrl != null && !sourceUrl.isEmpty() && !isAllowedAnimeThemesAudioUrl(sourceUrl)) {
+            call.reject("Unsupported sourceUrl");
             return;
         }
 
@@ -313,7 +319,9 @@ public class YtDlpPlugin extends Plugin {
                 try {
                 ensureInitialized();
 
-                String url = "https://www.youtube.com/watch?v=" + videoId;
+                String url = sourceUrl != null && !sourceUrl.isEmpty()
+                    ? sourceUrl
+                    : "https://www.youtube.com/watch?v=" + videoId;
 
                 String fileName = "audio_" + System.currentTimeMillis() + ".mp3";
 
@@ -388,6 +396,16 @@ public class YtDlpPlugin extends Plugin {
                 bridge.getActivity().runOnUiThread(() -> call.reject("Download failed: " + e.getMessage()));
             }
         });
+    }
+
+    private static boolean isAllowedAnimeThemesAudioUrl(String sourceUrl) {
+        try {
+            URI uri = URI.create(sourceUrl);
+            return "https".equalsIgnoreCase(uri.getScheme())
+                && "a.animethemes.moe".equalsIgnoreCase(uri.getHost());
+        } catch (Exception ignored) {
+            return false;
+        }
     }
 
     // Keep old method name for compatibility

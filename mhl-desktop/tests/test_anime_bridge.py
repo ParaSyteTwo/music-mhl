@@ -14,6 +14,7 @@ tests cover the public contract:
 from __future__ import annotations
 
 import json
+from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -287,26 +288,58 @@ def test_anime_search_skips_media_without_any_title():
 # ---------------------------------------------------------------------------
 
 
-def _make_themes_post_mock(anilist_meta, animethemes_anime_list, themes_node):
-    """Build a side_effect that handles the 3 sequential POSTs.
+def _rest_themes_payload(themes_node):
+    if not themes_node:
+        return {"anime": {"animethemes": []}}
+    themes = []
+    for theme in themes_node.get("themes", []):
+        entries = []
+        for entry in theme.get("entries", []):
+            videos = []
+            for video in entry.get("videos", []):
+                basename = video.get("basename") or "theme.webm"
+                audio = video.get("audio")
+                videos.append({
+                    "link": f"https://v.animethemes.moe/{basename}",
+                    "audio": (
+                        {"link": f"https://a.animethemes.moe/{audio.get('basename')}"}
+                        if isinstance(audio, dict) and audio.get("basename")
+                        else None
+                    ),
+                })
+            entries.append({
+                "episodes": entry.get("episodes"),
+                "videos": videos,
+            })
+        themes.append({
+            "type": theme.get("type"),
+            "sequence": theme.get("sequence"),
+            "song": {
+                "title": theme.get("title") or f"{theme.get('type')} {theme.get('sequence')}",
+                "artists": theme.get("artists") or [],
+            },
+            "animethemeentries": entries,
+        })
+    return {"anime": {"animethemes": themes}}
 
-    1. AniList by id → returns ``anilist_meta``
-    2. animethemes search by name → returns ``animethemes_anime_list``
-    3. animethemes findAnimeById → returns ``themes_node``
-    """
 
-    def side_effect(url, **kwargs):
-        if url == "https://graphql.anilist.co":
-            return _mock_response(_anilist_meta_payload(anilist_meta))
-        if url == "https://api.animethemes.moe/graphql":
-            payload = kwargs.get("json") or {}
-            query = payload.get("query") or ""
-            if "findAnimeById" in query:
-                return _mock_response(_animethemes_themes_payload(themes_node))
-            return _mock_response(_animethemes_search_payload(animethemes_anime_list))
+@contextmanager
+def _mock_theme_requests(anilist_meta, animethemes_anime_list, themes_node):
+    def get_side_effect(url, **_kwargs):
+        if url == "https://api.animethemes.moe/anime":
+            return _mock_response({"anime": animethemes_anime_list})
+        if url.startswith("https://api.animethemes.moe/anime/"):
+            return _mock_response(_rest_themes_payload(themes_node))
         raise AssertionError(f"Unexpected URL: {url}")
 
-    return side_effect
+    with (
+        patch(
+            "bridge.requests.post",
+            return_value=_mock_response(_anilist_meta_payload(anilist_meta)),
+        ),
+        patch("bridge.requests.get", side_effect=get_side_effect),
+    ):
+        yield
 
 
 def test_anime_get_themes_walks_three_step_resolution_and_parses_themes():
@@ -363,10 +396,7 @@ def test_anime_get_themes_walks_three_step_resolution_and_parses_themes():
     }
 
     bridge = Bridge()
-    with patch(
-        "bridge.requests.post",
-        side_effect=_make_themes_post_mock(naruto_meta, animethemes_anime, themes_node),
-    ):
+    with _mock_theme_requests(naruto_meta, animethemes_anime, themes_node):
         result = bridge.anime_get_themes(20)
 
     assert result["success"] is True
@@ -385,27 +415,27 @@ def test_anime_get_themes_walks_three_step_resolution_and_parses_themes():
         "artist",
         "episodesFrom",
         "episodesTo",
-        "videoId",
+        "audioUrl",
         "videoUrl",
     }
     assert op1["animeId"] == 20
     assert op1["type"] == "OP"
     assert op1["sequence"] == 1
     assert op1["title"] == "OP 1"  # default fallback when theme.title is None
-    assert op1["videoId"] == "AAAA1111"
-    assert op1["videoUrl"] == "https://www.youtube.com/watch?v=AAAA1111"
+    assert op1["audioUrl"] == "https://a.animethemes.moe/watch?v=AAAA1111"
+    assert op1["videoUrl"] == "https://v.animethemes.moe/watch?v=AAAA1111"
     assert op1["episodesFrom"] == 1
     assert op1["episodesTo"] == 25
 
     assert ed1["type"] == "ED"
-    assert ed1["artist"] == "v2"
-    assert ed1["videoId"] == "BBBB2222"
+    assert ed1["artist"] == ""
+    assert ed1["audioUrl"] == "https://a.animethemes.moe/BBBB2222"
 
 
 def test_anime_get_themes_drops_videos_without_audio():
     """animethemes lists some videos as video-only (no audio mirror); skip them."""
     naruto_meta = {"id": 20, "title": {"romaji": "Naruto", "english": "Naruto"}}
-    animethemes_anime = [{"id": 1, "name": "Naruto"}]
+    animethemes_anime = [{"id": 1, "name": "Naruto", "slug": "naruto"}]
     themes_node = {
         "id": 1,
         "themes": [
@@ -435,24 +465,18 @@ def test_anime_get_themes_drops_videos_without_audio():
     }
 
     bridge = Bridge()
-    with patch(
-        "bridge.requests.post",
-        side_effect=_make_themes_post_mock(naruto_meta, animethemes_anime, themes_node),
-    ):
+    with _mock_theme_requests(naruto_meta, animethemes_anime, themes_node):
         result = bridge.anime_get_themes(20)
 
     assert result["success"] is True
     assert len(result["themes"]) == 1
-    assert result["themes"][0]["videoId"] == "LIVE1111"
+    assert result["themes"][0]["audioUrl"] == "https://a.animethemes.moe/LIVE1111"
 
 
 def test_anime_get_themes_returns_empty_list_when_anilist_id_unknown():
     """If AniList returns no Media for the id, return [] (not an error)."""
     bridge = Bridge()
-    with patch(
-        "bridge.requests.post",
-        side_effect=_make_themes_post_mock(None, [], None),
-    ):
+    with _mock_theme_requests(None, [], None):
         result = bridge.anime_get_themes(99999999)
 
     assert result == {"success": True, "themes": []}
@@ -462,10 +486,7 @@ def test_anime_get_themes_returns_empty_list_when_animethemes_lacks_match():
     """If animethemes search returns no anime, return []."""
     naruto_meta = {"id": 20, "title": {"romaji": "Obscure Anime", "english": None}}
     bridge = Bridge()
-    with patch(
-        "bridge.requests.post",
-        side_effect=_make_themes_post_mock(naruto_meta, [], None),
-    ):
+    with _mock_theme_requests(naruto_meta, [], None):
         result = bridge.anime_get_themes(20)
 
     assert result == {"success": True, "themes": []}
@@ -621,7 +642,7 @@ _TS_THEME_KEYS = {
     "artist",
     "episodesFrom",
     "episodesTo",
-    "videoId",
+    "audioUrl",
     "videoUrl",
 }
 
@@ -653,7 +674,7 @@ def test_anime_get_themes_response_shape_matches_ts_animetheme_interface():
     ``src/types/anime.ts:AnimeTheme`` exactly.
 
     Regression guard for the cross-track contract: the JS ThemeRow component
-    reads ``theme.animeId`` / ``theme.episodesFrom`` / ``theme.videoId``
+    reads ``theme.animeId`` / ``theme.episodesFrom`` / ``theme.audioUrl``
     directly. If the bridge ever emits ``anime_id`` / ``episodes_from`` /
     ``video_id`` (Python dataclass field names), the download button is
     broken. This test fails the moment a snake_case key sneaks back into the
@@ -692,15 +713,26 @@ def test_anime_get_themes_response_shape_matches_ts_animetheme_interface():
     }
 
     bridge = Bridge()
-    with patch(
-        "bridge.requests.post",
-        side_effect=_make_themes_post_mock(naruto_meta, animethemes_anime, themes_node),
-    ):
+    with _mock_theme_requests(naruto_meta, animethemes_anime, themes_node):
         result = bridge.anime_get_themes(20)
 
     assert result["success"] is True
     assert len(result["themes"]) == 1
     assert set(result["themes"][0].keys()) == _TS_THEME_KEYS
+
+
+def test_get_raw_audio_rejects_untrusted_source_url():
+    bridge = Bridge()
+
+    result = bridge.get_raw_audio(
+        None,
+        "Haruka Kanata",
+        "Asian Kung-Fu Generation",
+        ["Haruka Kanata Asian Kung-Fu Generation"],
+        source_url="https://example.com/audio.ogg",
+    )
+
+    assert result == {"success": False, "error": "Unsupported source URL"}
 
 
 if __name__ == "__main__":

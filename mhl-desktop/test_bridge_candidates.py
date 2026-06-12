@@ -62,3 +62,29 @@ def test_weak_primary_candidates_expand_search():
 
     assert len(calls) > 1
     assert len(result["candidates"]) <= 3
+
+
+def test_anime_queries_require_explicit_opt_in():
+    bridge = Bridge()
+    calls: list[str] = []
+
+    def search(query: str, _limit: int) -> list[dict]:
+        calls.append(query)
+        return [_candidate("weak", 80)]
+
+    bridge._yt_search_fast = search
+    bridge._score_smart = lambda candidate, *_args: candidate["test_score"]
+    bridge._label_fast = lambda _candidate: "song"
+
+    base_track = {
+        "title": "Naruto Opening",
+        "artist": "Artist",
+        "album": "Naruto OST",
+        "duration": 180,
+    }
+    bridge.get_candidates(base_track)
+    assert not any("Opening 1" in query for query in calls)
+
+    calls.clear()
+    bridge.get_candidates({**base_track, "animeSearchEnabled": True})
+    assert any("Opening 1" in query for query in calls)

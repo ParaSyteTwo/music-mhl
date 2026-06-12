@@ -292,6 +292,28 @@ describe('useMusicStore', () => {
       expect(getDownloadQueueDelayMs('pywebview')).toBe(0);
     });
 
+    it('keeps a curated source URL in the queued download', () => {
+      const track = {
+        id: 'anime-20-OP-2',
+        title: 'Naruto OP 2',
+        artist: 'Asian Kung-Fu Generation',
+        album: 'Naruto',
+        duration: 0,
+        cover: '',
+      };
+      useMusicStore.setState({ activeDownloads: 2, downloadQueue: [], downloads: [] });
+
+      useMusicStore.getState().startDownloadWithSourceUrl(
+        track,
+        'https://a.animethemes.moe/Naruto-OP2.ogg',
+      );
+
+      const queued = useMusicStore.getState().downloads[0];
+      expect(queued.status).toBe('queued');
+      expect(queued.sourceUrlOverride).toBe('https://a.animethemes.moe/Naruto-OP2.ogg');
+      expect(useMusicStore.getState().downloadQueue).toContain(queued.id);
+    });
+
     it('should remove download by id', () => {
       const store = useMusicStore.getState();
       const testDownload = {

@@ -110,9 +110,15 @@ interface MusicStore {
   activeDownloads: number;
   startDownload: (track: Track) => void;
   startDownloadWithVideoId: (track: Track, videoId: string) => void;
+  startDownloadWithSourceUrl: (track: Track, sourceUrl: string) => void;
   removeDownload: (id: string) => void;
   processDownloadQueue: () => Promise<void>;
-  _executeDownload: (track: Track, id: string, videoIdOverride?: string) => Promise<void>;
+  _executeDownload: (
+    track: Track,
+    id: string,
+    videoIdOverride?: string,
+    sourceUrlOverride?: string,
+  ) => Promise<void>;
 
   // Download folder (web only, not persisted across sessions)
   downloadFolder: FileSystemDirectoryHandle | null;
@@ -386,11 +392,21 @@ export const useMusicStore = create<MusicStore>()(
 
           const dl = get().downloads.find((d) => d.id === nextId);
           if (dl && dl.status === 'queued') {
-            await get()._executeDownload(dl.track, nextId);
+            await get()._executeDownload(
+              dl.track,
+              nextId,
+              dl.videoIdOverride,
+              dl.sourceUrlOverride,
+            );
           }
         },
 
-        _executeDownload: async (track: Track, id: string, videoIdOverride?: string) => {
+        _executeDownload: async (
+          track: Track,
+          id: string,
+          videoIdOverride?: string,
+          sourceUrlOverride?: string,
+        ) => {
           set((s) => ({ activeDownloads: s.activeDownloads + 1 }));
 
           const updateDl = (patch: Partial<Download>) =>
@@ -452,6 +468,7 @@ export const useMusicStore = create<MusicStore>()(
                   queries,
                   downloadFormat,
                   mp3Quality,
+                  sourceUrlOverride ?? null,
                 ),
                 supplementalDataPromise,
               ]);
@@ -527,7 +544,7 @@ export const useMusicStore = create<MusicStore>()(
               const [audioBuffer, [trackMeta, lyricsResult]] = await Promise.all([
                 downloadTrackAudio(track, (progress) => {
                   updateDl({ progress });
-                }, { format: downloadFormat, quality: mp3Quality }, videoIdOverride),
+                }, { format: downloadFormat, quality: mp3Quality }, videoIdOverride, sourceUrlOverride),
                 supplementalDataPromise,
               ]);
               updateDl({ progress: 80 });
@@ -730,6 +747,31 @@ export const useMusicStore = create<MusicStore>()(
           }
         },
 
+        startDownloadWithSourceUrl: (track, sourceUrl) => {
+          if (get().downloadWifiOnly && !isOnWifi()) {
+            toast.error(storeText(get().uiLanguageMode, 'wifiOnlyCancelled'), { duration: 4000 });
+            return;
+          }
+          const existing = get().downloads.find((d) => d.track.id === track.id);
+          if (existing && (existing.status === 'downloading' || existing.status === 'queued')) return;
+
+          const id = `d${Date.now()}`;
+          set((s) => ({
+            downloads: [...s.downloads, {
+              id,
+              track,
+              sourceUrlOverride: sourceUrl,
+              progress: 0,
+              status: 'queued' as const,
+            }],
+          }));
+          if (get().activeDownloads < 2) {
+            get()._executeDownload(track, id, undefined, sourceUrl);
+          } else {
+            set((s) => ({ downloadQueue: [...s.downloadQueue, id] }));
+          }
+        },
+
         startDownloadWithVideoId: (track, videoId) => {
           if (get().downloadWifiOnly && !isOnWifi()) {
             toast.error(storeText(get().uiLanguageMode, 'wifiOnlyCancelled'), { duration: 4000 });
@@ -740,7 +782,13 @@ export const useMusicStore = create<MusicStore>()(
 
           const id = `d${Date.now()}`;
           set((s) => ({
-            downloads: [...s.downloads, { id, track, progress: 0, status: 'queued' as const }],
+            downloads: [...s.downloads, {
+              id,
+              track,
+              videoIdOverride: videoId,
+              progress: 0,
+              status: 'queued' as const,
+            }],
           }));
           if (get().activeDownloads < 2) {
             get()._executeDownload(track, id, videoId);

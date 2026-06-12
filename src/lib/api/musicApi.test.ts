@@ -101,6 +101,31 @@ describe('musicApi request reuse', () => {
 });
 
 describe('musicApi candidate ranking', () => {
+  const animeTrack: Track = {
+    ...track,
+    title: 'Naruto Opening',
+    album: 'Naruto OST',
+  };
+
+  it('does not add anime queries unless the user enabled anime search', () => {
+    expect(__testing.buildCandidateQueries(animeTrack, false)).toEqual([
+      'naruto opening artist official audio',
+      'naruto opening artist',
+    ]);
+    expect(__testing.buildCandidateQueries(animeTrack, true)).toContain('naruto opening Opening 1');
+  });
+
+  it('keeps anime candidate caches separate from normal search caches', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => (
+      new Response(JSON.stringify({ success: true, candidates: [] }), { status: 200 })
+    ));
+
+    await getDownloadCandidates(animeTrack, false);
+    await getDownloadCandidates(animeTrack, true);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it('returns at most three unique candidates ordered by quality', () => {
     const ranked = __testing.rankDownloadCandidates(track, [
       { videoId: 'cover', title: 'Song cover', channel: 'Fan', duration: 180, score: 80 },

@@ -58,6 +58,8 @@ export interface LocalGenre {
 export interface Download {
   id: string;
   track: Track;
+  videoIdOverride?: string;
+  sourceUrlOverride?: string;
   progress: number;
   status: 'queued' | 'downloading' | 'completed' | 'error';
   error?: string;

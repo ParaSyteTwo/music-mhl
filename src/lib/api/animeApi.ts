@@ -19,7 +19,8 @@ export interface AnimeThemesResponse {
 export interface DownloadAnimeThemeResponse {
   success: boolean;
   candidates?: ReturnType<typeof getDownloadCandidates> extends Promise<infer T> ? T : never;
-  videoId?: string;
+  track?: Track;
+  sourceUrl?: string;
   error?: string;
 }
 
@@ -35,6 +36,201 @@ const searchCache = new Map<string, TimedCacheEntry<Anime[]>>();
 const searchRequests = new Map<string, Promise<AnimeSearchResponse>>();
 const themesCache = new Map<string, TimedCacheEntry<AnimeTheme[]>>();
 const themesRequests = new Map<string, Promise<AnimeThemesResponse>>();
+const ANILIST_ENDPOINT = 'https://graphql.anilist.co';
+const ANIMETHEMES_ENDPOINT = 'https://api.animethemes.moe';
+
+const ANILIST_SEARCH_QUERY = `
+query ($search: String!, $perPage: Int!) {
+  Page(perPage: $perPage) {
+    media(search: $search, type: ANIME, sort: SEARCH_MATCH) {
+      id
+      title { romaji english native }
+      coverImage { extraLarge large }
+      format
+      episodes
+      startDate { year }
+      description
+    }
+  }
+}`;
+
+const ANILIST_BY_ID_QUERY = `
+query ($id: Int!) {
+  Media(id: $id, type: ANIME) {
+    title { romaji english native }
+  }
+}`;
+
+function normalizeAnimeSearchQuery(query: string): string {
+  return query
+    .replace(/\b(anime|theme song|ost)\b/gi, ' ')
+    .replace(/\b(opening|ending|op|ed)\s*\d*\b/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim() || query.trim();
+}
+
+function stripHtml(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const text = value.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  return text || null;
+}
+
+function animeType(value: unknown): Anime['type'] {
+  return value === 'TV' || value === 'MOVIE' || value === 'OVA' || value === 'SPECIAL'
+    ? value
+    : 'SPECIAL';
+}
+
+function parseAnimeList(value: unknown): Anime[] {
+  if (!value || typeof value !== 'object') return [];
+  const page = (value as { data?: { Page?: { media?: unknown } } }).data?.Page;
+  if (!Array.isArray(page?.media)) return [];
+  return page.media.flatMap((item): Anime[] => {
+    if (!item || typeof item !== 'object') return [];
+    const media = item as {
+      id?: unknown;
+      title?: { romaji?: unknown; english?: unknown; native?: unknown };
+      coverImage?: { extraLarge?: unknown; large?: unknown };
+      format?: unknown;
+      type?: unknown;
+      episodes?: unknown;
+      startDate?: { year?: unknown };
+      description?: unknown;
+    };
+    const id = typeof media.id === 'number' ? media.id : 0;
+    const romaji = typeof media.title?.romaji === 'string'
+      ? media.title.romaji
+      : typeof media.title?.english === 'string'
+        ? media.title.english
+        : '';
+    if (!id || !romaji) return [];
+    return [{
+      id,
+      titleRomaji: romaji,
+      titleEnglish: typeof media.title?.english === 'string' ? media.title.english : null,
+      titleNative: typeof media.title?.native === 'string' ? media.title.native : null,
+      cover: typeof media.coverImage?.extraLarge === 'string'
+        ? media.coverImage.extraLarge
+        : typeof media.coverImage?.large === 'string'
+          ? media.coverImage.large
+          : '',
+      type: animeType(media.format ?? media.type),
+      episodes: typeof media.episodes === 'number' ? media.episodes : null,
+      year: typeof media.startDate?.year === 'number' ? media.startDate.year : null,
+      synopsis: stripHtml(media.description),
+    }];
+  });
+}
+
+async function postAniList(query: string, variables: Record<string, string | number>): Promise<unknown> {
+  const response = await fetch(ANILIST_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query, variables }),
+  });
+  if (!response.ok) throw new Error(`AniList HTTP ${response.status}`);
+  const payload = await response.json() as { errors?: Array<{ message?: string }> };
+  if (payload.errors?.length) throw new Error(payload.errors[0]?.message || 'AniList error');
+  return payload;
+}
+
+function parseEpisodeRange(value: unknown): [number | null, number | null] {
+  if (typeof value !== 'string') return [null, null];
+  const numbers = value.match(/\d+/g)?.map(Number).filter(Number.isFinite) ?? [];
+  if (!numbers.length) return [null, null];
+  return [Math.min(...numbers), Math.max(...numbers)];
+}
+
+function parseAnimeThemes(payload: unknown, anilistId: number): AnimeTheme[] {
+  if (!payload || typeof payload !== 'object') return [];
+  const anime = (payload as { anime?: { animethemes?: unknown } }).anime;
+  if (!Array.isArray(anime?.animethemes)) return [];
+  const results: AnimeTheme[] = [];
+  for (const rawTheme of anime.animethemes) {
+    if (!rawTheme || typeof rawTheme !== 'object') continue;
+    const theme = rawTheme as {
+      type?: unknown;
+      sequence?: unknown;
+      song?: { title?: unknown; artists?: unknown };
+      animethemeentries?: unknown;
+    };
+    if (theme.type !== 'OP' && theme.type !== 'ED') continue;
+    const sequence = typeof theme.sequence === 'number' ? theme.sequence : 0;
+    const entries = Array.isArray(theme.animethemeentries) ? theme.animethemeentries : [];
+    const artists = Array.isArray(theme.song?.artists)
+      ? theme.song.artists
+          .map((artist) => (
+            artist && typeof artist === 'object' && typeof (artist as { name?: unknown }).name === 'string'
+              ? (artist as { name: string }).name
+              : ''
+          ))
+          .filter(Boolean)
+      : [];
+    for (const rawEntry of entries) {
+      if (!rawEntry || typeof rawEntry !== 'object') continue;
+      const entry = rawEntry as { episodes?: unknown; videos?: unknown };
+      const videos = Array.isArray(entry.videos) ? entry.videos : [];
+      const video = videos.find((candidate) => candidate && typeof candidate === 'object') as
+        | { link?: unknown; audio?: { link?: unknown } }
+        | undefined;
+      const audioUrl = typeof video?.audio?.link === 'string' ? video.audio.link : null;
+      const videoUrl = typeof video?.link === 'string' ? video.link : null;
+      if (!audioUrl) continue;
+      const [episodesFrom, episodesTo] = parseEpisodeRange(entry.episodes);
+      results.push({
+        animeId: anilistId,
+        type: theme.type,
+        sequence,
+        title: typeof theme.song?.title === 'string'
+          ? theme.song.title
+          : `${theme.type} ${sequence}`,
+        artist: artists.join(', '),
+        episodesFrom,
+        episodesTo,
+        audioUrl,
+        videoUrl,
+      });
+      break;
+    }
+  }
+  return results;
+}
+
+async function getAnimeThemesDirect(anilistId: number): Promise<AnimeTheme[]> {
+  const metaPayload = await postAniList(ANILIST_BY_ID_QUERY, { id: anilistId });
+  const title = (metaPayload as {
+    data?: { Media?: { title?: { english?: unknown; romaji?: unknown } } };
+  }).data?.Media?.title;
+  const name = typeof title?.english === 'string'
+    ? title.english
+    : typeof title?.romaji === 'string'
+      ? title.romaji
+      : '';
+  if (!name) return [];
+
+  const searchUrl = new URL(`${ANIMETHEMES_ENDPOINT}/anime`);
+  searchUrl.searchParams.set('filter[name]', name);
+  searchUrl.searchParams.set('page[size]', '15');
+  const searchResponse = await fetch(searchUrl);
+  if (!searchResponse.ok) throw new Error(`AnimeThemes HTTP ${searchResponse.status}`);
+  const searchPayload = await searchResponse.json() as {
+    anime?: Array<{ name?: string; slug?: string }>;
+  };
+  const normalized = name.replace(/\W+/g, '').toLocaleLowerCase();
+  const match = searchPayload.anime?.find(
+    (item) => item.name?.replace(/\W+/g, '').toLocaleLowerCase() === normalized,
+  ) ?? searchPayload.anime?.[0];
+  if (!match?.slug) return [];
+
+  const themesUrl = new URL(`${ANIMETHEMES_ENDPOINT}/anime/${encodeURIComponent(match.slug)}`);
+  themesUrl.searchParams.set(
+    'include',
+    'animethemes.song.artists,animethemes.animethemeentries.videos.audio',
+  );
+  const themesResponse = await fetch(themesUrl);
+  if (!themesResponse.ok) throw new Error(`AnimeThemes HTTP ${themesResponse.status}`);
+  return parseAnimeThemes(await themesResponse.json(), anilistId);
+}
 
 function getCachedValue<T>(cache: Map<string, TimedCacheEntry<T>>, key: string): T | undefined {
   const entry = cache.get(key);
@@ -114,17 +310,18 @@ export async function searchAnime(
 
       if (isPyWebViewPlatform()) {
         const api = requirePyWebViewApi();
-        const data = await api.anime_search?.(normalizedQuery, limit);
+        const data = await api.anime_search?.(normalizeAnimeSearchQuery(normalizedQuery), limit);
         if (!data) throw new Error('anime_search unavailable in desktop bridge');
         if (!data.success) {
           return { success: false, error: data.error || 'Desktop anime search failed' };
         }
         results = data.results || [];
       } else if (isAndroidPlatform()) {
-        return {
-          success: false,
-          error: 'UNSUPPORTED_PLATFORM',
-        };
+        const payload = await postAniList(ANILIST_SEARCH_QUERY, {
+          search: normalizeAnimeSearchQuery(normalizedQuery),
+          perPage: Math.max(1, Math.min(limit, 25)),
+        });
+        results = parseAnimeList(payload);
       } else {
         const url = `${getRailwayUrl()}/anime/search`;
         const res = await fetch(url, {
@@ -190,10 +387,7 @@ export async function getAnimeThemes(
         }
         themes = data.themes || [];
       } else if (isAndroidPlatform()) {
-        return {
-          success: false,
-          error: 'UNSUPPORTED_PLATFORM',
-        };
+        themes = await getAnimeThemesDirect(anilistId);
       } else {
         const url = `${getRailwayUrl()}/anime/themes`;
         const res = await fetch(url, {
@@ -243,23 +437,22 @@ export async function downloadAnimeTheme(
     album: animeTitle,
     duration: 0,
     cover: '',
-    youtubeId: theme.videoId,
   };
 
   try {
-    useMusicStore.getState().startDownloadWithVideoId(virtualTrack, theme.videoId);
-    return { success: true, videoId: theme.videoId };
+    if (theme.audioUrl) {
+      useMusicStore.getState().startDownloadWithSourceUrl(virtualTrack, theme.audioUrl);
+      return { success: true, sourceUrl: theme.audioUrl };
+    }
+    const candidates = await getDownloadCandidates(virtualTrack, true);
+    return {
+      success: false,
+      error: 'CURATED_AUDIO_UNAVAILABLE',
+      candidates,
+      track: virtualTrack,
+    };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Download failed';
-    if (!/dead|unavailable|forbidden|not found|404|410/i.test(message)) {
-      return { success: false, error: message };
-    }
-    try {
-      const candidates = await getDownloadCandidates(virtualTrack);
-      return { success: false, error: message, candidates };
-    } catch (fallbackError) {
-      const fallbackMessage = fallbackError instanceof Error ? fallbackError.message : 'Fallback failed';
-      return { success: false, error: `${message}; ${fallbackMessage}` };
-    }
+    return { success: false, error: message };
   }
 }

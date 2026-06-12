@@ -43,6 +43,18 @@ explícitamente.
 
 ## Stack & Constraints
 
+## Anime Search Activation Contract
+
+- El modo anime está desactivado por defecto.
+- Nunca se habilita automáticamente por una búsqueda, reproducción, artista o
+  heurística de supuesto interés.
+- El usuario debe activarlo explícitamente desde Ajustes. La elección se
+  persiste.
+- Las heurísticas `anime-feel` sólo pueden cambiar el tipo de resultados cuando
+  ese ajuste ya está habilitado.
+- Una query ambigua nunca debe alterar la búsqueda musical normal de un usuario
+  que no haya optado por la feature.
+
 | Plataforma | Estado | Technology | Notes |
 |-----------|--------|-----------|-------|
 | **Desktop** | ✅ ACTIVA | pywebview + PyInstaller | yt-dlp.exe y ffmpeg.exe bundleados. **Target principal de release.** |

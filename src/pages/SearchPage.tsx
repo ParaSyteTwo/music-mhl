@@ -68,6 +68,7 @@ export default function SearchPage() {
   const [isLoadingThemes, setIsLoadingThemes] = useState(false);
   const [downloadingThemeKey, setDownloadingThemeKey] = useState<string | null>(null);
   const animeRequestId = useRef(0);
+  const themesRequestId = useRef(0);
 
   const handleDownloadClick = (e: React.MouseEvent, track: Track) => {
     e.stopPropagation();
@@ -81,10 +82,12 @@ export default function SearchPage() {
 
   // ─── Anime mode handlers ───
   const handleAnimeCardClick = useCallback(async (anime: Anime) => {
+    const requestId = ++themesRequestId.current;
     setSelectedAnime(anime);
     setAnimeThemes([]);
     setIsLoadingThemes(true);
     const response = await getAnimeThemes(anime.id);
+    if (requestId !== themesRequestId.current) return;
     setIsLoadingThemes(false);
     if (response.success && response.themes) {
       setAnimeThemes(response.themes);
@@ -101,6 +104,7 @@ export default function SearchPage() {
     setAnimeResults([]);
     setSelectedAnime(null);
     setAnimeThemes([]);
+    themesRequestId.current++;
     animeRequestId.current++;
     if (trimmed) {
       performSearch(trimmed);
@@ -124,6 +128,7 @@ export default function SearchPage() {
             toast.success(`${animeTitle} ${theme.type} ${theme.sequence}`);
           } else if (response.candidates && response.candidates.length > 0) {
             toast(t('animeThemesDeadVideo'));
+            if (response.track) setPickerTrack(response.track);
           } else {
             toast.error(response.error ?? 'Download failed');
           }
@@ -195,6 +200,14 @@ export default function SearchPage() {
   useEffect(() => {
     const trimmed = query.trim();
     if (!trimmed) {
+      animeRequestId.current++;
+      themesRequestId.current++;
+      setAnimeMode(false);
+      setAnimeResults([]);
+      setSelectedAnime(null);
+      setAnimeThemes([]);
+      setIsSearchingAnime(false);
+      setIsLoadingThemes(false);
       if (searchQuery) {
         const timeout = window.setTimeout(() => {
           performSearch('');

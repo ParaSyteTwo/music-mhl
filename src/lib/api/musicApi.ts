@@ -422,14 +422,18 @@ function getPreferredAlbumName(track: Track): string {
   return track.canonicalAlbum?.trim() || track.album;
 }
 
-function buildCandidateQueries(track: Track): string[] {
+function shouldUseAnimeEnhancements(track: Track, animeSearchEnabled: boolean): boolean {
+  return animeSearchEnabled && looksAnimeLike(track);
+}
+
+function buildCandidateQueries(track: Track, animeSearchEnabled: boolean): string[] {
   const title = normalizeSearchTerm(getPreferredTrackTitle(track));
   const artist = normalizeSearchTerm(track.artist);
   const queries = [
     `${title} ${artist} official audio`,
     `${title} ${artist}`,
   ];
-  if (looksAnimeLike(track)) {
+  if (shouldUseAnimeEnhancements(track, animeSearchEnabled)) {
     const album = normalizeSearchTerm(getPreferredAlbumName(track));
     queries.push(`${title} full`);
     if (album && album !== title) queries.push(`${title} ${album}`);
@@ -470,6 +474,7 @@ function scoreNativeCandidate(
   track: Track,
   candidate: Pick<DownloadCandidate, 'title' | 'channel' | 'duration'>,
   queryIndex: number,
+  animeSearchEnabled: boolean,
 ): number {
   const title = candidate.title.toLowerCase();
   const normalizedTitle = normalizeSearchTerm(candidate.title);
@@ -506,7 +511,11 @@ function scoreNativeCandidate(
   if (title.includes('audio only')) score += 20;
   if (channel.includes('topic')) score += 14;
   if (channel.includes('official')) score += 10;
-  if (/(opening|ending|\bop\b|\bed\b|full version)/.test(title) && looksAnimeLike(track)) score += 15;
+  if (
+    animeSearchEnabled &&
+    /(opening|ending|\bop\b|\bed\b|full version)/.test(title) &&
+    looksAnimeLike(track)
+  ) score += 15;
   if (/(lyrics|lyric video|sub esp|sub english|subbed)/.test(title)) score -= 18;
   if (/(karaoke|reaction|nightcore|sped up|slowed|8d|amv|edit)/.test(title)) score -= 35;
   if (/(instrumental|extended|extended mix)/.test(title)) score -= 25;
@@ -527,11 +536,12 @@ function confidenceFromScore(score: number): 'alta' | 'media' | 'baja' {
 function rankDownloadCandidates(
   track: Track,
   candidates: DownloadCandidate[],
+  animeSearchEnabled = false,
 ): DownloadCandidate[] {
   const merged = new Map<string, DownloadCandidate>();
   for (const candidate of candidates) {
     if (!candidate.videoId) continue;
-    const localScore = scoreNativeCandidate(track, candidate, 0);
+    const localScore = scoreNativeCandidate(track, candidate, 0, animeSearchEnabled);
     const score = candidate.score >= 1000 ? candidate.score : localScore;
     const normalized: DownloadCandidate = {
       ...candidate,
@@ -556,8 +566,9 @@ function shouldExpandCandidateSearch(candidates: DownloadCandidate[]): boolean {
 // ─── Get YouTube candidates for user selection ───
 async function fetchDownloadCandidates(
   track: Track,
+  animeSearchEnabled: boolean,
 ): Promise<DownloadCandidate[]> {
-  const cacheKey = `${track.deezerId ?? track.id}|${getPreferredTrackTitle(track)}|${track.artist}|${getPreferredAlbumName(track)}`;
+  const cacheKey = `${track.deezerId ?? track.id}|${getPreferredTrackTitle(track)}|${track.artist}|${getPreferredAlbumName(track)}|anime:${animeSearchEnabled}`;
   const cached = getCachedValue(candidateCache, cacheKey);
   if (cached) return cached;
 
@@ -565,7 +576,7 @@ async function fetchDownloadCandidates(
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const api = (window as any).pywebview.api;
-      const queries = buildCandidateQueries(track);
+      const queries = buildCandidateQueries(track, animeSearchEnabled);
       const result = await api.get_candidates({
         title: getPreferredTrackTitle(track),
         artist: track.artist,
@@ -573,9 +584,14 @@ async function fetchDownloadCandidates(
         duration: track.duration ?? 0,
         isrc: track.isrc || '',
         queries,
+        animeSearchEnabled,
       });
       if (!result.success) throw new Error(result.error || 'Error obteniendo candidatos');
-      const finalCandidates = rankDownloadCandidates(track, result.candidates as DownloadCandidate[]);
+      const finalCandidates = rankDownloadCandidates(
+        track,
+        result.candidates as DownloadCandidate[],
+        animeSearchEnabled,
+      );
       setCachedValue(candidateCache, cacheKey, finalCandidates, finalCandidates.length > 0 ? CANDIDATE_CACHE_TTL_MS : EMPTY_CANDIDATE_CACHE_TTL_MS, CANDIDATE_CACHE_MAX_ENTRIES);
       return finalCandidates;
     } catch (err) {
@@ -587,9 +603,9 @@ async function fetchDownloadCandidates(
   if (Capacitor.isNativePlatform()) {
     try {
       const { searchYouTubeNative, searchYouTubeNativeMulti } = await import('@/lib/ytdlpBridge');
-      const queries = buildCandidateQueries(track);
+      const queries = buildCandidateQueries(track, animeSearchEnabled);
       // Más queries para anime (Opening/Ending numerados)
-      const maxQueries = looksAnimeLike(track) ? 8 : 4;
+      const maxQueries = shouldUseAnimeEnhancements(track, animeSearchEnabled) ? 8 : 4;
       const primaryResults = await withTimeout(searchYouTubeNative(queries[0]), 20000).catch(() => []);
       const merged = new Map<string, DownloadCandidate>();
       const addResults = (
@@ -597,7 +613,7 @@ async function fetchDownloadCandidates(
         queryIndex: number,
       ) => {
         for (const result of results) {
-          const score = scoreNativeCandidate(track, result, queryIndex);
+          const score = scoreNativeCandidate(track, result, queryIndex, animeSearchEnabled);
           const candidate: DownloadCandidate = {
             videoId: result.videoId,
             title: result.title,
@@ -612,14 +628,14 @@ async function fetchDownloadCandidates(
         }
       };
       addResults(primaryResults, 0);
-      let finalCandidates = rankDownloadCandidates(track, [...merged.values()]);
+      let finalCandidates = rankDownloadCandidates(track, [...merged.values()], animeSearchEnabled);
       if (shouldExpandCandidateSearch(finalCandidates)) {
         const extraResults = await withTimeout(
           searchYouTubeNativeMulti(queries.slice(1, maxQueries)),
           35000,
         ).catch(() => []);
         addResults(extraResults, 1);
-        finalCandidates = rankDownloadCandidates(track, [...merged.values()]);
+        finalCandidates = rankDownloadCandidates(track, [...merged.values()], animeSearchEnabled);
       }
       setCachedValue(candidateCache, cacheKey, finalCandidates, finalCandidates.length > 0 ? CANDIDATE_CACHE_TTL_MS : EMPTY_CANDIDATE_CACHE_TTL_MS, CANDIDATE_CACHE_MAX_ENTRIES);
       return finalCandidates;
@@ -646,21 +662,28 @@ async function fetchDownloadCandidates(
   }
   const data = await res.json();
   if (!data.success) throw new Error(data.error || data.detail || 'Sin candidatos');
-  const finalCandidates = rankDownloadCandidates(track, data.candidates as DownloadCandidate[]);
+  const finalCandidates = rankDownloadCandidates(
+    track,
+    data.candidates as DownloadCandidate[],
+    animeSearchEnabled,
+  );
   setCachedValue(candidateCache, cacheKey, finalCandidates, finalCandidates.length > 0 ? CANDIDATE_CACHE_TTL_MS : EMPTY_CANDIDATE_CACHE_TTL_MS, CANDIDATE_CACHE_MAX_ENTRIES);
   return finalCandidates;
 }
 
-export async function getDownloadCandidates(track: Track): Promise<DownloadCandidate[]> {
+export async function getDownloadCandidates(
+  track: Track,
+  animeSearchEnabled = useMusicStore.getState().animeSearchEnabled,
+): Promise<DownloadCandidate[]> {
   try {
-    const cacheKey = `${track.deezerId ?? track.id}|${getPreferredTrackTitle(track)}|${track.artist}|${getPreferredAlbumName(track)}`;
+    const cacheKey = `${track.deezerId ?? track.id}|${getPreferredTrackTitle(track)}|${track.artist}|${getPreferredAlbumName(track)}|anime:${animeSearchEnabled}`;
     const cached = getCachedValue(candidateCache, cacheKey);
     if (cached) return cached;
 
     const pending = candidateRequests.get(cacheKey);
     if (pending) return pending;
 
-    const request = fetchDownloadCandidates(track).finally(() => {
+    const request = fetchDownloadCandidates(track, animeSearchEnabled).finally(() => {
       candidateRequests.delete(cacheKey);
     });
     candidateRequests.set(cacheKey, request);
@@ -689,13 +712,15 @@ export async function downloadTrackAudio(
   onProgress?: (progress: number) => void,
   options: DownloadOptions = {},
   videoIdOverride?: string,
+  sourceUrlOverride?: string,
 ): Promise<ArrayBuffer> {
   if (isRunningInPyWebView()) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const api = (window as any).pywebview.api;
     const title = getPreferredTrackTitle(track);
     const artist = track.artist;
-    const queries = buildCandidateQueries(track);
+    const animeSearchEnabled = useMusicStore.getState().animeSearchEnabled;
+    const queries = buildCandidateQueries(track, animeSearchEnabled);
     onProgress?.(10);
     const result = await api.get_raw_audio(
       videoIdOverride ?? null,
@@ -704,6 +729,7 @@ export async function downloadTrackAudio(
       queries,
       options.format ?? 'mp3',
       options.quality ?? 'alta',
+      sourceUrlOverride ?? null,
     );
     if (!result.success) throw new Error(result.error || 'Error descargando audio');
     onProgress?.(85);
@@ -716,6 +742,19 @@ export async function downloadTrackAudio(
 
   if (Capacitor.isNativePlatform()) {
     const { downloadMp3Native } = await import('@/lib/ytdlpBridge');
+
+    if (sourceUrlOverride) {
+      onProgress?.(10);
+      try {
+        return await downloadMp3Native(null, {
+          format: options.format,
+          quality: options.quality,
+          sourceUrl: sourceUrlOverride,
+        });
+      } catch {
+        // La fuente curada puede estar temporalmente caída; usar YouTube como respaldo.
+      }
+    }
 
     if (videoIdOverride) {
       onProgress?.(10);
@@ -964,6 +1003,7 @@ async function _combineLyrics(
 
 export const __testing = {
   combineLyrics: _combineLyrics,
+  buildCandidateQueries,
   rankDownloadCandidates,
   shouldExpandCandidateSearch,
   getCacheSizes: () => ({
