@@ -1,5 +1,26 @@
 # Changelog
 
+## v1.4.2 - 2026-06-11
+
+### 🎌 Búsqueda de anime (OP/ED)
+
+- Nueva sección "Búsqueda" en Ajustes (toggle **off** por defecto) que activa el modo anime en SearchPage.
+- Cuando la query matchea heurísticas anime (palabras como "anime", "opening", "ending", o termina en `OP 1`, `ED 2`, etc.), SearchPage muestra tarjetas de anime con cover, título, año, tipo y episodios.
+- Click en una tarjeta lista los OP/ED del anime con su videoId de YouTube.
+- Click en un tema descarga vía `startDownloadWithVideoId` del store; si el video está muerto, fallback al picker de candidatos existente.
+- i18n completo en `es` y `en` (`animeModeActive`, `animeToggleTitle`, `animeThemesDownload`, etc.).
+- Desktop (pywebview): nuevos métodos `bridge.anime_search` y `bridge.anime_get_themes` que llaman directo a AniList y animethemes.moe desde Python (sin backend). Respuesta en camelCase para coincidir con la interface TS.
+
+### 📐 Arquitectura
+
+- Alcance del proyecto actualizado: **solo Desktop (pywebview) + Android (Capacitor)**. La web/PWA está fuera de scope — la IP del servidor de Google rechaza el tráfico de yt-dlp. `AGENTS.md` y `TECH_DESIGN.md` documentan el cambio.
+- Backend FastAPI `services/ytdlp-service/` queda como código legacy — no se despliega, no se verifica en releases.
+
+### 🔧 Compatibilidad
+
+- `versionCode` incrementado a `16`.
+- Esta es la primera release estable tras 1.4.1 (que rompió la cuarentena de 7 días de 1.4.0). Desde esta release, las versiones estables futuras son inmediatas.
+
 ## v1.4.1 - 2026-06-10
 
 ### 📱 Canales de actualización

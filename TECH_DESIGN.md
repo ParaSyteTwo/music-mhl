@@ -1,12 +1,34 @@
 # Technical Design Document
 > Project: MHL Music
-> Stack: Multi-platform (React/Vite + FastAPI + pywebview + Capacitor)
-> Version: 2.0
-> Last updated: 2026-06-10
+> Stack: Multi-platform (React/Vite + pywebview + Capacitor) — **Web FUERA de scope desde 2026-06-11**
+> Version: 2.1
+> Last updated: 2026-06-11
+
+> ## ⚠️ CAMBIO DE ALCANCE — 2026-06-11
+>
+> **Plataformas activas: SOLO Desktop (pywebview) y Android (Capacitor).**
+> La web/PWA está **fuera de scope**. El usuario la abandonó porque la IP del
+> servidor de Google rechaza el tráfico de yt-dlp y la experiencia no
+> funciona. Todo código bajo `src/` que tenga un branch `web` en su switch
+> de plataforma es **código muerto en producción** — mantenlo compilando,
+> pero no inviertas tiempo en él.
+>
+> El backend FastAPI en `services/ytdlp-service/` **ya no se despliega**.
+> El Desktop llama directo a las APIs externas (AniList, animethemes, etc.)
+> desde Python. Si una feature nueva necesita lógica compartida, ponla en
+> `mhl-desktop/bridge.py` o en el plugin nativo Android — no en FastAPI.
+>
+> **Implicaciones para planes / SDD / docs nuevos:**
+> - Marcar "Alcance: Desktop + Android" al inicio de cualquier plan.
+> - No incluir "web" en verificaciones de release ni checklists de QA.
+> - Los tests de paths web en `src/lib/api/*.test.ts` se mantienen
+>   (compilan, no molestan) pero su fallo no es un blocker.
+> - Los tests de `services/ytdlp-service/` se mantienen (código vivo) pero
+>   no son parte de la release de usuario.
 
 ## 1. Tech Stack
 
-### Frontend (compartido entre Web, PWA, Desktop)
+### Frontend (compartido entre Desktop y Android)
 
 | Layer | Technology | Version |
 |-------|-----------|---------|
@@ -17,17 +39,16 @@
 | State | Zustand | 5.0+ |
 | Styling | TailwindCSS | 3.4+ |
 | Animations | Framer Motion | latest |
-| PWA | vite-plugin-pwa | latest |
 | Testing | Vitest + Playwright | latest |
 
-### Backend (Fly.io — solo para Web/PWA)
+### Backend FastAPI (legado — NO se despliega desde 1.4.2)
 
 | Layer | Technology | Version |
 |-------|-----------|---------|
 | Framework | FastAPI | 0.110+ |
 | Language | Python | 3.11+ |
 | Audio | yt-dlp | latest |
-| Deployment | Fly.io (Docker) | - |
+| Deployment | ~~Fly.io~~ (decommissioned) | - |
 
 ### Android (ya funciona — no tocar)
 
