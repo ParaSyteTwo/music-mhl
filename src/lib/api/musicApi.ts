@@ -1,8 +1,11 @@
 import { Track } from '@/types/music';
 import { Capacitor } from '@capacitor/core';
 import { useMusicStore } from '@/store/musicStore';
+import type { Anime, AnimeTheme } from '@/types/anime';
 
 interface PyWebViewApi {
+  anime_search?: (query: string, limit: number) => Promise<{ success: boolean; error?: string; results?: Anime[] }>
+  anime_get_themes?: (anilistId: number) => Promise<{ success: boolean; error?: string; themes?: AnimeTheme[] }>
   deezer_search?: (query: string, limit: number, index: number) => Promise<unknown>
   deezer_track?: (trackId: string) => Promise<unknown>
   deezer_album?: (albumId: string) => Promise<unknown>
@@ -90,15 +93,28 @@ function isNativeApp(): boolean {
   return Capacitor.isNativePlatform() || isRunningInPyWebView();
 }
 
-function getRailwayUrl(): string {
+export class DesktopBridgeUnavailableError extends Error {
+  constructor() {
+    super('PyWebView desktop bridge is unavailable');
+    this.name = 'DesktopBridgeUnavailableError';
+  }
+}
+
+export function requirePyWebViewApi(): PyWebViewApi {
+  const api = (typeof window === 'undefined' ? undefined : (window as PyWebViewWindow).pywebview?.api);
+  if (!api) throw new DesktopBridgeUnavailableError();
+  return api;
+}
+
+export function getRailwayUrl(): string {
   return (import.meta.env.VITE_RAILWAY_URL as string | undefined)?.replace(/\/$/, '') ?? '';
 }
 
-function getRailwayKey(): string {
+export function getRailwayKey(): string {
   return (import.meta.env.VITE_SERVICE_API_KEY as string | undefined) ?? '';
 }
 
-function railwayHeaders(): HeadersInit {
+export function railwayHeaders(): HeadersInit {
   return {
     'Content-Type': 'application/json',
     'Authorization': `Bearer ${getRailwayKey()}`,
