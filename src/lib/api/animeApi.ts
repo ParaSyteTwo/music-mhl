@@ -166,6 +166,10 @@ export async function searchAnime(
 export async function getAnimeThemes(
   anilistId: number,
 ): Promise<AnimeThemesResponse> {
+  if (!Number.isInteger(anilistId) || anilistId <= 0) {
+    return { success: false, error: 'Invalid anilistId' };
+  }
+
   const cacheKey = String(anilistId);
   const cached = getCachedValue(themesCache, cacheKey);
   if (cached) return { success: true, themes: cached };

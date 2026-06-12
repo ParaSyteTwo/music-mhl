@@ -175,6 +175,23 @@ describe('getAnimeThemes', () => {
 
     expect(result).toEqual({ success: false, error: 'UNSUPPORTED_PLATFORM' });
   });
+
+  it.each([0, -1, Number.NaN, 1.5])(
+    'rejects invalid anilistId %s without calling fetch or the bridge',
+    async (badId) => {
+      const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        new Response('{}', { status: 200 }),
+      );
+      const animeGetThemes = vi.fn();
+      setPyWebViewPlatform({ anime_search: vi.fn(), anime_get_themes: animeGetThemes });
+
+      const result = await getAnimeThemes(badId);
+
+      expect(result).toEqual({ success: false, error: 'Invalid anilistId' });
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(animeGetThemes).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe('downloadAnimeTheme', () => {
