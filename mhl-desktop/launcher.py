@@ -103,7 +103,7 @@ def main():
     bridge = Bridge()
 
     window = webview.create_window(
-        title='MHL Music',
+        title='MHL Music - Cargando',
         url=f'http://127.0.0.1:{port}?platform=pywebview',
         js_api=bridge,
         width=1280,

@@ -1,6 +1,5 @@
 import { Track } from '@/types/music';
 import type { Anime, AnimeTheme } from '@/types/anime';
-import { useMusicStore } from '@/store/musicStore';
 import { getDownloadCandidates } from '@/lib/api/musicApi';
 import { requirePyWebViewApi, getRailwayUrl, railwayHeaders } from '@/lib/api/musicApi';
 
@@ -441,8 +440,7 @@ export async function downloadAnimeTheme(
 
   try {
     if (theme.audioUrl) {
-      useMusicStore.getState().startDownloadWithSourceUrl(virtualTrack, theme.audioUrl);
-      return { success: true, sourceUrl: theme.audioUrl };
+      return { success: true, sourceUrl: theme.audioUrl, track: virtualTrack };
     }
     const candidates = await getDownloadCandidates(virtualTrack, true);
     return {

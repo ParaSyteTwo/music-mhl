@@ -56,7 +56,7 @@ _ANILIST_ENDPOINT = 'https://graphql.anilist.co'
 _ANIMETHEMES_ENDPOINT = 'https://api.animethemes.moe'
 _ANIME_HEADERS = {
     'Content-Type': 'application/json',
-    'User-Agent': 'MHLMusic/1.4.2',
+    'User-Agent': 'MHLMusic/1.4.3',
 }
 _ANIME_TIMEOUT = 10
 
@@ -990,6 +990,14 @@ class Bridge:
 
     def save_setting(self, key: str, value) -> dict:
         settings.set(key, value)
+        return {'success': True}
+
+    def frontend_ready(self) -> dict:
+        """Marca la ventana como lista solo después de que React haya montado."""
+        window = getattr(self, '_window', None)
+        if window is None:
+            return {'success': False}
+        window.set_title('MHL Music')
         return {'success': True}
 
     # ── Filesystem helpers ────────────────────────────────────────────────────

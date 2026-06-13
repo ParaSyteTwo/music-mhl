@@ -51,6 +51,7 @@ export default function SearchPage() {
     currentTrack,
     isPlaying,
     startDownloadWithVideoId,
+    startDownloadWithSourceUrl,
     downloads,
     mostDownloadedArtists,
     animeSearchEnabled,
@@ -58,6 +59,7 @@ export default function SearchPage() {
 
   const [query, setQuery] = useState(searchQuery);
   const [pickerTrack, setPickerTrack] = useState<Track | null>(null);
+  const { recent, remove: removeRecent, refresh: refreshRecent } = useRecentSearches();
 
   // ─── Anime mode state ───
   const [animeMode, setAnimeMode] = useState(false);
@@ -77,8 +79,8 @@ export default function SearchPage() {
   };
 
   const handleDownloadPrefetch = useCallback((track: Track) => {
-    getDownloadCandidates(track).catch(() => {});
-  }, []);
+    getDownloadCandidates(track, animeSearchEnabled).catch(() => {});
+  }, [animeSearchEnabled]);
 
   // ─── Anime mode handlers ───
   const handleAnimeCardClick = useCallback(async (anime: Anime) => {
@@ -124,7 +126,8 @@ export default function SearchPage() {
       setDownloadingThemeKey(key);
       downloadAnimeTheme(theme, animeTitle)
         .then((response) => {
-          if (response.success) {
+          if (response.success && response.sourceUrl && response.track) {
+            startDownloadWithSourceUrl(response.track, response.sourceUrl);
             toast.success(`${animeTitle} ${theme.type} ${theme.sequence}`);
           } else if (response.candidates && response.candidates.length > 0) {
             toast(t('animeThemesDeadVideo'));
@@ -141,10 +144,9 @@ export default function SearchPage() {
           setDownloadingThemeKey((current) => (current === key ? null : current));
         });
     },
-    [downloadingThemeKey, t],
+    [downloadingThemeKey, startDownloadWithSourceUrl, t],
   );
   const [inputFocused, setInputFocused] = useState(false);
-  const { recent, remove: removeRecent, refresh: refreshRecent } = useRecentSearches();
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
   const suggestedSearches = useMemo(
@@ -692,9 +694,10 @@ export default function SearchPage() {
 
       <AnimatePresence>
         {pickerTrack && (
-          <CandidatePicker
-            track={pickerTrack}
-            onClose={() => setPickerTrack(null)}
+      <CandidatePicker
+        track={pickerTrack}
+        animeSearchEnabled={animeSearchEnabled}
+        onClose={() => setPickerTrack(null)}
             onSelect={(videoId) => {
               startDownloadWithVideoId(pickerTrack, videoId);
               setPickerTrack(null);

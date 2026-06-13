@@ -1,6 +1,5 @@
 import { Track } from '@/types/music';
 import { Capacitor } from '@capacitor/core';
-import { useMusicStore } from '@/store/musicStore';
 import type { Anime, AnimeTheme } from '@/types/anime';
 import { looksAnimeLike } from '@/lib/util/animeDetector';
 
@@ -356,9 +355,10 @@ export interface DownloadCandidate {
   confidence?: 'alta' | 'media' | 'baja';
 }
 
-interface DownloadOptions {
+export interface DownloadOptions {
   format?: 'mp3' | 'aac';
   quality?: 'alta' | 'media' | 'baja';
+  animeSearchEnabled?: boolean;
 }
 
 interface TimedCacheEntry<T> {
@@ -673,7 +673,7 @@ async function fetchDownloadCandidates(
 
 export async function getDownloadCandidates(
   track: Track,
-  animeSearchEnabled = useMusicStore.getState().animeSearchEnabled,
+  animeSearchEnabled = false,
 ): Promise<DownloadCandidate[]> {
   try {
     const cacheKey = `${track.deezerId ?? track.id}|${getPreferredTrackTitle(track)}|${track.artist}|${getPreferredAlbumName(track)}|anime:${animeSearchEnabled}`;
@@ -719,7 +719,7 @@ export async function downloadTrackAudio(
     const api = (window as any).pywebview.api;
     const title = getPreferredTrackTitle(track);
     const artist = track.artist;
-    const animeSearchEnabled = useMusicStore.getState().animeSearchEnabled;
+    const animeSearchEnabled = options.animeSearchEnabled ?? false;
     const queries = buildCandidateQueries(track, animeSearchEnabled);
     onProgress?.(10);
     const result = await api.get_raw_audio(
@@ -764,7 +764,7 @@ export async function downloadTrackAudio(
     onProgress?.(10);
 
     // Reutiliza el ranking escalonado y la caché del picker.
-    const scored = await getDownloadCandidates(track);
+    const scored = await getDownloadCandidates(track, options.animeSearchEnabled ?? false);
     if (!scored.length) throw new Error('No se encontró en YouTube');
 
     onProgress?.(25);
@@ -786,7 +786,6 @@ export async function downloadTrackAudio(
           try {
             const { updateYtDlp } = await import('@/lib/ytdlpBridge');
             await updateYtDlp();
-            useMusicStore.getState().setYtDlpUpdateAvailable(false);
           } catch { /* update failure is non-fatal */ }
         }
         continue;

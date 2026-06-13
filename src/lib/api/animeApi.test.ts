@@ -2,17 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Anime, AnimeTheme } from '@/types/anime';
 
 // Hoisted mocks must be declared before importing the SUT.
-const { startDownloadWithSourceUrlMock, getDownloadCandidatesMock } = vi.hoisted(() => ({
-  startDownloadWithSourceUrlMock: vi.fn(),
+const { getDownloadCandidatesMock } = vi.hoisted(() => ({
   getDownloadCandidatesMock: vi.fn(),
-}));
-
-vi.mock('@/store/musicStore', () => ({
-  useMusicStore: {
-    getState: () => ({
-      startDownloadWithSourceUrl: startDownloadWithSourceUrlMock,
-    }),
-  },
 }));
 
 vi.mock('@/lib/api/musicApi', async () => {
@@ -56,7 +47,6 @@ function clearPlatform(): void {
   delete (window as { Capacitor?: unknown }).Capacitor;
   __animeApiTesting.clearCaches();
   vi.restoreAllMocks();
-  startDownloadWithSourceUrlMock.mockReset();
   getDownloadCandidatesMock.mockReset();
 }
 
@@ -251,13 +241,11 @@ describe('getAnimeThemes', () => {
 });
 
 describe('downloadAnimeTheme', () => {
-  it('builds a virtual track and queues the curated audio URL', async () => {
+  it('returns a virtual track with the curated audio URL', async () => {
     const result = await downloadAnimeTheme(sampleTheme, 'Naruto');
 
-    expect(startDownloadWithSourceUrlMock).toHaveBeenCalledTimes(1);
-    const [track, sourceUrl] = startDownloadWithSourceUrlMock.mock.calls[0];
-    expect(sourceUrl).toBe(sampleTheme.audioUrl);
-    expect(track).toEqual({
+    expect(result.sourceUrl).toBe(sampleTheme.audioUrl);
+    expect(result.track).toEqual({
       id: 'anime-20-OP-2',
       title: 'Naruto OP 2',
       artist: sampleTheme.artist,
@@ -266,6 +254,5 @@ describe('downloadAnimeTheme', () => {
       cover: '',
     });
     expect(result.success).toBe(true);
-    expect(result.sourceUrl).toBe(sampleTheme.audioUrl);
   });
 });

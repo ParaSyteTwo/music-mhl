@@ -48,10 +48,12 @@ const toneStyles: Record<CandidateMatchTone, {
 
 export function CandidatePicker({
   track,
+  animeSearchEnabled,
   onClose,
   onSelect,
 }: {
   track: Track;
+  animeSearchEnabled: boolean;
   onClose: () => void;
   onSelect: (videoId: string) => void;
 }) {
@@ -75,7 +77,7 @@ export function CandidatePicker({
     setCandidates([]);
     const loadCandidates = async () => {
       try {
-        const cands = await getDownloadCandidates(track);
+        const cands = await getDownloadCandidates(track, animeSearchEnabled);
         if (!active) return;
         setCandidates(cands);
         if (cands.length === 0) {
@@ -95,7 +97,7 @@ export function CandidatePicker({
     return () => {
       active = false;
     };
-  }, [track, t]);
+  }, [animeSearchEnabled, track, t]);
 
   function fmt(s: number) {
     const m = Math.floor(s / 60);

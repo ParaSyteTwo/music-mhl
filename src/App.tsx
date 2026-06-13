@@ -20,6 +20,18 @@ function RouteFallback() {
 }
 
 const App = () => {
+  useEffect(() => {
+    const markFrontendReady = () => {
+      const api = (window as Window & {
+        pywebview?: { api?: { frontend_ready?: () => Promise<{ success: boolean }> } };
+      }).pywebview?.api;
+      void api?.frontend_ready?.();
+    };
+    markFrontendReady();
+    window.addEventListener('pywebviewready', markFrontendReady);
+    return () => window.removeEventListener('pywebviewready', markFrontendReady);
+  }, []);
+
   // Rescan local library on Android to restore localFileRefs after app restart
   useEffect(() => {
     if (Capacitor.isNativePlatform()) {
