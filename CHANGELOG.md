@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.4.4 - 2026-06-13
+
+### 📱 Android
+
+- Corregida la apertura del instalador del sistema en móviles que no aceptaban la acción genérica usada por versiones anteriores.
+- El APK descargado se comparte con el instalador mediante un permiso de lectura explícito y compatible con distintos fabricantes.
+- Al volver de autorizar "Instalar aplicaciones desconocidas", MHL Music comprueba el permiso y reanuda la instalación automáticamente.
+- Si el instalador del sistema no está disponible, la aplicación muestra un error concreto en vez de quedar bloqueada.
+- `versionCode` incrementado a `18` y certificado oficial conservado.
+
+### ✅ Verificación
+
+- Tests frontend, lint, build de producción y tests Android superados.
+- Actualización firmada desde 1.4.3 verificada conservando paquete y certificado.
+
 ## v1.4.3 - 2026-06-13
 
 ### 💻 Desktop
