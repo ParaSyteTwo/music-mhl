@@ -44,6 +44,9 @@ export default function SettingsPage() {
   const appUpdateProgress = useAppUpdateStore((state) => state.downloadProgress);
   const installReadyUpdate = useAppUpdateStore((state) => state.installReadyUpdate);
   const openInstallPermission = useAppUpdateStore((state) => state.openInstallPermission);
+  const resumeInstallAfterPermission = useAppUpdateStore(
+    (state) => state.resumeInstallAfterPermission,
+  );
   const updateChannel = useAppUpdateStore((state) => state.updateChannel);
   const setUpdateChannel = useAppUpdateStore((state) => state.setUpdateChannel);
 
@@ -72,6 +75,21 @@ export default function SettingsPage() {
       getAudioPlayers().then((list) => setAudioPlayers(list)).catch(() => {})
     ).catch(() => {}).finally(() => setLoadingPlayers(false));
   }, []);
+
+  useEffect(() => {
+    if (!isAndroid || appUpdateStatus !== 'permissionRequired') return;
+    const resumeInstallation = () => {
+      if (document.visibilityState === 'visible') {
+        void resumeInstallAfterPermission();
+      }
+    };
+    document.addEventListener('visibilitychange', resumeInstallation);
+    window.addEventListener('focus', resumeInstallation);
+    return () => {
+      document.removeEventListener('visibilitychange', resumeInstallation);
+      window.removeEventListener('focus', resumeInstallation);
+    };
+  }, [appUpdateStatus, resumeInstallAfterPermission]);
 
   const handleUpdate = async () => {
     if (ytDlpUpdating) return;

@@ -1,5 +1,6 @@
 package com.mhl.music;
 
+import android.content.ClipData;
 import android.content.Intent;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
@@ -318,12 +319,16 @@ public class AppUpdaterPlugin extends Plugin {
                     getContext().getPackageName() + ".updateprovider",
                     apkFile
                 );
-                Intent intent = new Intent(Intent.ACTION_VIEW);
+                Intent intent = new Intent(Intent.ACTION_INSTALL_PACKAGE);
                 intent.setDataAndType(apkUri, "application/vnd.android.package-archive");
+                intent.setClipData(ClipData.newRawUri("MHL Music update", apkUri));
                 intent.addFlags(
                     Intent.FLAG_GRANT_READ_URI_PERMISSION |
                     Intent.FLAG_ACTIVITY_NEW_TASK
                 );
+                if (intent.resolveActivity(packageManager) == null) {
+                    throw new IllegalStateException("Android package installer is not available.");
+                }
                 getContext().startActivity(intent);
 
                 JSObject data = new JSObject();

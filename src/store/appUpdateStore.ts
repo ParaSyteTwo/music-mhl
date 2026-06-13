@@ -5,6 +5,7 @@ import { evaluateAppUpdate } from '@/lib/appUpdatePolicy';
 import { getInstalledAppIdentity } from '@/lib/appUpdaterBridge';
 import {
   addUpdateDownloadProgressListener,
+  canInstallAndroidPackages,
   cancelAndroidUpdateDownload,
   downloadAndroidUpdate,
   inspectDownloadedApk,
@@ -41,6 +42,7 @@ interface AppUpdateState {
   cancelAvailableUpdateDownload: () => Promise<void>;
   installReadyUpdate: () => Promise<void>;
   openInstallPermission: () => Promise<void>;
+  resumeInstallAfterPermission: () => Promise<void>;
   dismissCurrentBuild: () => void;
 }
 
@@ -380,6 +382,21 @@ export const useAppUpdateStore = create<AppUpdateState>()(
         if (!result.success) {
           set({ status: 'error', error: result.error });
         }
+      },
+
+      resumeInstallAfterPermission: async () => {
+        if (get().status !== 'permissionRequired') return;
+        set({ status: 'readyToInstall', error: null });
+        const permission = await canInstallAndroidPackages();
+        if (!permission.success) {
+          set({ status: 'error', error: permission.error });
+          return;
+        }
+        if (!permission.data) {
+          set({ status: 'permissionRequired' });
+          return;
+        }
+        await get().installReadyUpdate();
       },
 
       dismissCurrentBuild: () => {

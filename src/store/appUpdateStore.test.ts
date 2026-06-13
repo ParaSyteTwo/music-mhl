@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   inspect: vi.fn(),
   addProgressListener: vi.fn(),
   install: vi.fn(),
+  canInstall: vi.fn(),
   openInstallSettings: vi.fn(),
 }));
 
@@ -22,6 +23,7 @@ vi.mock('@/lib/appUpdaterBridge', () => ({
   inspectDownloadedApk: mocks.inspect,
   addUpdateDownloadProgressListener: mocks.addProgressListener,
   installAndroidUpdate: mocks.install,
+  canInstallAndroidPackages: mocks.canInstall,
   openAndroidInstallPermissionSettings: mocks.openInstallSettings,
 }));
 vi.mock('@/lib/githubAndroidRelease', () => ({
@@ -81,6 +83,7 @@ beforeEach(() => {
     },
   });
   mocks.addProgressListener.mockResolvedValue({ remove: vi.fn() });
+  mocks.canInstall.mockResolvedValue({ success: true, data: false });
   mocks.download.mockResolvedValue({
     success: true,
     data: {
@@ -327,5 +330,54 @@ describe('app update store', () => {
     await useAppUpdateStore.getState().installReadyUpdate();
     expect(useAppUpdateStore.getState().status).toBe('permissionRequired');
     vi.restoreAllMocks();
+  });
+
+  it('waits when install permission is still disabled after returning from settings', async () => {
+    useAppUpdateStore.setState({ status: 'permissionRequired' });
+
+    await useAppUpdateStore.getState().resumeInstallAfterPermission();
+
+    expect(mocks.canInstall).toHaveBeenCalledOnce();
+    expect(mocks.install).not.toHaveBeenCalled();
+    expect(useAppUpdateStore.getState().status).toBe('permissionRequired');
+  });
+
+  it('resumes installation after the user grants install permission', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-06-20T12:00:00Z'));
+    mocks.canInstall.mockResolvedValue({ success: true, data: true });
+    useAppUpdateStore.setState({
+      status: 'permissionRequired',
+      installedBuild: installed,
+      remoteBuild: build,
+      downloadedApkPath: 'C:\\cache\\app-updates\\MHL-Music-1.3.6.apk',
+      decision: {
+        status: 'available',
+        replacementBuild: false,
+        eligibleAt: '2026-06-17T12:00:00.000Z',
+      },
+    });
+
+    await useAppUpdateStore.getState().resumeInstallAfterPermission();
+
+    expect(mocks.canInstall).toHaveBeenCalledOnce();
+    expect(mocks.install).toHaveBeenCalledOnce();
+    expect(useAppUpdateStore.getState().status).toBe('installing');
+    vi.restoreAllMocks();
+  });
+
+  it('ignores duplicate resume events while checking install permission', async () => {
+    let resolvePermission: ((value: { success: true; data: boolean }) => void) | undefined;
+    mocks.canInstall.mockImplementation(() => new Promise((resolve) => {
+      resolvePermission = resolve;
+    }));
+    useAppUpdateStore.setState({ status: 'permissionRequired' });
+
+    const firstResume = useAppUpdateStore.getState().resumeInstallAfterPermission();
+    const secondResume = useAppUpdateStore.getState().resumeInstallAfterPermission();
+    resolvePermission?.({ success: true, data: false });
+    await Promise.all([firstResume, secondResume]);
+
+    expect(mocks.canInstall).toHaveBeenCalledOnce();
+    expect(useAppUpdateStore.getState().status).toBe('permissionRequired');
   });
 });
