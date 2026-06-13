@@ -1,13 +1,39 @@
 # Changelog
 
+## v1.4.3 - 2026-06-13
+
+### 💻 Desktop
+
+- Corregida la pantalla negra causada por una dependencia circular entre el store y la API de descargas.
+- Corregido el acceso a una función de búsquedas recientes antes de inicializarla, que impedía montar la pantalla de búsqueda.
+- El ajuste de búsqueda anime se pasa explícitamente al ranking, caché y descarga sin acoplar la API al estado global.
+- El empaquetado ahora solo supera el smoke test cuando React confirma que la interfaz terminó de montar.
+
+### 📱 Android
+
+- La consulta del manifiesto de actualización usa HTTP nativo de Capacitor para evitar el bloqueo CORS de los assets de GitHub Releases.
+- Eliminado el service worker legado que podía mezclar `index.html` y chunks JavaScript de versiones distintas tras actualizar.
+- Cada `versionCode` limpia una vez los caches PWA antiguos antes de cargar la interfaz nueva.
+- Una release remota anterior se muestra como aplicación actualizada, no como un fallo de downgrade.
+- Ajustes vuelve a consultar la identidad nativa si el estado persistido no contiene la versión instalada.
+- Ajustes muestra el código y detalle real cuando una comprobación o instalación falla.
+- `versionCode` incrementado a `17` y certificado oficial conservado.
+
+### ✅ Verificación
+
+- Tests frontend, lint, build de producción y tests Desktop superados.
+- Portable Windows construido con Python 3.12 y apertura real verificada.
+- APK release firmada verificada en instalación limpia y actualización conservando datos.
+- Flujo anime Android verificado con AniList, AnimeThemes y descarga directa completada.
+
 ## v1.4.2 - 2026-06-11
 
 ### 🎌 Búsqueda de anime (OP/ED)
 
 - Nueva sección "Búsqueda" en Ajustes (toggle **off** por defecto) que activa el modo anime en SearchPage.
 - Cuando la query matchea heurísticas anime (palabras como "anime", "opening", "ending", o termina en `OP 1`, `ED 2`, etc.), SearchPage muestra tarjetas de anime con cover, título, año, tipo y episodios.
-- Click en una tarjeta lista los OP/ED del anime con su videoId de YouTube.
-- Click en un tema descarga vía `startDownloadWithVideoId` del store; si el video está muerto, fallback al picker de candidatos existente.
+- Click en una tarjeta lista los OP/ED obtenidos desde AnimeThemes.
+- Click en un tema descarga el audio directo de AnimeThemes; si no está disponible, usa YouTube mediante el selector de candidatos existente.
 - i18n completo en `es` y `en` (`animeModeActive`, `animeToggleTitle`, `animeThemesDownload`, etc.).
 - Desktop (pywebview): nuevos métodos `bridge.anime_search` y `bridge.anime_get_themes` que llaman directo a AniList y animethemes.moe desde Python (sin backend). Respuesta en camelCase para coincidir con la interface TS.
 

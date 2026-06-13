@@ -90,13 +90,13 @@ Sin cuentas obligatorias, sin anuncios y sin seguimiento.
 |---|---|---|
 | Windows 10/11 x64 | React + pywebview | ✅ Compatible |
 | Android 7.0+ (API 24) | React + Capacitor | ✅ Compatible |
-| Web / PWA | React + FastAPI remoto | ❌ Sin servicio si Fly.io está caído |
+| Web / PWA | Código legado | ❌ Fuera de alcance |
 
 ### ⚠️ Web / PWA
 
-La edición Web/PWA depende del backend remoto desplegado en Fly.io. Cuando ese servicio no está disponible, la búsqueda y la descarga Web dejan de funcionar.
+La edición Web/PWA está abandonada y no forma parte de las releases. Las plataformas soportadas son Windows Desktop y Android.
 
-**Windows y Android no dependen de Fly.io para procesar las descargas.**
+**Windows y Android procesan las descargas localmente y no dependen del backend Web legado.**
 
 ---
 
@@ -106,7 +106,7 @@ La edición Web/PWA depende del backend remoto desplegado en Fly.io. Cuando ese 
 
 **Portable (recomendada):**
 
-1. Descarga [`MHL-Music-Portable-1.4.1.zip`](../../releases/latest)
+1. Descarga [`MHL-Music-Portable-1.4.3.zip`](../../releases/latest)
 2. Descomprime el ZIP en cualquier carpeta
 3. Ejecuta `MHL Music.exe`
 
@@ -114,7 +114,7 @@ La edición Web/PWA depende del backend remoto desplegado en Fly.io. Cuando ese 
 
 ### 📱 Android
 
-1. Descarga [`MHL-Music-1.4.1.apk`](../../releases/latest)
+1. Descarga [`MHL-Music-1.4.3.apk`](../../releases/latest)
 2. Abre el archivo en tu dispositivo
 3. Autoriza la instalación desde esa fuente si Android lo solicita
 
