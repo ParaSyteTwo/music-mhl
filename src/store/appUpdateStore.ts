@@ -74,7 +74,13 @@ export const useAppUpdateStore = create<AppUpdateState>()(
       checkForUpdate: async (force = false) => {
         if (Capacitor.getPlatform() !== 'android') return;
         const now = Date.now();
-        if (!force && now - get().lastCheckedAt < AUTO_CHECK_INTERVAL_MS) return;
+        if (
+          !force &&
+          get().installedBuild &&
+          now - get().lastCheckedAt < AUTO_CHECK_INTERVAL_MS
+        ) {
+          return;
+        }
 
         set({ status: 'checking', error: null, lastCheckedAt: now });
         try {

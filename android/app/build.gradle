@@ -34,9 +34,14 @@ android {
         applicationId "com.mhl.music"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 16
-        versionName "1.4.2"
+        versionCode 17
+        versionName "1.4.3"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField(
+            "boolean",
+            "MHL_EMULATOR_BUILD",
+            System.getenv('MHL_ANDROID_EMULATOR_BUILD') == '1' ? 'true' : 'false'
+        )
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
              // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
@@ -44,7 +49,13 @@ android {
         }
         ndk {
             abiFilters "arm64-v8a", "armeabi-v7a"
+            if (System.getenv('MHL_ANDROID_EMULATOR_BUILD') == '1') {
+                abiFilters "x86_64"
+            }
         }
+    }
+    buildFeatures {
+        buildConfig = true
     }
     packaging {
         jniLibs {

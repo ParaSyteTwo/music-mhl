@@ -1,3 +1,4 @@
+import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import {
   ANDROID_PACKAGE_NAME,
   ANDROID_RELEASE_MANIFEST_NAME,
@@ -150,30 +151,53 @@ function isOfficialAssetUrl(url: string, tag: string, assetName: string): boolea
 
 export async function fetchLatestOfficialAndroidRelease(
   channel: AppUpdateChannel = 'stable',
-  fetchImpl: typeof fetch = fetch,
+  fetchImpl?: typeof fetch,
 ): Promise<AppUpdateResult<FetchedAndroidRelease>> {
   try {
     const releaseApi = channel === 'stable'
       ? 'https://api.github.com/repos/ParaSyteTwo/music-mhl/releases/latest'
       : 'https://api.github.com/repos/ParaSyteTwo/music-mhl/releases?per_page=20';
-    const releaseResponse = await fetchImpl(
-      releaseApi,
-      {
+    const useNativeHttp = !fetchImpl && Capacitor.getPlatform() === 'android';
+    let responseValue: unknown;
+    let githubDateHeader = '';
+
+    if (useNativeHttp) {
+      const releaseResponse = await CapacitorHttp.get({
+        url: releaseApi,
+        headers: { Accept: 'application/vnd.github+json' },
+        responseType: 'json',
+      });
+      if (releaseResponse.status < 200 || releaseResponse.status >= 300) {
+        return {
+          success: false,
+          error: {
+            code: 'NETWORK',
+            detail: `GitHub release request failed with status ${releaseResponse.status}.`,
+          },
+        };
+      }
+      responseValue = releaseResponse.data;
+      githubDateHeader = Object.entries(releaseResponse.headers).find(
+        ([name]) => name.toLowerCase() === 'date',
+      )?.[1] ?? '';
+    } else {
+      const releaseResponse = await (fetchImpl ?? fetch)(releaseApi, {
         headers: { Accept: 'application/vnd.github+json' },
         cache: 'no-store',
-      },
-    );
-    if (!releaseResponse.ok) {
-      return {
-        success: false,
-        error: {
-          code: 'NETWORK',
-          detail: `GitHub release request failed with status ${releaseResponse.status}.`,
-        },
-      };
+      });
+      if (!releaseResponse.ok) {
+        return {
+          success: false,
+          error: {
+            code: 'NETWORK',
+            detail: `GitHub release request failed with status ${releaseResponse.status}.`,
+          },
+        };
+      }
+      responseValue = await releaseResponse.json();
+      githubDateHeader = releaseResponse.headers.get('date') ?? '';
     }
 
-    const responseValue: unknown = await releaseResponse.json();
     const releaseValue = channel === 'stable'
       ? responseValue
       : Array.isArray(responseValue)
@@ -215,24 +239,43 @@ export async function fetchLatestOfficialAndroidRelease(
       };
     }
 
-    const manifestResponse = await fetchImpl(manifestAssets[0].browser_download_url, {
-      cache: 'no-store',
-    });
-    if (!manifestResponse.ok) {
-      return {
-        success: false,
-        error: {
-          code: 'NETWORK',
-          detail: `Android manifest request failed with status ${manifestResponse.status}.`,
-        },
-      };
+    let manifestValue: unknown;
+    if (useNativeHttp) {
+      const manifestResponse = await CapacitorHttp.get({
+        url: manifestAssets[0].browser_download_url,
+        responseType: 'json',
+      });
+      if (manifestResponse.status < 200 || manifestResponse.status >= 300) {
+        return {
+          success: false,
+          error: {
+            code: 'NETWORK',
+            detail: `Android manifest request failed with status ${manifestResponse.status}.`,
+          },
+        };
+      }
+      manifestValue = manifestResponse.data;
+    } else {
+      const manifestResponse = await (fetchImpl ?? fetch)(
+        manifestAssets[0].browser_download_url,
+        { cache: 'no-store' },
+      );
+      if (!manifestResponse.ok) {
+        return {
+          success: false,
+          error: {
+            code: 'NETWORK',
+            detail: `Android manifest request failed with status ${manifestResponse.status}.`,
+          },
+        };
+      }
+      manifestValue = await manifestResponse.json();
     }
 
-    const manifestValue: unknown = await manifestResponse.json();
     const parsedRelease = parseOfficialAndroidRelease(releaseValue, manifestValue, resolvedChannel);
     if (!parsedRelease.success) return parsedRelease;
 
-    const githubDate = Date.parse(releaseResponse.headers.get('date') ?? '');
+    const githubDate = Date.parse(githubDateHeader);
     return {
       success: true,
       data: {

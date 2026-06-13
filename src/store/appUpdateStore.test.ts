@@ -132,11 +132,29 @@ describe('app update store', () => {
   it('skips repeated automatic checks within 24 hours', async () => {
     const now = Date.parse('2026-06-20T12:00:00Z');
     vi.spyOn(Date, 'now').mockReturnValue(now);
-    useAppUpdateStore.setState({ lastCheckedAt: now - 1000 });
+    useAppUpdateStore.setState({
+      lastCheckedAt: now - 1000,
+      installedBuild: installed,
+    });
     await useAppUpdateStore.getState().checkForUpdate(false);
     expect(mocks.identity).not.toHaveBeenCalled();
     await useAppUpdateStore.getState().checkForUpdate(true);
     expect(mocks.identity).toHaveBeenCalledOnce();
+    vi.restoreAllMocks();
+  });
+
+  it('refreshes native identity when persisted state has no installed build', async () => {
+    const now = Date.parse('2026-06-20T12:00:00Z');
+    vi.spyOn(Date, 'now').mockReturnValue(now);
+    useAppUpdateStore.setState({
+      lastCheckedAt: now - 1000,
+      installedBuild: null,
+    });
+
+    await useAppUpdateStore.getState().checkForUpdate(false);
+
+    expect(mocks.identity).toHaveBeenCalledOnce();
+    expect(useAppUpdateStore.getState().installedBuild).toEqual(installed);
     vi.restoreAllMocks();
   });
 
@@ -149,6 +167,21 @@ describe('app update store', () => {
     expect(useAppUpdateStore.getState()).toMatchObject({
       status: 'error',
       error: { code: 'INVALID_MANIFEST' },
+    });
+  });
+
+  it('does not report an error when the installed build is newer than GitHub', async () => {
+    mocks.identity.mockResolvedValue({
+      success: true,
+      data: { ...installed, versionName: '1.4.3', versionCode: 17 },
+    });
+
+    await useAppUpdateStore.getState().checkForUpdate(true);
+
+    expect(useAppUpdateStore.getState()).toMatchObject({
+      status: 'upToDate',
+      decision: { status: 'upToDate', reason: 'installedBuildIsNewer' },
+      error: null,
     });
   });
 

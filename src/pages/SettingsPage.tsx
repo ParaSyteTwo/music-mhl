@@ -33,6 +33,7 @@ export default function SettingsPage() {
   const [audioPlayers, setAudioPlayers] = useState<AudioPlayer[]>([]);
   const [loadingPlayers, setLoadingPlayers] = useState(false);
   const appUpdateStatus = useAppUpdateStore((state) => state.status);
+  const appUpdateError = useAppUpdateStore((state) => state.error);
   const installedBuild = useAppUpdateStore((state) => state.installedBuild);
   const remoteBuild = useAppUpdateStore((state) => state.remoteBuild);
   const checkForAppUpdate = useAppUpdateStore((state) => state.checkForUpdate);
@@ -407,7 +408,7 @@ export default function SettingsPage() {
             } ${appUpdateStatus === 'checking' ? 'animate-spin' : ''}`} />
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-[#F5F5F0]">
-                {t('installedVersion', { version: installedBuild?.versionName ?? '1.4.1' })}
+                {t('installedVersion', { version: installedBuild?.versionName ?? '…' })}
               </p>
               <p className="text-xs text-[#8A8A8A] mt-1">
                 {t('updateChannelActive', {
@@ -441,7 +442,14 @@ export default function SettingsPage() {
                 <p className="text-xs text-[#C8F04B] mt-1">{t('appUpdateInstallerOpened')}</p>
               )}
               {appUpdateStatus === 'error' && (
-                <p className="text-xs text-[#8A8A8A] mt-1">{t('appUpdateCheckFailed')}</p>
+                <>
+                  <p className="text-xs text-[#8A8A8A] mt-1">{t('appUpdateCheckFailed')}</p>
+                  {appUpdateError && (
+                    <p className="text-[11px] text-red-300 mt-1 break-words">
+                      {appUpdateError.code}: {appUpdateError.detail}
+                    </p>
+                  )}
+                </>
               )}
             </div>
             <div className="flex flex-col gap-2">

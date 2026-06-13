@@ -11,13 +11,7 @@ export function evaluateAppUpdate(
   _lastTrustedTimeMs = 0,
 ): AppUpdateDecision {
   if (remote.versionCode < installed.versionCode) {
-    return {
-      status: 'rejected',
-      error: {
-        code: 'DOWNGRADE_REJECTED',
-        detail: 'Remote Android build has a lower versionCode than the installed build.',
-      },
-    };
+    return { status: 'upToDate', reason: 'installedBuildIsNewer' };
   }
 
   if (

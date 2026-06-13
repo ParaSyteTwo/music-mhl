@@ -1,4 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
+
+const capacitorMocks = vi.hoisted(() => ({
+  platform: vi.fn(() => 'web'),
+  get: vi.fn(),
+}));
+
+vi.mock('@capacitor/core', () => ({
+  Capacitor: { getPlatform: capacitorMocks.platform },
+  CapacitorHttp: { get: capacitorMocks.get },
+}));
+
 import {
   fetchLatestOfficialAndroidRelease,
   parseAndroidReleaseManifest,
@@ -107,6 +118,39 @@ describe('official GitHub Android release', () => {
     expect(fetchMock.mock.calls[1][0]).toBe(
       'https://github.com/ParaSyteTwo/music-mhl/releases/download/v1.3.6/MHL-Music-Android.json',
     );
+  });
+
+  it('uses native HTTP on Android so GitHub asset redirects are not blocked by CORS', async () => {
+    capacitorMocks.platform.mockReturnValue('android');
+    capacitorMocks.get
+      .mockResolvedValueOnce({
+        status: 200,
+        data: createRelease(),
+        headers: { date: 'Wed, 10 Jun 2026 12:00:00 GMT' },
+        url: 'https://api.github.com/repos/ParaSyteTwo/music-mhl/releases/latest',
+      })
+      .mockResolvedValueOnce({
+        status: 200,
+        data: createManifest(),
+        headers: {},
+        url: createRelease().assets[0].browser_download_url,
+      });
+
+    const result = await fetchLatestOfficialAndroidRelease('stable');
+
+    expect(result).toMatchObject({
+      success: true,
+      data: {
+        build: { versionName: '1.3.6' },
+        trustedTimeMs: Date.parse('2026-06-10T12:00:00Z'),
+      },
+    });
+    expect(capacitorMocks.get).toHaveBeenNthCalledWith(2, {
+      url: createRelease().assets[0].browser_download_url,
+      responseType: 'json',
+    });
+    capacitorMocks.platform.mockReturnValue('web');
+    capacitorMocks.get.mockReset();
   });
 
   it('selects a published prerelease for beta testers', async () => {

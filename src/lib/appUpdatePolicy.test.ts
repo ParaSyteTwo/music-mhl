@@ -85,13 +85,13 @@ describe('app update policy', () => {
     });
   });
 
-  it('rejects downgrades and inconsistent equal version codes', () => {
+  it('treats older remote builds as current and rejects inconsistent equal version codes', () => {
     expect(evaluateAppUpdate(installed, remote({
       versionName: '1.3.4',
       versionCode: 12,
-    }), Date.now())).toMatchObject({
-      status: 'rejected',
-      error: { code: 'DOWNGRADE_REJECTED' },
+    }), Date.now())).toEqual({
+      status: 'upToDate',
+      reason: 'installedBuildIsNewer',
     });
 
     expect(evaluateAppUpdate(installed, remote({

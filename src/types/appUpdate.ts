@@ -101,7 +101,7 @@ export interface InspectedAndroidApk extends InstalledAndroidBuild {
 export type AppUpdateDecision =
   | {
       status: 'upToDate';
-      reason: 'sameBuild';
+      reason: 'sameBuild' | 'installedBuildIsNewer';
     }
   | {
       status: 'rejected';
