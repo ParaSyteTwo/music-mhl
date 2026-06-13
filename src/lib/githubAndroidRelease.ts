@@ -63,7 +63,7 @@ function parseAsset(value: unknown): GitHubAsset | null {
     name: value.name,
     state: value.state,
     size: value.size,
-    digest: value.digest,
+    digest: value.digest as string | null,
     updated_at: value.updated_at,
     browser_download_url: value.browser_download_url,
   };
@@ -177,9 +177,10 @@ export async function fetchLatestOfficialAndroidRelease(
         };
       }
       responseValue = releaseResponse.data;
-      githubDateHeader = Object.entries(releaseResponse.headers).find(
+      const dateHeader = Object.entries(releaseResponse.headers).find(
         ([name]) => name.toLowerCase() === 'date',
-      )?.[1] ?? '';
+      )?.[1];
+      githubDateHeader = typeof dateHeader === 'string' ? dateHeader : '';
     } else {
       const releaseResponse = await (fetchImpl ?? fetch)(releaseApi, {
         headers: { Accept: 'application/vnd.github+json' },
@@ -203,7 +204,7 @@ export async function fetchLatestOfficialAndroidRelease(
       : Array.isArray(responseValue)
         ? responseValue.find((value) => {
             const candidate = parseRelease(value);
-            return candidate && !candidate.draft;
+            return candidate && !candidate.draft && candidate.prerelease;
           })
         : null;
     const release = parseRelease(releaseValue);
@@ -273,7 +274,9 @@ export async function fetchLatestOfficialAndroidRelease(
     }
 
     const parsedRelease = parseOfficialAndroidRelease(releaseValue, manifestValue, resolvedChannel);
-    if (!parsedRelease.success) return parsedRelease;
+    if (parsedRelease.success === false) {
+      return { success: false, error: parsedRelease.error };
+    }
 
     const githubDate = Date.parse(githubDateHeader);
     return {
@@ -308,7 +311,9 @@ export function parseOfficialAndroidRelease(
   }
 
   const manifestResult = parseAndroidReleaseManifest(manifestValue);
-  if (!manifestResult.success) return manifestResult;
+  if (manifestResult.success === false) {
+    return { success: false, error: manifestResult.error };
+  }
   const manifest = manifestResult.data;
 
   if (release.tag_name !== `v${manifest.versionName}`) {

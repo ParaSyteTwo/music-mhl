@@ -586,7 +586,7 @@ def test_anime_requests_carry_user_agent_and_json_content_type_headers():
         bridge.anime_search("naruto", 5)
 
     assert captured_headers.get("Content-Type") == "application/json"
-    assert captured_headers.get("User-Agent") == "MHLMusic/1.4.4"
+    assert captured_headers.get("User-Agent") == "MHLMusic/1.4.5"
 
 
 def test_anime_requests_always_have_timeout():

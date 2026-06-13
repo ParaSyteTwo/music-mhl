@@ -9,7 +9,9 @@ export default tseslint.config(
     ignores: [
       "dist",
       "dev-dist",
-      ".pytest_cache",
+      "**/.pytest_cache/**",
+      "**/.venv/**",
+      "**/__pycache__/**",
       ".worktrees",
       ".claude/worktrees",
       "android/**/build",

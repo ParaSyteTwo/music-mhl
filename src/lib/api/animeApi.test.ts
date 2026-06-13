@@ -241,18 +241,30 @@ describe('getAnimeThemes', () => {
 });
 
 describe('downloadAnimeTheme', () => {
-  it('returns a virtual track with the curated audio URL', async () => {
-    const result = await downloadAnimeTheme(sampleTheme, 'Naruto');
+  it('uses the original song identity and asks the user to select full audio', async () => {
+    getDownloadCandidatesMock.mockResolvedValue([{
+      videoId: 'full-song',
+      title: 'Haruka Kanata',
+      channel: 'Asian Kung-Fu Generation - Topic',
+      duration: 244,
+      score: 160,
+    }]);
+
+    const result = await downloadAnimeTheme(sampleTheme, 'Naruto', sampleAnime.cover);
 
     expect(result.sourceUrl).toBe(sampleTheme.audioUrl);
     expect(result.track).toEqual({
       id: 'anime-20-OP-2',
-      title: 'Naruto OP 2',
+      title: 'Haruka Kanata',
+      canonicalTitle: 'Haruka Kanata',
       artist: sampleTheme.artist,
       album: 'Naruto',
+      canonicalAlbum: 'Naruto',
       duration: 0,
-      cover: '',
+      cover: sampleAnime.cover,
     });
-    expect(result.success).toBe(true);
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('FULL_TRACK_SELECTION_REQUIRED');
+    expect(getDownloadCandidatesMock).toHaveBeenCalledWith(result.track, true);
   });
 });

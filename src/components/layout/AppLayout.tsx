@@ -1,7 +1,7 @@
 import { Outlet, NavLink } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
 import { BottomPlayer } from './BottomPlayer';
-import { Search, Download, Settings } from 'lucide-react';
+import { Search, Download, Library, Settings } from 'lucide-react';
 import { useI18n } from '@/lib/useI18n';
 import { useMusicStore } from '@/store/musicStore';
 import { usesRemoteBackend } from '@/lib/platform';
@@ -137,6 +137,9 @@ export function AppLayout() {
         <NavLink to="/downloads" className={({ isActive }) => `flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors ${isActive ? 'text-[#C8F04B] bg-[rgba(200,240,75,0.1)]' : 'text-[#999] hover:text-[#F5F5F0]'}`}>
           <Download className="w-4 h-4" /> {t('downloads')}
         </NavLink>
+        <NavLink to="/library" className={({ isActive }) => `flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors ${isActive ? 'text-[#C8F04B] bg-[rgba(200,240,75,0.1)]' : 'text-[#999] hover:text-[#F5F5F0]'}`}>
+          <Library className="w-4 h-4" /> {t('library')}
+        </NavLink>
         <NavLink to="/settings" className={({ isActive }) => `flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors ${isActive ? 'text-[#C8F04B] bg-[rgba(200,240,75,0.1)]' : 'text-[#999] hover:text-[#F5F5F0]'}`}>
           <Settings className="w-4 h-4" /> {t('settings')}
         </NavLink>
@@ -179,6 +182,10 @@ export function AppLayout() {
               {downloadCount}
             </span>
           )}
+        </NavLink>
+        <NavLink to="/library" className={({ isActive }) => `flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors min-h-[44px] ${isActive ? 'text-[#C8F04B] bg-[rgba(200,240,75,0.06)]' : 'text-[#666]'}`}>
+          <Library className="w-5 h-5" />
+          <span className="text-[10px] font-medium">{t('library')}</span>
         </NavLink>
         <NavLink to="/settings" className={({ isActive }) => `flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors min-h-[44px] ${isActive ? 'text-[#C8F04B] bg-[rgba(200,240,75,0.06)]' : 'text-[#666]'}`}>
           <Settings className="w-5 h-5" />

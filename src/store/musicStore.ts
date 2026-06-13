@@ -9,6 +9,7 @@ import {
   resolveImportedTrackMeta,
   resolveLocalPlaybackUrl,
   shouldPersistLocalPath,
+  toImportedAudioFile,
 } from '@/lib/localTrackRuntime';
 import { parseLocalFiles } from '@/lib/metadataEnricher';
 import { Capacitor } from '@capacitor/core';
@@ -22,6 +23,7 @@ import {
   resolveEffectiveLanguage,
 } from '@/lib/language';
 import { detectPlatform } from '@/lib/platform';
+import { decodeBase64ArrayBuffer } from '@/lib/binaryEncoding';
 
 function storeText(mode: UiLanguageMode, key: string, vars?: Record<string, string | number>): string {
   return translate(resolveEffectiveLanguage(mode), key, vars);
@@ -38,6 +40,7 @@ function getProgressLabel(progress: number, lang: Lang = 'es'): string {
 export { getProgressLabel };
 
 let searchRequestId = 0;
+let isProcessingDownloadQueue = false;
 
 export function getDownloadQueueDelayMs(
   currentPlatform: ReturnType<typeof detectPlatform> = detectPlatform(),
@@ -290,11 +293,19 @@ export const useMusicStore = create<MusicStore>()(
           if (isPlaying) {
             audioEngine.pause();
             audioEngine.setPlaybackState('paused');
+            set({ isPlaying: false });
           } else {
-            audioEngine.play();
-            audioEngine.setPlaybackState('playing');
+            void audioEngine.play()
+              .then(() => {
+                audioEngine.setPlaybackState('playing');
+                set({ isPlaying: true });
+              })
+              .catch((error) => {
+                console.error('Play failed:', error);
+                set({ isPlaying: false });
+                toast.error(storeText(get().uiLanguageMode, 'playbackFailed'));
+              });
           }
-          set({ isPlaying: !isPlaying });
         },
 
         setVolume: (v) => {
@@ -379,25 +390,31 @@ export const useMusicStore = create<MusicStore>()(
         activeDownloads: 0,
 
         processDownloadQueue: async () => {
-          const { downloadQueue, activeDownloads, downloads } = get();
-          if (downloadQueue.length === 0 || activeDownloads >= 2) return;
+          if (isProcessingDownloadQueue) return;
+          isProcessingDownloadQueue = true;
+          try {
+            const { downloadQueue, activeDownloads } = get();
+            if (downloadQueue.length === 0 || activeDownloads >= 2) return;
 
-          const queueDelayMs = getDownloadQueueDelayMs();
-          if (queueDelayMs > 0) {
-            await new Promise((resolve) => setTimeout(resolve, queueDelayMs));
-          }
+            const [nextId, ...rest] = downloadQueue;
+            set({ downloadQueue: rest });
 
-          const [nextId, ...rest] = downloadQueue;
-          set({ downloadQueue: rest });
+            const queueDelayMs = getDownloadQueueDelayMs();
+            if (queueDelayMs > 0) {
+              await new Promise((resolve) => setTimeout(resolve, queueDelayMs));
+            }
 
-          const dl = get().downloads.find((d) => d.id === nextId);
-          if (dl && dl.status === 'queued') {
-            await get()._executeDownload(
-              dl.track,
-              nextId,
-              dl.videoIdOverride,
-              dl.sourceUrlOverride,
-            );
+            const dl = get().downloads.find((d) => d.id === nextId);
+            if (dl && dl.status === 'queued') {
+              void get()._executeDownload(
+                dl.track,
+                nextId,
+                dl.videoIdOverride,
+                dl.sourceUrlOverride,
+              );
+            }
+          } finally {
+            isProcessingDownloadQueue = false;
           }
         },
 
@@ -476,14 +493,7 @@ export const useMusicStore = create<MusicStore>()(
               const lyrics = lyricsResult.synced || lyricsResult.plain || null;
 
               updateDl({ progress: 50 });
-              // Convertir hex a ArrayBuffer
-              const hex = rawResult.data_b64 as string;
-              const byteCount = hex.length / 2;
-              const audioBuffer = new ArrayBuffer(byteCount);
-              const view = new Uint8Array(audioBuffer);
-              for (let i = 0; i < byteCount; i++) {
-                view[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-              }
+              const audioBuffer = decodeBase64ArrayBuffer(rawResult.data_b64 as string);
 
               updateDl({ progress: 70 });
               // Escribir ID3 tags con browser-id3-writer (misma lógica que web/Android)
@@ -504,14 +514,23 @@ export const useMusicStore = create<MusicStore>()(
               const fileName = buildDownloadFileName(track, ext);
               const filePath = outputDir + '/' + fileName;
               const taggedArr = await taggedBlob.arrayBuffer();
-              await api.write_file_bytes(filePath, Array.from(new Uint8Array(taggedArr)));
+              const writeResult = await api.write_file_bytes(
+                filePath,
+                Array.from(new Uint8Array(taggedArr)),
+              );
+              if (!writeResult?.success) {
+                throw new Error(writeResult?.error || 'No se pudo guardar el archivo descargado');
+              }
 
               // Guardar .lrc junto al MP3 para que reproductores lo lean con sincronización
               if (lyricsResult.synced && get().saveLrcFile) {
                 const lrcName = buildDownloadFileName(track, 'lrc');
                 const lrcPath = outputDir + '/' + lrcName;
                 const lrcBytes = new TextEncoder().encode(lyricsResult.synced);
-                await api.write_file_bytes(lrcPath, Array.from(lrcBytes));
+                const lrcWriteResult = await api.write_file_bytes(lrcPath, Array.from(lrcBytes));
+                if (!lrcWriteResult?.success) {
+                  throw new Error(lrcWriteResult?.error || 'No se pudo guardar el archivo LRC');
+                }
               }
 
               updateDl({ progress: 100, status: 'completed', error: undefined, fileName });
@@ -802,7 +821,10 @@ export const useMusicStore = create<MusicStore>()(
         },
 
         removeDownload: (id) =>
-          set((s) => ({ downloads: s.downloads.filter((d) => d.id !== id) })),
+          set((s) => ({
+            downloads: s.downloads.filter((d) => d.id !== id),
+            downloadQueue: s.downloadQueue.filter((queuedId) => queuedId !== id),
+          })),
 
         // ─── Download Folder ───
         downloadFolder: null,
@@ -988,11 +1010,9 @@ export const useMusicStore = create<MusicStore>()(
             const validFiles = filesData.filter((f) => f !== null) as Array<{ file: File; path: string }>;
             if (validFiles.length === 0) return;
 
-            const restoredFiles = validFiles.map(({ file, path }) => ({
-              ...file,
-              __mhlRelativePath: path,
-              __mhlSource: 'documents',
-            } as ImportedAudioFile));
+            const restoredFiles = validFiles.map(({ file, path }) => (
+              toImportedAudioFile(file, { relativePath: path, source: 'documents' })
+            ));
             const parsed = (await parseLocalFiles(restoredFiles)).map((track) =>
               resolveImportedTrackMeta(track, restoredFiles)
             );

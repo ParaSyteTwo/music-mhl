@@ -90,11 +90,11 @@ export const useAppUpdateStore = create<AppUpdateState>()(
             getInstalledAppIdentity(),
             fetchLatestOfficialAndroidRelease(get().updateChannel),
           ]);
-          if (!installedResult.success) {
+          if (installedResult.success === false) {
             set({ status: 'error', error: installedResult.error });
             return;
           }
-          if (!releaseResult.success) {
+          if (releaseResult.success === false) {
             set({
               status: 'error',
               error: releaseResult.error,
@@ -160,7 +160,7 @@ export const useAppUpdateStore = create<AppUpdateState>()(
         let progressListener: Awaited<ReturnType<typeof addUpdateDownloadProgressListener>> = null;
         try {
           const refreshedRelease = await fetchLatestOfficialAndroidRelease(state.updateChannel);
-          if (!refreshedRelease.success) {
+          if (refreshedRelease.success === false) {
             set({ status: 'error', error: refreshedRelease.error });
             return;
           }
@@ -220,7 +220,7 @@ export const useAppUpdateStore = create<AppUpdateState>()(
             eligibleAtMs: Date.parse(refreshedDecision.eligibleAt),
             trustedTimeMs,
           });
-          if (!downloadResult.success) {
+          if (downloadResult.success === false) {
             set(downloadResult.error.code === 'DOWNLOAD_CANCELLED'
               ? { status: 'available', downloadProgress: 0, error: null }
               : { status: 'error', error: downloadResult.error });
@@ -229,7 +229,7 @@ export const useAppUpdateStore = create<AppUpdateState>()(
 
           set({ status: 'validating', downloadProgress: 100 });
           const inspectionResult = await inspectDownloadedApk(downloadResult.data.path);
-          if (!inspectionResult.success) {
+          if (inspectionResult.success === false) {
             set({ status: 'error', error: inspectionResult.error });
             return;
           }
@@ -271,7 +271,7 @@ export const useAppUpdateStore = create<AppUpdateState>()(
       cancelAvailableUpdateDownload: async () => {
         if (get().status !== 'downloading') return;
         const result = await cancelAndroidUpdateDownload();
-        if (!result.success) {
+        if (result.success === false) {
           set({ status: 'error', error: result.error });
         }
       },
@@ -295,7 +295,7 @@ export const useAppUpdateStore = create<AppUpdateState>()(
 
         try {
           const refreshedRelease = await fetchLatestOfficialAndroidRelease(state.updateChannel);
-          if (!refreshedRelease.success) {
+          if (refreshedRelease.success === false) {
             set({ status: 'error', error: refreshedRelease.error });
             return;
           }
@@ -343,7 +343,7 @@ export const useAppUpdateStore = create<AppUpdateState>()(
           }
 
           const inspection = await inspectDownloadedApk(state.downloadedApkPath);
-          if (!inspection.success) {
+          if (inspection.success === false) {
             set({ status: 'error', error: inspection.error });
             return;
           }
@@ -356,7 +356,7 @@ export const useAppUpdateStore = create<AppUpdateState>()(
             eligibleAtMs: Date.parse(refreshedDecision.eligibleAt),
             trustedTimeMs,
           });
-          if (!installResult.success) {
+          if (installResult.success === false) {
             set({
               status: installResult.error.code === 'INSTALL_PERMISSION_REQUIRED'
                 ? 'permissionRequired'
@@ -379,7 +379,7 @@ export const useAppUpdateStore = create<AppUpdateState>()(
 
       openInstallPermission: async () => {
         const result = await openAndroidInstallPermissionSettings();
-        if (!result.success) {
+        if (result.success === false) {
           set({ status: 'error', error: result.error });
         }
       },
@@ -388,7 +388,7 @@ export const useAppUpdateStore = create<AppUpdateState>()(
         if (get().status !== 'permissionRequired') return;
         set({ status: 'readyToInstall', error: null });
         const permission = await canInstallAndroidPackages();
-        if (!permission.success) {
+        if (permission.success === false) {
           set({ status: 'error', error: permission.error });
           return;
         }

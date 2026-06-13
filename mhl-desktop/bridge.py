@@ -3,6 +3,7 @@ MHL Music — Python bridge expuesto al frontend React via pywebview.
 Todas las llamadas externas (Deezer, YouTube/yt-dlp, filesystem) pasan por aquí.
 Cero dependencia del backend Fly.io.
 """
+import base64
 import json
 import os
 import re
@@ -47,6 +48,10 @@ def _safe(s: str) -> str:
     return re.sub(r'[/\\?%*:|"<>]', '', s).strip()
 
 
+def _encode_audio_bytes(value: bytes) -> str:
+    return base64.b64encode(value).decode('ascii')
+
+
 # ── Anime client (AniList + animethemes.moe) ─────────────────────────────────
 # Replica la misma forma de respuesta que el backend (services/ytdlp-service/modules/anime_client.py)
 # para que el frontend pueda cambiar de plataforma sin diferencias. Implementación
@@ -56,7 +61,7 @@ _ANILIST_ENDPOINT = 'https://graphql.anilist.co'
 _ANIMETHEMES_ENDPOINT = 'https://api.animethemes.moe'
 _ANIME_HEADERS = {
     'Content-Type': 'application/json',
-    'User-Agent': 'MHLMusic/1.4.4',
+    'User-Agent': 'MHLMusic/1.4.5',
 }
 _ANIME_TIMEOUT = 10
 
@@ -217,8 +222,7 @@ def _anime_search_animethemes(name):
         candidate = re.sub(r'\W+', '', str(result.get('name') or '')).casefold()
         if candidate == normalized_name:
             return result
-    first = results[0]
-    return first if isinstance(first, dict) else None
+    return None
 
 
 def _anime_fetch_themes(anime_slug):
@@ -259,18 +263,25 @@ def _anime_shape_themes(raw_themes, anilist_id):
             if isinstance(item, dict) and item.get('name')
         )
         entries = theme.get('animethemeentries') or []
+        theme_added = False
         for entry in entries:
             if not isinstance(entry, dict):
                 continue
             videos = entry.get('videos') or []
-            for video in videos:
+            ordered_videos = sorted(
+                videos,
+                key=lambda item: not (
+                    isinstance(item, dict)
+                    and isinstance(item.get('audio'), dict)
+                    and item['audio'].get('link')
+                ),
+            )
+            for video in ordered_videos:
                 if not isinstance(video, dict):
                     continue
                 audio = video.get('audio') or {}
                 audio_url = audio.get('link') if isinstance(audio, dict) else None
                 video_url = video.get('link')
-                if not audio_url:
-                    continue
                 eps_from, eps_to = _anime_episode_range(entry.get('episodes'))
                 shaped.append({
                     'animeId': anilist_id,
@@ -283,7 +294,22 @@ def _anime_shape_themes(raw_themes, anilist_id):
                     'audioUrl': audio_url,
                     'videoUrl': video_url,
                 })
+                theme_added = True
                 break
+            if theme_added:
+                break
+        if not theme_added:
+            shaped.append({
+                'animeId': anilist_id,
+                'type': theme_type,
+                'sequence': sequence,
+                'title': title,
+                'artist': artist,
+                'episodesFrom': None,
+                'episodesTo': None,
+                'audioUrl': None,
+                'videoUrl': None,
+            })
     return shaped
 
 
@@ -827,9 +853,13 @@ class Bridge:
 
         if not video_id:
             for q in queries:
-                results = self._yt_search(q, limit=5)
+                results = self._yt_search_fast(q, limit=5)
                 if results:
-                    scored = sorted(results, key=lambda r: self._score(r, title, artist, 0), reverse=True)
+                    scored = sorted(
+                        results,
+                        key=lambda r: self._score_smart(r, title, artist, album, 0),
+                        reverse=True,
+                    )
                     video_id = scored[0]['videoId']
                     break
 
@@ -902,9 +932,13 @@ class Bridge:
 
         if not video_id and not source_url:
             for q in queries:
-                results = self._yt_search(q, limit=5)
+                results = self._yt_search_fast(q, limit=5)
                 if results:
-                    scored = sorted(results, key=lambda r: self._score(r, title, artist, 0), reverse=True)
+                    scored = sorted(
+                        results,
+                        key=lambda r: self._score_smart(r, title, artist, '', 0),
+                        reverse=True,
+                    )
                     video_id = scored[0]['videoId']
                     break
 
@@ -951,7 +985,7 @@ class Bridge:
                 return {'success': False, 'error': f'yt-dlp error {proc.returncode}: {err_detail}'}
 
             audio_bytes = Path(result_path).read_bytes()
-            b64 = audio_bytes.hex()
+            b64 = _encode_audio_bytes(audio_bytes)
             return {
                 'success': True,
                 'data_b64': b64,
@@ -971,8 +1005,16 @@ class Bridge:
     def write_file_bytes(self, file_path: str, data: list[int]) -> dict:
         """Escribe bytes recibidos del frontend (ArrayBuffer convertido a list[int])."""
         try:
-            Path(file_path).write_bytes(bytes(data))
-            return {'success': True}
+            root = Path(settings.get(
+                'download_folder',
+                str(Path.home() / 'Music' / 'MHL Music'),
+            )).resolve()
+            target = Path(file_path).resolve()
+            if target.parent != root:
+                return {'success': False, 'error': 'Path outside download folder'}
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(bytes(data))
+            return {'success': True, 'size': target.stat().st_size}
         except Exception as e:
             return {'success': False, 'error': str(e)}
 

@@ -1,4 +1,4 @@
-package com.getcapacitor.myapp;
+package com.mhl.music;
 
 import static org.junit.Assert.*;
 

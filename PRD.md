@@ -1,109 +1,150 @@
-# PRD — Product Requirements Document
+# PRD - Product Requirements Document
 > Project: MHL Music
-> Version: 2.0
-> Last updated: 2026-06-10
+> Version: 2.1
+> Last updated: 2026-06-13
+> Scope: Desktop (Windows, pywebview) + Android (Capacitor)
 
 ## 1. Overview
 
-MHL Music es una app multi-plataforma para buscar, reproducir y descargar música usando Deezer como catálogo y YouTube como fuente de audio. Corre como PWA (iPhone/web), app Android nativa y app de escritorio Windows — cada plataforma completamente funcional e independiente.
+MHL Music es una aplicacion para buscar, reproducir, identificar y descargar
+musica en dos plataformas activas:
+
+- Desktop Windows mediante React/Vite dentro de pywebview, con bridge Python.
+- Android mediante React/Vite dentro de Capacitor y plugins nativos.
+
+El frontend compartido vive en `src/`. Web/PWA y el backend FastAPI son codigo
+legado fuera del producto entregado. Deben seguir compilando mientras existan,
+pero no forman parte de los requisitos, QA ni releases.
 
 ## 2. Target Audience
 
 | Plataforma | Usuario | Caso de uso |
-|-----------|---------|-------------|
-| PWA / Web | Amigos y conocidos con iPhone | Buscar y reproducir música sin instalar nada |
-| Android | Usuario principal (Paul) | App nativa completa con descargas |
-| Desktop | Usuario principal (Paul) | App Windows con descargas locales sin depender de ningún servicio externo |
+|---|---|---|
+| Desktop | Usuario principal | Buscar, reproducir y descargar musica localmente en Windows |
+| Android | Usuario principal | Usar la aplicacion nativa, descargar musica y gestionar la biblioteca |
 
 ## 3. Core Features
 
-| Feature | Plataforma | Priority | Descripción |
-|---------|-----------|----------|-------------|
-| Búsqueda de música | Web + Android + Desktop | P0 | Buscar canciones, artistas y álbumes vía Deezer |
-| Reproductor de audio | Web + Android + Desktop | P0 | Player con controles completos (play/pause/skip/seek/volumen) |
-| Descarga de audio | Android + Desktop | P0 | Descargar MP3 con metadatos ID3 usando yt-dlp bundleado |
-| PWA instalable | Web (iOS/iPhone) | P0 | App instalable desde Safari, funciona offline para library |
-| Biblioteca local | Android + Desktop | P1 | Gestión de canciones descargadas, playlists |
-| App Desktop self-contained | Desktop | P0 | `.exe` instalable, todo bundleado (yt-dlp + ffmpeg), sin backend externo |
-| Historial / Playlists | Todos | P1 | Crear y gestionar playlists |
-| Settings | Todos | P2 | Configuración de calidad, rutas de descarga, idioma |
-| Auto-update asistido | Android | P1 | Detectar APK oficial por canal y abrir instalación confirmada |
+| Feature | Plataforma | Priority | Descripcion |
+|---|---|---|---|
+| Busqueda musical | Desktop + Android | P0 | Buscar canciones, artistas y albumes usando Deezer como catalogo |
+| Reproductor | Desktop + Android | P0 | Play, pause, skip, seek, volumen y cola |
+| Descarga de audio | Desktop + Android | P0 | Seleccionar una fuente de audio de YouTube y guardar el archivo local |
+| Metadatos | Desktop + Android | P0 | Conservar titulo, artista, album y portada de la identidad musical seleccionada |
+| Busqueda anime opt-in | Desktop + Android | P1 | Buscar anime y listar sus openings/endings solo cuando el usuario activa el modo |
+| Biblioteca local | Desktop + Android | P1 | Acceder y reproducir archivos descargados o importados |
+| Ajustes | Desktop + Android | P1 | Calidad, formato, carpeta cuando aplique, idioma y modo anime |
+| Updater asistido | Android | P1 | Detectar una release oficial, verificarla y abrir la instalacion con confirmacion del sistema |
 
 ## 4. Requisitos por Plataforma
 
-### Web / PWA (iPhone focus)
-- Debe funcionar 100% en Safari iOS (PWA installable)
-- Búsqueda y reproducción de audio sin errores CORS
-- Manifest correcto: icons, theme_color, display: standalone
-- Service Worker activo para cache offline de la UI
-- Sin funcionalidad de descarga (limitación iOS PWA)
-- Tiempo de carga < 3s en móvil 4G
+### Desktop
+
+- Runtime: pywebview con backend local Python en `mhl-desktop/`.
+- Las llamadas con restricciones de CORS, busqueda YouTube, descargas y acceso
+  al filesystem pasan por `window.pywebview.api`.
+- yt-dlp y ffmpeg se distribuyen con el build portable; el usuario no debe
+  instalarlos por separado.
+- El artefacto de release es un ZIP portable de Windows en `release/`.
+- No se genera instalador salvo peticion explicita.
+- Desktop no depende del FastAPI legado ni de Fly.io para sus flujos reales.
+- El paquete debe funcionar sin Node ni una instalacion externa de Python.
 
 ### Android
-- Ya funciona al 100% — NO tocar sin razón
-- Plugin nativo yt-dlp + ffmpeg bundleados
-- Las futuras builds deben conservar compatibilidad con `ANDROID_UPDATE_CONTRACT.md`
-- El updater solo puede consultar GitHub Releases de `ParaSyteTwo/music-mhl`
-- Estable recibe la última release pública; beta puede recibir prereleases y releases estables
-- Toda instalación será confirmada por el usuario mediante Android
 
-### Desktop (Windows — Tauri)
-- Tauri v2 con Rust para el proceso principal
-- yt-dlp.exe + ffmpeg.exe bundleados en `resources/win/` (ignorados por git)
-- **Sin dependencia de Fly.io ni ningún backend externo — cero dependencias externas**
-- Deezer search: llama a `api.deezer.com` directamente desde el webview Tauri (sin CORS en desktop nativo)
-- Búsqueda YouTube y descargas: ejecutadas localmente vía Tauri Shell plugin → yt-dlp.exe
-- **Ventana con frame nativo del SO** (`decorations: true`) — sin chrome customizado
-- El frontend (React/Vite build) se sirve desde el proceso Tauri
-- Instalador `.exe` generado con Tauri bundler (NSIS)
-- Auto-updater opcional (v2.1)
-- ⚠️ BUG CONOCIDO: la búsqueda en Desktop Tauri no funciona — el frontend no detecta correctamente el contexto Tauri y hace fallback al backend Fly.io. Fix en TECH_DESIGN.md §4.
+- Runtime: Capacitor 8 con plugins nativos registrados en `android/`.
+- La busqueda y descarga YouTube se realizan mediante el plugin `YtDlp`.
+- Biblioteca, apertura de archivos y updater usan sus respectivos plugins
+  nativos.
+- Las releases deben conservar `applicationId = com.mhl.music`, el certificado
+  de firma actual e incrementar `versionCode` en releases normales.
+- `ANDROID_UPDATE_CONTRACT.md` es la especificacion normativa del updater.
+- El APK y `MHL-Music-Android.json` se publican con los nombres definidos por
+  dicho contrato.
 
-## 5. Acceptance Criteria
+## 5. Contrato de Anime
 
-### Web / PWA
-- [ ] Búsqueda devuelve resultados en < 2s
-- [ ] Audio se reproduce sin cortes en Chrome, Firefox y Safari iOS
-- [ ] PWA se puede instalar desde Safari en iPhone (sin errores de manifest)
-- [ ] La app carga offline (UI básica con Service Worker)
-- [ ] No hay errores en consola en producción
+El modo anime esta desactivado por defecto y solo se activa desde Ajustes. La
+eleccion se persiste. Ninguna consulta, reproduccion o heuristica puede
+habilitarlo automaticamente.
+
+Cuando el modo esta activo:
+
+1. AniList identifica la obra y aporta sus titulos y portada.
+2. AnimeThemes resuelve los temas y es la autoridad para la identidad musical:
+   `song.title` es el titulo de la cancion y `song.artists` sus artistas.
+3. El titulo del anime se conserva como album o contexto, no sustituye al
+   titulo real de la cancion.
+4. YouTube se usa para localizar y seleccionar el audio completo que mejor
+   coincide con titulo, artista y duracion esperada.
+5. Los titulos y metadatos de YouTube no reemplazan automaticamente la
+   identidad obtenida de AnimeThemes.
+6. El audio curado de AnimeThemes puede utilizarse como fallback explicito
+   cuando no haya una alternativa valida, dejando claro si es una version
+   corta o TV-size.
+
+Las heuristicas `anime-feel` solo pueden modificar consultas o ranking cuando
+el ajuste ya esta habilitado. Una busqueda ambigua nunca altera el flujo
+musical normal de un usuario que no haya optado por la feature.
+
+## 6. Acceptance Criteria
 
 ### Desktop
-- [ ] El instalador `.exe` funciona en Windows 10/11 limpio (sin Node, sin Python, sin Rust)
-- [ ] Descarga una canción completa con metadatos en < 60s
-- [ ] yt-dlp y ffmpeg se ejecutan localmente sin instalación externa
-- [ ] La UI es idéntica a la versión web
-- [ ] No requiere conexión al backend de Fly.io para nada (ni descargas ni búsqueda)
-- [ ] La ventana muestra frame nativo del SO (barra de título, botones de sistema)
-- [ ] Deezer search funciona en Desktop llamando a api.deezer.com directamente
-- [ ] Si el backend Fly.io cae, Desktop sigue funcionando al 100%
 
-### Android (ya cumplido — mantener)
-- [ ] Descarga funciona con plugin nativo
-- [ ] No regresiones al tocar código compartido
+- [ ] Busca musica y anime sin llamar al backend FastAPI legado.
+- [ ] Reproduce audio y refleja correctamente errores de reproduccion.
+- [ ] Descarga una cancion completa y confirma que el archivo fue escrito.
+- [ ] Escribe metadatos coherentes con la identidad elegida.
+- [ ] Funciona en Windows 10/11 limpio sin Node ni Python instalados.
+- [ ] La release genera un ZIP portable en `release/`.
+- [ ] El ZIP incluye los binarios y recursos requeridos por pywebview,
+      yt-dlp y ffmpeg.
 
-### Android Auto-update (implementado)
-- [x] Solo acepta releases publicadas de `ParaSyteTwo/music-mhl`
-- [x] Detecta builds mediante `versionCode`, `versionName` y SHA-256
-- [x] Canal estable inmediato y canal beta opcional
-- [x] Rechaza digest, package, versión o certificado inválidos
-- [x] Nunca permite downgrade
-- [x] No bloquea el uso normal de la aplicación ante errores
-- [x] Requiere confirmación del instalador de Android
+### Android
 
-## 6. Out of Scope (v2.0)
+- [ ] Busqueda, reproduccion, descargas y biblioteca no sufren regresiones.
+- [ ] La release genera un APK firmado en `release/`.
+- [ ] El updater cumple integramente `ANDROID_UPDATE_CONTRACT.md`.
+- [ ] Toda instalacion requiere confirmacion del sistema Android.
 
-- Sincronización de biblioteca entre dispositivos
-- Streaming propio (Deezer directo con cuenta premium)
-- macOS / Linux desktop
-- Auto-updater en Desktop (v2.1)
-- Login / cuentas de usuario
-- Modo offline completo en PWA (reproducción offline)
-- Chrome customizado / titlebar personalizado en Desktop
+### Anime
 
-## 7. Success Metrics
+- [ ] El modo permanece inactivo hasta que el usuario lo habilita.
+- [ ] La cancion usa el titulo y artista reales de AnimeThemes.
+- [ ] El anime se guarda como album o contexto, no como titulo de pista.
+- [ ] La seleccion YouTube se evalua contra la identidad canonica y no la
+      sustituye.
+- [ ] La ausencia de audio curado no elimina un tema que pueda resolverse en
+      YouTube.
+- [ ] Los fallbacks cortos o TV-size se presentan como tales.
 
-- PWA instalable y funcional en iPhone sin errores
-- Desktop `.exe` funcional en PC limpio, descarga sin backend
-- Android sin regresiones
-- Cero errores críticos en consola web en producción
+## 7. Release Artifacts
+
+Cada release normal debe dejar en `release/`:
+
+- Un ZIP portable de Windows construido con PyInstaller.
+- Un APK Android firmado.
+- `MHL-Music-Android.json` y los assets adicionales exigidos por
+  `ANDROID_UPDATE_CONTRACT.md`.
+
+No se publica PWA, despliegue web, servicio FastAPI ni instalador de Windows
+como parte del proceso normal.
+
+## 8. Out of Scope
+
+- Web/PWA y compatibilidad de navegador como producto entregable.
+- Despliegue o ampliacion funcional de `services/ytdlp-service/`.
+- Instalador Windows, salvo peticion explicita.
+- macOS y Linux.
+- Sincronizacion de biblioteca entre dispositivos.
+- Login o cuentas de usuario.
+- Auto-update de Desktop.
+
+## 9. Success Metrics
+
+- Desktop y Android completan busqueda, reproduccion y descarga sin depender
+  del backend legado.
+- Las descargas anime conservan el nombre original de la cancion y sus
+  metadatos canonicos.
+- Cada release produce los artefactos Desktop y Android requeridos.
+- No hay regresiones en el contrato de actualizacion Android.

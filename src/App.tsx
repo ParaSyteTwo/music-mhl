@@ -5,9 +5,11 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { useMusicStore } from "@/store/musicStore";
 import { useI18n } from "@/lib/useI18n";
+import { useAppUpdateStore } from "@/store/appUpdateStore";
 
 const SearchPage = lazy(() => import("./pages/SearchPage"));
 const DownloadsPage = lazy(() => import("./pages/DownloadsPage"));
+const LibraryPage = lazy(() => import("./pages/LibraryPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 
 function RouteFallback() {
@@ -42,11 +44,7 @@ const App = () => {
         });
       });
 
-      import("@/store/appUpdateStore").then(({ useAppUpdateStore }) => {
-        void useAppUpdateStore.getState().checkForUpdate(false);
-      }).catch(() => {
-        // Update checks are optional and must never block app startup.
-      });
+      void useAppUpdateStore.getState().checkForUpdate(false);
 
       // Also verify downloaded files still exist (cleanup if deleted externally)
       const { downloads } = useMusicStore.getState();
@@ -68,7 +66,7 @@ const App = () => {
           <Route element={<AppLayout />}>
             <Route path="/" element={<SearchPage />} />
             <Route path="/downloads" element={<DownloadsPage />} />
-            <Route path="/library" element={<Navigate to="/downloads" replace />} />
+            <Route path="/library" element={<LibraryPage />} />
             <Route path="/playlists" element={<Navigate to="/downloads" replace />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>

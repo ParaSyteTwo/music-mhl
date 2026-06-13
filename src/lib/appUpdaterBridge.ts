@@ -60,7 +60,7 @@ export async function getInstalledAppIdentity(): Promise<AppUpdateResult<Install
 
   try {
     const result = await AppUpdater.getInstalledIdentity();
-    if (!result.success) {
+    if (result.success === false) {
       return {
         success: false,
         error: {
@@ -105,7 +105,7 @@ export async function inspectDownloadedApk(
 
   try {
     const result = await AppUpdater.inspectDownloadedApk({ path });
-    if (!result.success) {
+    if (result.success === false) {
       return {
         success: false,
         error: {
@@ -164,7 +164,7 @@ export async function downloadAndroidUpdate(options: {
 
   try {
     const result = await AppUpdater.downloadUpdate(options);
-    if (result.success) return result;
+    if (result.success === true) return result;
     return {
       success: false,
       error: {
@@ -202,7 +202,7 @@ export async function cancelAndroidUpdateDownload(): Promise<AppUpdateResult<boo
 
   try {
     const result = await AppUpdater.cancelDownload();
-    return result.success
+    return result.success === true
       ? { success: true, data: result.data.cancelled }
       : {
           success: false,
@@ -239,7 +239,7 @@ export async function canInstallAndroidPackages(): Promise<AppUpdateResult<boole
   }
   try {
     const result = await AppUpdater.canInstallPackages();
-    return result.success
+    return result.success === true
       ? { success: true, data: result.data.allowed }
       : {
           success: false,
@@ -265,7 +265,7 @@ export async function openAndroidInstallPermissionSettings(): Promise<AppUpdateR
   }
   try {
     const result = await AppUpdater.openInstallPermissionSettings();
-    return result.success
+    return result.success === true
       ? { success: true, data: result.data.opened }
       : {
           success: false,
@@ -298,7 +298,7 @@ export async function installAndroidUpdate(options: {
   }
   try {
     const result = await AppUpdater.installUpdate(options);
-    if (result.success) return { success: true, data: result.data.started };
+    if (result.success === true) return { success: true, data: result.data.started };
     return {
       success: false,
       error: {

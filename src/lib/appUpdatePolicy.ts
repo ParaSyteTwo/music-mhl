@@ -4,6 +4,8 @@ import {
   type RemoteAndroidBuild,
 } from '@/types/appUpdate';
 
+export const ANDROID_ASSET_SAFETY_PERIOD_MS = 7 * 24 * 60 * 60 * 1000;
+
 export function evaluateAppUpdate(
   installed: InstalledAndroidBuild,
   remote: RemoteAndroidBuild,
@@ -50,6 +52,6 @@ export function evaluateAppUpdate(
   return {
     status: 'available',
     replacementBuild,
-    eligibleAt: new Date(0).toISOString(),
+    eligibleAt: new Date(updatedAtMs + ANDROID_ASSET_SAFETY_PERIOD_MS).toISOString(),
   };
 }

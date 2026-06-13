@@ -170,16 +170,16 @@ describe('official GitHub Android release', () => {
     expect(fetchMock.mock.calls[0][0]).toContain('/releases?per_page=20');
   });
 
-  it('lets beta testers receive a newer stable release', async () => {
+  it('rejects a stable-only release list for the beta channel', async () => {
     const fetchMock = vi.fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify([createRelease()]), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify(createManifest()), { status: 200 }));
+      .mockResolvedValueOnce(new Response(JSON.stringify([createRelease()]), { status: 200 }));
 
     const result = await fetchLatestOfficialAndroidRelease('beta', fetchMock);
     expect(result).toMatchObject({
-      success: true,
-      data: { build: { channel: 'stable' } },
+      success: false,
+      error: { code: 'INVALID_RELEASE' },
     });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('rejects drafts, prereleases, and mismatched tags', () => {

@@ -7,6 +7,7 @@ const installed: InstalledAndroidBuild = {
   versionName: '1.3.5',
   versionCode: 13,
   digest: `sha256:${'a'.repeat(64)}`,
+  signingCertificateDigests: [`sha256:${'b'.repeat(64)}`],
 };
 
 function remote(overrides: Partial<RemoteAndroidBuild> = {}): RemoteAndroidBuild {
@@ -43,7 +44,7 @@ describe('app update policy', () => {
     });
   });
 
-  it('makes a stable update available immediately', () => {
+  it('keeps a stable update unavailable for installation until seven days after upload', () => {
     const decision = evaluateAppUpdate(
       installed,
       remote(),
@@ -53,6 +54,7 @@ describe('app update policy', () => {
     expect(decision).toMatchObject({
       status: 'available',
       replacementBuild: false,
+      eligibleAt: '2026-06-17T12:00:00.000Z',
     });
   });
 
@@ -103,7 +105,7 @@ describe('app update policy', () => {
     });
   });
 
-  it('does not delay updates based on trusted time', () => {
+  it('derives eligibility from trusted GitHub asset metadata, not device time', () => {
     expect(evaluateAppUpdate(
       installed,
       remote(),
@@ -111,6 +113,7 @@ describe('app update policy', () => {
       0,
     )).toMatchObject({
       status: 'available',
+      eligibleAt: '2026-06-17T12:00:00.000Z',
     });
   });
 
@@ -122,6 +125,7 @@ describe('app update policy', () => {
       0,
     )).toMatchObject({
       status: 'available',
+      eligibleAt: '2026-06-17T12:00:00.000Z',
     });
   });
 });

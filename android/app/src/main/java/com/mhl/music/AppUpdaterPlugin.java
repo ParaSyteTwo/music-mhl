@@ -310,6 +310,9 @@ public class AppUpdaterPlugin extends Plugin {
                 ) {
                     throw new SecurityException("Downloaded APK identity changed before installation.");
                 }
+                if (getVersionCode(archiveInfo) < getVersionCode(installedInfo)) {
+                    throw new SecurityException("Downloaded APK would downgrade the installed app.");
+                }
                 if (!getCertificateDigests(archiveInfo).equals(getCertificateDigests(installedInfo))) {
                     throw new SecurityException("Downloaded APK signing certificate does not match.");
                 }

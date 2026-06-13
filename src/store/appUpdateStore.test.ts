@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { InstalledAndroidBuild, RemoteAndroidBuild } from '@/types/appUpdate';
 
 const mocks = vi.hoisted(() => ({
   platform: vi.fn(() => 'android'),
@@ -32,7 +33,7 @@ vi.mock('@/lib/githubAndroidRelease', () => ({
 
 import { useAppUpdateStore } from './appUpdateStore';
 
-const installed = {
+const installed: InstalledAndroidBuild = {
   packageName: 'com.mhl.music',
   versionName: '1.3.5',
   versionCode: 13,
@@ -40,7 +41,7 @@ const installed = {
   signingCertificateDigests: [`sha256:${'b'.repeat(64)}`],
 };
 
-const build = {
+const build: RemoteAndroidBuild = {
   channel: 'stable',
   releaseId: 10,
   releaseTag: 'v1.3.6',

@@ -1,7 +1,7 @@
 {
   "name": "mhl-music",
   "private": false,
-  "version": "1.4.4",
+  "version": "1.4.5",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -15,7 +15,6 @@
     "cap:open": "npx cap open android",
     "cap:run": "npx cap run android",
     "android": "npm run build && npx cap sync android && npx cap open android",
-    "yt-dlp:update-and-build": "powershell -ExecutionPolicy Bypass -File scripts/download-and-integrate-yt-dlp.ps1",
     "android:prepare-release": "node scripts/android/release-contract.mjs",
     "test:android-release-contract": "node --test scripts/android/release-contract.test.mjs"
   },

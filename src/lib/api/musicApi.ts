@@ -2,6 +2,7 @@ import { Track } from '@/types/music';
 import { Capacitor } from '@capacitor/core';
 import type { Anime, AnimeTheme } from '@/types/anime';
 import { looksAnimeLike } from '@/lib/util/animeDetector';
+import { decodeBase64ArrayBuffer } from '@/lib/binaryEncoding';
 
 export { looksAnimeLike };
 
@@ -733,11 +734,8 @@ export async function downloadTrackAudio(
     );
     if (!result.success) throw new Error(result.error || 'Error descargando audio');
     onProgress?.(85);
-    const binary = atob(result.data_b64 as string);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
     onProgress?.(95);
-    return bytes.buffer as ArrayBuffer;
+    return decodeBase64ArrayBuffer(result.data_b64 as string);
   }
 
   if (Capacitor.isNativePlatform()) {

@@ -1,5 +1,31 @@
 # Changelog
 
+## v1.4.5 - 2026-06-13
+
+### Anime
+
+- Los títulos y artistas de AnimeThemes se usan como identidad canónica de la canción, conservando el anime como álbum y su portada.
+- YouTube selecciona la canción completa; el audio TV-size de AnimeThemes queda como fallback explícito.
+- Eliminado el fallback ambiguo al primer resultado y mantenidos los temas sin audio curado para búsquedas en YouTube.
+
+### Desktop
+
+- Corregida la transferencia de audio Base64, la búsqueda/scoring Python y la escritura segura dentro de la carpeta configurada.
+- Las descargas ya no se marcan como completadas si falla la escritura.
+- AAC queda deshabilitado mientras el pipeline de metadatos solo sea compatible con MP3.
+
+### Android y frontend
+
+- Restaurados la biblioteca y sus rutas de navegación, la cola atómica y la restauración de archivos reales.
+- Restaurado el periodo obligatorio de maduración de siete días y restringido el canal beta a prereleases.
+- Bloqueados downgrades, restringido FileProvider y corregidos los contratos TypeScript del updater.
+- `versionCode` incrementado a `19` con el paquete y certificado oficiales.
+
+### Verificación
+
+- Lint, TypeScript, tests frontend, Desktop y Android, builds de producción y contratos de release superados.
+- ZIP portable y APK firmada verificados antes de publicar.
+
 ## v1.4.4 - 2026-06-13
 
 ### 📱 Android

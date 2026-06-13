@@ -124,7 +124,7 @@ export default function SearchPage() {
       const key = `${theme.animeId}-${theme.type}-${theme.sequence}`;
       if (downloadingThemeKey === key) return;
       setDownloadingThemeKey(key);
-      downloadAnimeTheme(theme, animeTitle)
+      downloadAnimeTheme(theme, animeTitle, selectedAnime?.cover ?? '')
         .then((response) => {
           if (response.success && response.sourceUrl && response.track) {
             startDownloadWithSourceUrl(response.track, response.sourceUrl);
@@ -144,7 +144,7 @@ export default function SearchPage() {
           setDownloadingThemeKey((current) => (current === key ? null : current));
         });
     },
-    [downloadingThemeKey, startDownloadWithSourceUrl, t],
+    [downloadingThemeKey, selectedAnime?.cover, startDownloadWithSourceUrl, t],
   );
   const [inputFocused, setInputFocused] = useState(false);
   const loadMoreRef = useRef<HTMLDivElement>(null);

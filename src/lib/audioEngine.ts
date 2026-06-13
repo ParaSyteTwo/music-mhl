@@ -89,9 +89,7 @@ class AudioEngine {
   }
 
   play() {
-    return this.audio.play().catch((e) => {
-      console.warn('Audio play failed:', e.message);
-    });
+    return this.audio.play();
   }
 
   pause() {

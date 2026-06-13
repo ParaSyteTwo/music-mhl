@@ -1,4 +1,6 @@
-from bridge import Bridge
+import base64
+
+from bridge import Bridge, _encode_audio_bytes
 
 
 def _candidate(video_id: str, score: int) -> dict:
@@ -88,3 +90,10 @@ def test_anime_queries_require_explicit_opt_in():
     calls.clear()
     bridge.get_candidates({**base_track, "animeSearchEnabled": True})
     assert any("Opening 1" in query for query in calls)
+
+
+def test_desktop_audio_contract_uses_real_base64():
+    encoded = _encode_audio_bytes(bytes([0, 1, 254, 255]))
+
+    assert encoded == "AAH+/w=="
+    assert base64.b64decode(encoded) == bytes([0, 1, 254, 255])

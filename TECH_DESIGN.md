@@ -1,346 +1,266 @@
 # Technical Design Document
 > Project: MHL Music
-> Stack: Multi-platform (React/Vite + pywebview + Capacitor) — **Web FUERA de scope desde 2026-06-11**
-> Version: 2.1
-> Last updated: 2026-06-11
+> Stack: React/Vite + pywebview/Python + Capacitor/Android
+> Version: 2.2
+> Last updated: 2026-06-13
+> Scope: Desktop + Android
 
-> ## ⚠️ CAMBIO DE ALCANCE — 2026-06-11
->
-> **Plataformas activas: SOLO Desktop (pywebview) y Android (Capacitor).**
-> La web/PWA está **fuera de scope**. El usuario la abandonó porque la IP del
-> servidor de Google rechaza el tráfico de yt-dlp y la experiencia no
-> funciona. Todo código bajo `src/` que tenga un branch `web` en su switch
-> de plataforma es **código muerto en producción** — mantenlo compilando,
-> pero no inviertas tiempo en él.
->
-> El backend FastAPI en `services/ytdlp-service/` **ya no se despliega**.
-> El Desktop llama directo a las APIs externas (AniList, animethemes, etc.)
-> desde Python. Si una feature nueva necesita lógica compartida, ponla en
-> `mhl-desktop/bridge.py` o en el plugin nativo Android — no en FastAPI.
->
-> **Implicaciones para planes / SDD / docs nuevos:**
-> - Marcar "Alcance: Desktop + Android" al inicio de cualquier plan.
-> - No incluir "web" en verificaciones de release ni checklists de QA.
-> - Los tests de paths web en `src/lib/api/*.test.ts` se mantienen
->   (compilan, no molestan) pero su fallo no es un blocker.
-> - Los tests de `services/ytdlp-service/` se mantienen (código vivo) pero
->   no son parte de la release de usuario.
+## 1. Alcance Normativo
 
-## 1. Tech Stack
+Las unicas plataformas activas son:
 
-### Frontend (compartido entre Desktop y Android)
+- Desktop Windows: pywebview, Python y PyInstaller.
+- Android: Capacitor 8 y plugins nativos.
 
-| Layer | Technology | Version |
-|-------|-----------|---------|
-| Framework | React | 18.3+ |
-| Language | TypeScript | 5+ (strict) |
-| Bundler | Vite | 5.4+ |
-| Routing | React Router | 6.30+ |
-| State | Zustand | 5.0+ |
-| Styling | TailwindCSS | 3.4+ |
-| Animations | Framer Motion | latest |
-| Testing | Vitest + Playwright | latest |
+El codigo Web/PWA y `services/ytdlp-service/` es legado fuera de scope. Puede
+mantenerse compilando, pero no recibe features nuevas, no forma parte de QA de
+release y no debe condicionar decisiones de arquitectura. FastAPI no se
+despliega para el flujo real.
 
-### Backend FastAPI (legado — NO se despliega desde 1.4.2)
+## 2. Tech Stack
 
-| Layer | Technology | Version |
-|-------|-----------|---------|
-| Framework | FastAPI | 0.110+ |
-| Language | Python | 3.11+ |
-| Audio | yt-dlp | latest |
-| Deployment | ~~Fly.io~~ (decommissioned) | - |
-
-### Android (ya funciona — no tocar)
+### Frontend compartido
 
 | Layer | Technology |
-|-------|-----------|
-| Bridge | Capacitor 8.2 |
-| Plugin | yt-dlp nativo (Java/Kotlin) |
-| Audio | ffmpeg-kit bundleado |
-
-### Desktop (Windows — Tauri v2)
-
-| Layer | Technology | Notas |
-|-------|-----------|-------|
-| Shell | Tauri v2 | proceso principal Rust |
-| Bundler | Tauri bundler | genera .exe NSIS installer |
-| Backend local | Tauri Shell plugin | invoca yt-dlp.exe + ffmpeg.exe |
-| Binarios | yt-dlp.exe + ffmpeg.exe | bundleados en `resources/win/`, ignorados por git |
-| IPC | Tauri commands + events | renderer ↔ Rust main process |
-| Window | decorations: true | frame nativo del SO, sin chrome customizado |
-| Auto-update | Tauri updater | v2.1 |
-
----
-
-## 2. Arquitectura General
-
-```
-music-mhl/
-├── src/                    # React app (compartido Web + Desktop + Android)
-│   ├── components/
-│   │   ├── layout/         # AppLayout, BottomPlayer
-│   │   └── ui/
-│   ├── pages/              # Search, Library, Downloads, Playlists, Settings
-│   ├── store/              # Zustand stores
-│   ├── lib/
-│   │   ├── api/            # musicApi.ts — llamadas al backend / yt-dlp local
-│   │   ├── platform/       # platform.ts — detección Web vs Tauri vs Android
-│   │   ├── audioEngine.ts
-│   │   ├── metadataEnricher.ts
-│   │   ├── ytdlpBridge.ts  # interfaz para Android (Capacitor plugin)
-│   │   └── tauriDownloader.ts  # interfaz para Desktop (Tauri Shell → yt-dlp.exe)
-│   └── types/
-│
-├── src-tauri/              # Proceso principal Tauri (Rust)
-│   ├── src/
-│   │   └── main.rs         # Entry point + Tauri commands
-│   ├── tauri.conf.json     # Configuración ventana: decorations: true
-│   └── Cargo.toml
-│
-├── resources/              # Binarios bundleados para Desktop
-│   └── win/
-│       ├── yt-dlp.exe      # ignorado por git — descargar con script
-│       └── ffmpeg.exe      # ignorado por git — descargar con script
-│
-├── services/
-│   └── ytdlp-service/      # Backend FastAPI (Fly.io) — solo para Web
-│
-└── android/                # Capacitor Android — no tocar
-```
-
----
-
-## 3. Capa de Abstracción de Plataforma
-
-**Problema:** el mismo React UI necesita comportarse diferente en Web, Desktop y Android.
-
-**Solución:** `src/lib/platform/index.ts` + branches en `musicApi.ts`:
-
-```typescript
-// src/lib/platform/index.ts
-export function detectPlatform(): 'tauri' | 'android' | 'web'
-
-export const isTauri   = platform === 'tauri';
-export const isAndroid = platform === 'android';
-export const isWeb     = platform === 'web';
-```
-
-| Plataforma | Deezer search | Búsqueda YouTube | Descarga audio |
-|-----------|--------------|-----------------|---------------|
-| Web/PWA | Backend Fly.io `/deezer` | Backend Fly.io `/candidates` | Backend Fly.io `/download-ticket` |
-| Desktop (Tauri) | `deezerDirect.ts` → `api.deezer.com` directo | yt-dlp.exe local via `tauriDownloader.ts` | yt-dlp.exe local via `tauriDownloader.ts` |
-| Android | Backend Fly.io `/deezer` | Plugin Capacitor `searchYouTubeNative()` | Plugin Capacitor `downloadMp3Native()` |
-
-**Desktop no hace ninguna llamada al backend Fly.io** — funciona aunque el backend caiga.
-
----
-
-## 4. Desktop — Flujo Completamente Self-Contained
-
-### Búsqueda Deezer (sin backend)
-```
-[React UI] → musicApi.searchDeezer() con isNativeApp()=true
-    ↓ callDeezerDirect() → invoke('deezer_get', { path })
-[Rust: deezer_get] → fetch('https://api.deezer.com/search?q=...')
-[api.deezer.com] — sin CORS en webview nativo de Tauri
-    ↓ JSON crudo → mapRawDeezerTrack()
-[React UI] → muestra resultados
-```
-
-### Búsqueda YouTube + Descarga (sin backend)
-```
-[React UI] → tauriDownloader.searchYouTubeTauri(query)
-    ↓ invoke('ytdlp_search', { args })
-[Rust: ytdlp_search] → spawn yt-dlp.exe --dump-json ytsearch8:...
-[yt-dlp.exe] (bundleado en resources/win/)
-    ↓ stdout: resultados JSON
-[React UI] → muestra candidatos
-
-[React UI] → tauriDownloader.downloadMp3Tauri(videoId, opts)
-    ↓ invoke('ytdlp_download', { trackId, args, outputDir })
-[Rust: ytdlp_download] → spawn yt-dlp.exe → ffmpeg.exe
-    ↓ archivo .mp3 + ID3 tags
-[~/Music/MHL/{artist} - {title}.mp3]
-    ↓ evento de progreso vía emit()
-[React UI] → actualiza estado de descarga
-```
-
-### ⚠️ Bug: Detección de contexto Tauri (BLOQUEANTE)
-
-**Problema:** `isNativeApp()` en `musicApi.ts` usa `__TAURI_INTERNALS__` para detectar Tauri. Este flag NO existe en Tauri v2. El paquete `@tauri-apps/api` no está instalado en `package.json`, por lo tanto las llamadas `invoke()` fallan silenciosamente y la app hace fallback al backend Fly.io.
-
-**Cadena rota:**
-```
-isNativeApp() → '__TAURI_INTERNALS__' in window → false (siempre)
-→ callDeezerProxy() (web fallback) → busca en backend Fly.io
-→ downloadTrackAudio() → Railway /candidates y /download-ticket
-→ Desktop deja de ser self-contained
-```
-
-**Fix requerido (4 pasos):**
-1. `npm install @tauri-apps/api` en el proyecto root
-2. Reemplazar `isNativeApp()` en `musicApi.ts` por `platform === 'tauri'` (usando `src/lib/platform/index.ts` que ya existe y funciona)
-3. En `downloadTrackAudio()` para Tauri: usar `tauriDownloader.ts` en lugar del fallback web (igual que Android)
-4. Verificar que `tauri.conf.json` tenga la sección `plugins.shell` con `scope` para invocar yt-dlp.exe
-
-**Archivos a modificar:**
-| Archivo | Cambio |
-|---------|--------|
-| `package.json` | Agregar `@tauri-apps/api` |
-| `src/lib/platform/index.ts` | Ya funciona — no tocar |
-| `src/lib/api/musicApi.ts` | Reemplazar `isNativeApp()` por `isTauri`; agregar branch Tauri en `downloadTrackAudio` |
-| `src-tauri/tauri.conf.json` | Agregar scope de shell para yt-dlp |
-
-**Rutas de binarios en producción (Tauri):**
-```typescript
-// yt-dlp.exe resuelto en Rust via find_resource() en lib.rs
-// No se necesita resolveResource() en frontend — todo pasa por invoke()
-```
-
----
-
-## 5. Desktop — Ventana Nativa
-
-**`src-tauri/tauri.conf.json`** — configuración correcta:
-```json
-{
-  "app": {
-    "windows": [{
-      "title": "MHL Music",
-      "width": 1200,
-      "height": 800,
-      "minWidth": 900,
-      "minHeight": 600,
-      "decorations": true,
-      "resizable": true,
-      "center": true
-    }]
-  }
-}
-```
-
-- **No hay titlebar customizado** en React — la barra de título la gestiona el SO
-- **No hay botones close/minimize/maximize** en el UI — los gestiona el frame nativo
-- Sin `window-drag-region` ni CSS de chrome customizado
-
----
-
-## 6. PWA — Requisitos para iPhone
-
-El manifest y service worker deben cumplir:
-
-```json
-{
-  "display": "standalone",
-  "background_color": "#000000",
-  "theme_color": "#000000",
-  "icons": [
-    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
-  ]
-}
-```
-
-- `apple-touch-icon` en el HTML
-- Service Worker con Workbox (ya incluido en vite-plugin-pwa)
-- HTTPS obligatorio (ya está en Render)
-- Sin headers que bloqueen instalación PWA
-
----
-
-## 7. Convenciones de Código
-
-- Componentes: funcionales, max 200 líneas, un archivo por pantalla
-- Estado global: Zustand stores tipados, sin mutación directa
-- API calls web: todas en `src/lib/api/`, tipadas con TypeScript
-- Tauri commands: siempre vía `@tauri-apps/api` (nunca `__TAURI_INTERNALS__` directo)
-- Binarios: siempre resueltos con `resolveResource()`, nunca rutas hardcodeadas
-- No `any` — usar `unknown` + type guards
-- Errores: siempre capturados y retornados como `{ success: false, error: string }`
-
----
-
-## 8. Build Targets
-
-| Target | Comando | Output |
-|--------|---------|--------|
-| Web/PWA | `npm run build` | `dist/` → Render |
-| Android | `npm run android` | APK via Android Studio |
-| Desktop | `npm run tauri:build` | `src-tauri/target/release/bundle/nsis/MHL Music_x.x.x_x64-setup.exe` |
-
-**tauri.conf.json bundle config**:
-```json
-{
-  "bundle": {
-    "active": true,
-    "targets": ["nsis"],
-    "resources": ["../resources/win/yt-dlp.exe", "../resources/win/ffmpeg.exe"],
-    "windows": { "nsis": { "installMode": "currentUser" } }
-  }
-}
-```
-
----
-
-## 9. Variables de Entorno
-
-```env
-# Web/PWA — frontend
-VITE_RAILWAY_URL=https://ytdlp-service-little-sea-7784.fly.dev
-VITE_SERVICE_API_KEY=...
-
-# Desktop — no necesita variables de entorno externas
-# Tauri resuelve binarios con resolveResource() desde el bundle
-```
-
----
-
-## 10. Prohibido (requiere aprobación explícita)
-
-- [ ] Llamar al backend Fly.io desde Desktop Tauri — para cualquier cosa (Deezer, YouTube, descargas)
-- [ ] `decorations: false` en tauri.conf.json — ventana siempre con frame nativo
-- [ ] Titlebar/chrome customizado en React para Desktop
-- [ ] Rutas absolutas hardcodeadas para binarios (usar `resolveResource()`)
-- [ ] Tocar `android/` sin motivo (ya funciona al 100%)
-- [ ] `npm run build` sin probar PWA manifest primero
-- [ ] Subir yt-dlp.exe / ffmpeg.exe al repositorio git (usar .gitignore + script de descarga)
-- [ ] `shell: { open: true }` en Tauri sin revisión de seguridad
-- [ ] Usar `__TAURI_INTERNALS__` para detectar Tauri — no existe en Tauri v2, usar `platform === 'tauri'` de `src/lib/platform/index.ts`
-
----
-
-## 11. Testing Strategy
-
-- Unit: Vitest para stores, utils, platform adapters
-- Integration: Vitest + mocks para flujos de descarga
-- E2E Web: Playwright en Chrome + Safari (Webkit)
-- Desktop: Tests manuales en Windows limpio (sin yt-dlp preinstalado)
-- Android: Ya tiene su propio ciclo de testing
-- Coverage target: 70% mínimo en src/lib/
-
----
-
-## 12. Android Update Architecture
-
-La especificación canónica es `ANDROID_UPDATE_CONTRACT.md`. Cualquier implementación futura debe conservar ese contrato.
-
-### Componentes implementados
-
-| Componente | Responsabilidad |
 |---|---|
-| `AppUpdaterPlugin.java` | Identidad instalada, digest, certificado, descarga e instalación |
-| `githubAndroidRelease.ts` | Consulta y validación de la release oficial |
-| `appUpdatePolicy.ts` | Comparación de builds y periodo de seguridad |
-| `appUpdaterBridge.ts` | Contrato tipado con el plugin Capacitor |
-| `appUpdateStore.ts` | Estado aislado del updater |
-| `AppUpdateNotice.tsx` | Aviso Android no bloqueante |
-| `scripts/android/release-contract.mjs` | Verificación de identidad, firma y generación del manifiesto |
+| UI | React 18 |
+| Language | TypeScript 5 |
+| Bundler | Vite 5 |
+| Routing | React Router 6 |
+| State | Zustand 5 |
+| Styling | TailwindCSS 3 |
+| Unit testing | Vitest |
 
-### Fuente y contrato
+### Desktop
+
+| Layer | Technology | Ubicacion |
+|---|---|---|
+| Window host | pywebview | `mhl-desktop/launcher.py` |
+| Native bridge | Python | `mhl-desktop/bridge.py` |
+| Settings | Python | `mhl-desktop/settings.py` |
+| Packaging | PyInstaller | `mhl-desktop/MHLMusic.spec` |
+| Portable build | PowerShell | `mhl-desktop/scripts/build-portable.ps1` |
+| Audio tools | yt-dlp + ffmpeg | incluidos por el packaging Desktop |
+
+### Android
+
+| Layer | Technology | Ubicacion |
+|---|---|---|
+| Host | Capacitor 8 | `android/` |
+| YouTube/download | `YtDlpPlugin` | plugin nativo Android |
+| Library | `NativeLibraryPlugin` | plugin nativo Android |
+| File opening | `OpenFilePlugin` | plugin nativo Android |
+| App updates | `AppUpdaterPlugin` | plugin nativo Android |
+
+## 3. Arquitectura General
 
 ```text
-GET https://api.github.com/repos/ParaSyteTwo/music-mhl/releases/latest
+music-mhl/
+|-- src/                         React compartido Desktop + Android
+|   |-- components/
+|   |-- pages/
+|   |-- store/
+|   |-- lib/
+|   |   |-- api/                 catalogo, anime y seleccion de audio
+|   |   |-- platform/            deteccion android/pywebview/web legado
+|   |   |-- ytdlpBridge.ts       adapter Capacitor
+|   |   |-- nativeLibraryBridge.ts
+|   |   `-- appUpdaterBridge.ts
+|   `-- types/
+|-- mhl-desktop/
+|   |-- launcher.py              servidor local + ventana pywebview
+|   |-- bridge.py                red, yt-dlp, descarga y filesystem
+|   |-- settings.py
+|   |-- MHLMusic.spec
+|   |-- scripts/build-portable.ps1
+|   `-- tests/
+|-- android/                     proyecto Capacitor Android
+|-- scripts/android/             contrato y preparacion de release
+|-- services/ytdlp-service/      legado fuera de scope
+`-- release/                     ZIP portable, APK y manifiesto Android
+```
+
+`src/` significa frontend compartido por Desktop y Android; no implica que la
+web sea una plataforma soportada.
+
+## 4. Deteccion y Adaptacion de Plataforma
+
+La API compartida distingue:
+
+```typescript
+type Platform = 'android' | 'pywebview' | 'web';
+```
+
+- `android`: `Capacitor.isNativePlatform()` y plugins registrados.
+- `pywebview`: parametro `?platform=pywebview` o `window.pywebview`.
+- `web`: fallback legado, no entregable.
+
+La deteccion debe centralizarse en `src/lib/platform/`. Los adapters pueden
+esperar el evento `pywebviewready` cuando el bridge aun no este inyectado.
+
+| Operacion | Desktop | Android |
+|---|---|---|
+| Catalogo musical | bridge Python o llamada directa aprobada | frontend/HTTP nativo |
+| Busqueda anime | `Bridge.anime_search` | AniList desde el adapter Android/frontend |
+| Temas anime | `Bridge.anime_get_themes` | AnimeThemes desde el adapter Android/frontend |
+| Candidatos YouTube | `Bridge.get_candidates` | `YtDlpPlugin.search` |
+| Descarga | bridge Python + yt-dlp/ffmpeg | `YtDlpPlugin` |
+| Filesystem | bridge Python restringido | plugins Capacitor |
+| Updater app | no aplica | `AppUpdaterPlugin` |
+
+Ninguna operacion Desktop o Android debe depender de
+`services/ytdlp-service/`.
+
+## 5. Desktop pywebview
+
+### Arranque
+
+```text
+launcher.py
+  -> inicia servidor local de assets Vite compilados
+  -> crea ventana pywebview con ?platform=pywebview
+  -> expone Bridge como window.pywebview.api
+  -> React notifica frontend_ready
+```
+
+El servidor local solo sirve los assets embebidos. No convierte Desktop en una
+plataforma web ni habilita el backend FastAPI legado.
+
+### Bridge
+
+`mhl-desktop/bridge.py` concentra las capacidades que requieren privilegios o
+evitan CORS:
+
+- peticiones a Deezer, AniList y AnimeThemes;
+- busqueda y evaluacion de candidatos YouTube;
+- ejecucion local de yt-dlp y ffmpeg;
+- lectura y escritura controlada de archivos;
+- seleccion de carpeta y settings Desktop.
+
+Los metodos async del frontend deben capturar errores y trabajar con respuestas
+tipadas:
+
+```typescript
+type BridgeResult<T> =
+  | { success: true; data: T }
+  | { success: false; error: string };
+```
+
+Las operaciones de filesystem deben resolver rutas dentro de destinos
+permitidos, bloquear escapes de directorio y confirmar escritura antes de
+marcar una descarga como completada.
+
+### Packaging
+
+El build Desktop se ejecuta mediante:
+
+```powershell
+mhl-desktop/scripts/build-portable.ps1
+```
+
+PyInstaller usa `mhl-desktop/MHLMusic.spec`. El resultado de release es un ZIP
+portable de Windows ubicado en `release/`, con la aplicacion y sus dependencias
+runtime. No se genera instalador en el flujo normal.
+
+## 6. Android Capacitor
+
+El frontend compilado se sincroniza con `android/` mediante Capacitor. Las
+capacidades nativas se exponen a TypeScript con adapters tipados.
+
+Plugins registrados:
+
+- `YtDlpPlugin`: busqueda, descarga y procesamiento de audio.
+- `NativeLibraryPlugin`: biblioteca local.
+- `OpenFilePlugin`: apertura y seleccion de archivos.
+- `AppUpdaterPlugin`: identidad, descarga, validacion e instalacion asistida.
+
+No se modifica el codigo Android sin una necesidad concreta y pruebas
+proporcionales al cambio. Toda release conserva package, firma y versionado
+compatibles con `ANDROID_UPDATE_CONTRACT.md`.
+
+## 7. Flujo Musical Normal
+
+```text
+consulta del usuario
+  -> catalogo Deezer
+  -> Track canonico: titulo, artista, album, portada, ISRC si existe
+  -> generar consultas YouTube
+  -> obtener y puntuar candidatos
+  -> seleccion automatica segura o eleccion del usuario
+  -> descargar audio
+  -> escribir metadatos canonicos
+  -> verificar archivo
+  -> incorporar a descargas/biblioteca
+```
+
+YouTube es fuente de audio. Sus titulos, canales y miniaturas son senales para
+evaluar candidatos, no autoridad automatica sobre los metadatos de la pista.
+
+## 8. Flujo Anime
+
+### Activacion
+
+`animeSearchEnabled` es persistente y `false` por defecto. Solo Ajustes puede
+cambiarlo de forma explicita. Las heuristicas no activan la feature.
+
+### Identidad
+
+```text
+consulta anime
+  -> AniList: obra, titulos alternativos y portada
+  -> AnimeThemes: opening/ending, song.title y song.artists
+  -> Track canonico
+       title  = titulo real de AnimeThemes
+       artist = artistas de AnimeThemes
+       album  = titulo del anime
+       cover  = portada del anime
+       context = OP/ED + secuencia + episodios
+```
+
+No debe construirse el titulo como `"{anime} OP 1"` cuando AnimeThemes aporta
+el nombre de la cancion. OP/ED es contexto, no identidad musical.
+
+### Seleccion de audio
+
+```text
+Track canonico
+  -> consulta principal: titulo real + artista
+  -> variantes limitadas: official audio, topic, opening/ending
+  -> puntuar titulo, artista, duracion, ISRC y penalizaciones
+  -> seleccionar candidato YouTube completo
+  -> descargar audio
+  -> conservar metadatos de AnimeThemes/AniList
+```
+
+El audio curado de AnimeThemes no es la fuente final preferida porque puede ser
+TV-size. Se permite como fallback explicito cuando YouTube no ofrezca un
+candidato valido. Los temas sin URL de audio curado deben conservarse si tienen
+titulo y artista suficientes para buscar en YouTube.
+
+La resolucion AnimeThemes debe comparar titulos romaji, ingles y nativo
+normalizados. Ante resultados ambiguos, debe fallar de forma controlada en vez
+de elegir silenciosamente otra serie.
+
+## 9. Metadatos y Formatos
+
+- La identidad canonica procede del catalogo correspondiente: Deezer para
+  musica normal; AnimeThemes/AniList para anime.
+- MP3 usa tags ID3.
+- Otros formatos solo se ofrecen cuando el pipeline puede escribir metadatos
+  compatibles; no se aplica un escritor ID3 a contenedores AAC/M4A.
+- El nombre de archivo se deriva de artista y titulo canonicos tras sanitizar
+  caracteres y nombres reservados.
+- Una descarga solo termina con exito despues de comprobar escritura y tamano.
+
+## 10. Android Update Architecture
+
+`ANDROID_UPDATE_CONTRACT.md` es la fuente normativa y prevalece ante cualquier
+resumen de este documento.
+
+Fuente unica:
+
+```text
+GitHub Releases: ParaSyteTwo/music-mhl
 ```
 
 Assets obligatorios:
@@ -350,37 +270,69 @@ MHL-Music-Android.json
 MHL-Music-{versionName}.apk
 ```
 
-La identidad de build es:
+Identidad:
 
 ```text
 versionCode + versionName + SHA-256
 ```
 
-### Flujo de seguridad
+Flujo:
 
 ```text
 release oficial
-  → validar manifest y asset
-  → comparar build instalada
-  → resolver canal estable o beta elegido
-  → descargar a almacenamiento privado
-  → validar SHA-256
-  → validar com.mhl.music
-  → validar versión sin downgrade
-  → validar certificado firmante
-  → reconsultar GitHub
-  → abrir instalador Android
+  -> validar manifiesto y madurez del asset
+  -> comparar build instalada
+  -> descargar a almacenamiento privado
+  -> validar digest, package, version y certificado
+  -> reconsultar GitHub
+  -> abrir instalador Android
+  -> confirmacion obligatoria del sistema
 ```
 
-Un cambio de `asset.id`, digest, tamaño o `updated_at` invalida cualquier descarga. Estable usa `/latest`; beta selecciona la prerelease válida más reciente.
+Reglas esenciales:
 
-### Reglas de evolución
+- incrementar `versionCode` en releases normales;
+- conservar `applicationId = com.mhl.music` y el certificado actual;
+- respetar siete dias desde `asset.updated_at`;
+- no permitir downgrade;
+- mantener separados updater de aplicacion y updater de yt-dlp;
+- no inicializar este flujo en Desktop ni en el branch web legado;
+- los errores son tipados y nunca bloquean el uso normal.
 
-- El updater de la aplicación permanece separado del updater de yt-dlp.
-- Cada release normal incrementa `versionCode`.
-- La detección de digest distinto con la misma versión es solo una recuperación excepcional.
-- La comprobación automática ocurre como máximo una vez cada 24 horas.
-- La comprobación manual permanece disponible en Ajustes.
-- Web y Desktop no inicializan este flujo.
-- Los errores son tipados y nunca bloquean búsqueda, reproducción o descargas.
-- `npm run android:prepare-release -- --apk <ruta>` prepara los assets canónicos y bloquea certificados o versiones incompatibles.
+## 11. Build y Release
+
+| Target | Preparacion | Artefacto requerido |
+|---|---|---|
+| Desktop | `mhl-desktop/scripts/build-portable.ps1` | ZIP portable Windows en `release/` |
+| Android | `npm run android` y proceso de firma | APK firmado en `release/` |
+| Android contract | `npm run android:prepare-release -- --apk <ruta>` | JSON y assets canonicos |
+
+No hay target Web/PWA de release. `npm run build` produce assets compartidos
+para los hosts activos; por si solo no representa una entrega web.
+
+## 12. Testing Strategy
+
+- Unit: Vitest para stores, utils, adapters y contratos de plataforma.
+- Desktop: pytest para el bridge, anime, candidatos y packaging.
+- Android: tests de adapters TypeScript, contrato de release y pruebas nativas
+  cuando cambie un plugin.
+- Integracion: busqueda, seleccion, descarga, metadatos y verificacion de
+  archivo en Desktop y Android.
+- Release smoke test: abrir el ZIP portable y el APK firmado en targets reales.
+
+Los tests del branch web legado pueden mantenerse para evitar roturas de
+compilacion, pero no son criterios de aceptacion ni bloquean una release.
+
+## 13. Reglas de Evolucion
+
+- Marcar `Alcance: Desktop + Android` al inicio de planes y SDD.
+- Implementar logica Desktop en el bridge Python y logica Android en plugins o
+  adapters nativos; no agregar endpoints FastAPI para features nuevas.
+- Mantener una unica evaluacion de candidatos reutilizada por UI y descarga.
+- Centralizar deteccion de plataforma y tipos de bridge.
+- No agregar dependencias externas sin aprobacion.
+- Toda feature incluye tests unitarios.
+- Todo async captura errores y devuelve errores tipados.
+- No subir binarios yt-dlp o ffmpeg a git.
+- No crear otro mecanismo de actualizacion Android que contradiga
+  `ANDROID_UPDATE_CONTRACT.md`.

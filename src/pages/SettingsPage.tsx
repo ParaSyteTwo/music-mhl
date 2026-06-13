@@ -33,6 +33,12 @@ export default function SettingsPage() {
   const [audioPlayers, setAudioPlayers] = useState<AudioPlayer[]>([]);
   const [loadingPlayers, setLoadingPlayers] = useState(false);
   const appUpdateStatus = useAppUpdateStore((state) => state.status);
+
+  useEffect(() => {
+    if (downloadFormat === 'aac') {
+      setDownloadFormat('mp3');
+    }
+  }, [downloadFormat, setDownloadFormat]);
   const appUpdateError = useAppUpdateStore((state) => state.error);
   const installedBuild = useAppUpdateStore((state) => state.installedBuild);
   const remoteBuild = useAppUpdateStore((state) => state.remoteBuild);
@@ -198,10 +204,6 @@ export default function SettingsPage() {
             <label className="flex items-center gap-2 cursor-pointer">
             <input type="radio" name="format" value="mp3" checked={downloadFormat === 'mp3'} onChange={() => setDownloadFormat('mp3')} />
             <span className="text-sm">{t('mp3')}</span>
-          </label>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="radio" name="format" value="aac" checked={downloadFormat === 'aac'} onChange={() => setDownloadFormat('aac')} />
-            <span className="text-sm">{t('aac')}</span>
           </label>
         </div>
       </section>
