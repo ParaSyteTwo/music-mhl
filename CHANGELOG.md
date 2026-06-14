@@ -1,8 +1,9 @@
 # Changelog
 
-## Sin publicar
+## v1.4.7-beta.2 - 2026-06-14
 
 - Corregida la lectura nativa de tamaños, versiones y timestamps enviados por Capacitor al descargar e instalar actualizaciones.
+- Unificado `FileProvider` para que el instalador Android pueda leer el APK validado sin errores de autoridad.
 
 ## v1.4.7-beta.1 - 2026-06-14
 
