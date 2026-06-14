@@ -34,6 +34,7 @@ import java.util.concurrent.Executors;
 public class AppUpdaterPlugin extends Plugin {
 
     private static final String UPDATE_DIRECTORY = "app-updates";
+    private static final double MAX_SAFE_JAVASCRIPT_INTEGER = 9_007_199_254_740_991d;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private volatile boolean downloadInProgress = false;
     private volatile boolean downloadCancellationRequested = false;
@@ -102,9 +103,9 @@ public class AppUpdaterPlugin extends Plugin {
         String url = call.getString("url");
         String assetName = call.getString("assetName");
         String expectedDigest = call.getString("expectedDigest");
-        Long expectedSize = call.getLong("expectedSize");
-        Long eligibleAtMs = call.getLong("eligibleAtMs");
-        Long trustedTimeMs = call.getLong("trustedTimeMs");
+        Long expectedSize = readWholeNumber(call, "expectedSize");
+        Long eligibleAtMs = readWholeNumber(call, "eligibleAtMs");
+        Long trustedTimeMs = readWholeNumber(call, "trustedTimeMs");
         if (
             url == null ||
             assetName == null ||
@@ -261,9 +262,9 @@ public class AppUpdaterPlugin extends Plugin {
         String path = call.getString("path");
         String expectedDigest = call.getString("expectedDigest");
         String expectedVersionName = call.getString("expectedVersionName");
-        Long expectedVersionCode = call.getLong("expectedVersionCode");
-        Long eligibleAtMs = call.getLong("eligibleAtMs");
-        Long trustedTimeMs = call.getLong("trustedTimeMs");
+        Long expectedVersionCode = readWholeNumber(call, "expectedVersionCode");
+        Long eligibleAtMs = readWholeNumber(call, "eligibleAtMs");
+        Long trustedTimeMs = readWholeNumber(call, "trustedTimeMs");
         if (
             path == null ||
             expectedDigest == null ||
@@ -516,6 +517,23 @@ public class AppUpdaterPlugin extends Plugin {
             output.append(String.format("%02x", item));
         }
         return output.toString();
+    }
+
+    private static Long readWholeNumber(PluginCall call, String name) {
+        return coerceWholeNumber(call.getData().opt(name));
+    }
+
+    static Long coerceWholeNumber(Object value) {
+        if (!(value instanceof Number)) return null;
+        double doubleValue = ((Number) value).doubleValue();
+        if (
+            !Double.isFinite(doubleValue) ||
+            doubleValue != Math.rint(doubleValue) ||
+            Math.abs(doubleValue) > MAX_SAFE_JAVASCRIPT_INTEGER
+        ) {
+            return null;
+        }
+        return ((Number) value).longValue();
     }
 
     private void resolveSuccess(PluginCall call, JSObject data) {

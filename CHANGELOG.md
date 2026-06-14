@@ -1,5 +1,9 @@
 # Changelog
 
+## Sin publicar
+
+- Corregida la lectura nativa de tamaños, versiones y timestamps enviados por Capacitor al descargar e instalar actualizaciones.
+
 ## v1.4.7-beta.1 - 2026-06-14
 
 - Corregido el canal beta para aceptar inmediatamente la release más reciente, sea estable o prerelease.
