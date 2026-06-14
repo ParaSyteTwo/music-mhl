@@ -37,6 +37,48 @@ describe('musicApi lyrics combination', () => {
     expect(result?.synced).toBe('[00:01.00]I want your love in my heart');
     expect(result?.synced).not.toContain('Quiero tu amor');
   });
+
+  it('does not append a Spanish translation to Spanish original lyrics', async () => {
+    const result = await __testing.combineLyrics(
+      {
+        original: ['Baila conmigo toda la noche', 'Sigo mirando tus ojos'],
+        romaji: [],
+        translated: ['Baila conmigo durante toda la noche', 'Continúo mirando tus ojos'],
+        sourceUrl: 'https://www.letras.com/example/song/',
+      },
+      null,
+      {
+        lyricOriginal: true,
+        lyricRomanization: false,
+        lyricTranslation: true,
+        deviceLang: 'es',
+      },
+    );
+
+    expect(result?.synced).not.toContain('durante toda');
+    expect(result?.synced).not.toContain('Continúo');
+  });
+
+  it('deduplicates an equal translated layer without removing repeated song lines', async () => {
+    const result = await __testing.combineLyrics(
+      {
+        original: ['I love you', 'I love you'],
+        romaji: [],
+        translated: ['I love you!', 'Te amo'],
+        sourceUrl: 'https://www.letras.com/example/song/',
+      },
+      null,
+      {
+        lyricOriginal: true,
+        lyricRomanization: false,
+        lyricTranslation: true,
+        deviceLang: 'es',
+      },
+    );
+
+    expect(result?.synced?.match(/I love you/g)).toHaveLength(2);
+    expect(result?.synced).toContain('Te amo');
+  });
 });
 
 describe('musicApi request reuse', () => {

@@ -33,8 +33,8 @@ export function detectScript(text: string): Script {
 
 export type LyricSourceLang = Lang | 'unknown'
 
-const ES_WORDS = /\b(el|la|los|las|un|una|unos|unas|de|del|que|y|en|por|para|con|sin|mi|tu|yo|te|me|amor|corazon|vida|noche|quiero|eres|estoy|esta|como)\b/gi
-const EN_WORDS = /\b(the|and|you|your|me|my|i|we|to|of|in|on|for|with|without|love|heart|life|night|want|are|is|am|like|baby)\b/gi
+const ES_WORDS = /\b(el|la|los|las|un|una|unos|unas|de|del|que|y|en|por|para|con|sin|mi|tu|yo|te|me|se|su|sus|es|soy|eres|somos|estoy|estas|esta|hay|amor|corazon|vida|noche|dia|alma|cielo|ojos|quiero|puedo|porque|cuando|donde|como|aunque|siempre|nunca|nada|todo|toda|contigo|conmigo|baila|besame|deja|sigo)\b/gi
+const EN_WORDS = /\b(the|and|you|your|me|my|i|we|to|of|in|on|for|with|without|love|heart|life|night|day|soul|eyes|want|are|is|am|like|baby|because|when|where|always|never|nothing|everything|dance|kiss|let|still)\b/gi
 
 function countMatches(text: string, re: RegExp): number {
   return (text.match(re) ?? []).length
@@ -51,12 +51,14 @@ export function detectLatinLyricLanguage(text: string): LyricSourceLang {
 
   if (!sample) return 'unknown'
   const raw = text.toLowerCase()
-  const hasSpanishSignals = /[áéíóúñ¿¡]/i.test(text) || /\b(que|estoy|corazon|cancion|tu|mi|amor)\b/i.test(raw)
+  const hasSpanishSignals =
+    /[áéíóúñ¿¡]/i.test(text) ||
+    /\b(que|porque|aunque|estoy|eres|corazon|cancion|contigo|conmigo|quiero)\b/i.test(raw)
   const esScore = countMatches(sample, ES_WORDS) + (hasSpanishSignals ? 3 : 0)
   const enScore = countMatches(sample, EN_WORDS)
 
-  if (esScore >= 4 && esScore >= enScore + 2) return 'es'
-  if (enScore >= 4 && enScore >= esScore + 2) return 'en'
+  if (esScore >= 4 && esScore >= enScore + 1) return 'es'
+  if (enScore >= 4 && enScore >= esScore + 1) return 'en'
   return 'unknown'
 }
 
@@ -261,6 +263,21 @@ interface LyricFlags {
   translation: boolean
 }
 
+function normalizeLyricLine(text: string): string {
+  return text
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+export function areLyricLinesEquivalent(left: string, right: string): boolean {
+  const normalizedLeft = normalizeLyricLine(left)
+  return normalizedLeft.length > 0 && normalizedLeft === normalizeLyricLine(right)
+}
+
 export function buildLRC(
   syncedLrc: string,
   romanized: string[] | null,
@@ -279,13 +296,25 @@ export function buildLRC(
 
     if (!text.trim()) { synced.push(ts); plain.push(''); return }
 
-    if (flags.original) { synced.push(`${ts}${text}`); plain.push(text) }
+    const selectedLines: string[] = []
+    const pushDistinct = (line: string | undefined) => {
+      if (
+        !line?.trim() ||
+        selectedLines.some((selected) => areLyricLinesEquivalent(selected, line))
+      ) {
+        return
+      }
+      selectedLines.push(line)
+      synced.push(`${ts}${line}`)
+      plain.push(line)
+    }
 
+    if (flags.original) pushDistinct(text)
     const rom = romanized?.[idx]
-    if (flags.romanization && rom) { synced.push(`${ts}${rom}`); plain.push(rom) }
+    if (flags.romanization) pushDistinct(rom)
 
     const tra = translated?.[idx]
-    if (flags.translation && tra) { synced.push(`${ts}${tra}`); plain.push(tra) }
+    if (flags.translation) pushDistinct(tra)
   })
 
   return { synced: synced.join('\n'), plain: plain.join('\n') }
@@ -307,15 +336,14 @@ export async function processLyrics(
 ): Promise<{ synced: string | null; plain: string | null }> {
   if (!syncedLrc) return { synced: null, plain: plainLrc || null }
 
-  const sample = syncedLrc.replace(LRC_RE, '$2').slice(0, 200)
+  const rawLines = syncedLrc.split('\n').map(l => {
+    const m = LRC_RE.exec(l); return m ? m[2] : l
+  })
+  const sample = rawLines.join('\n').slice(0, 500)
   const script = detectScript(sample)
   const isLatin = script === 'latin'
   const sourceLang = detectLyricSourceLanguage(sample, script)
   const shouldTranslate = shouldTranslateLyrics(sourceLang, prefs.deviceLang, prefs.lyricTranslation)
-
-  const rawLines = syncedLrc.split('\n').map(l => {
-    const m = LRC_RE.exec(l); return m ? m[2] : l
-  })
 
   const [romanized, translated] = await Promise.all([
     prefs.lyricRomanization && !isLatin

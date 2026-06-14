@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
+  buildLRC,
   detectLatinLyricLanguage,
   processLyrics,
   romanizeLines,
@@ -9,6 +10,7 @@ import {
 describe('lyrics language decisions', () => {
   it('detects common Spanish lyric text', () => {
     expect(detectLatinLyricLanguage('Yo quiero que tu amor este en mi corazon y en mi vida')).toBe('es');
+    expect(detectLatinLyricLanguage('Baila conmigo toda la noche, sigo mirando tus ojos')).toBe('es');
   });
 
   it('detects common English lyric text', () => {
@@ -31,6 +33,7 @@ describe('lyrics language decisions', () => {
   });
 
   it('does not duplicate Spanish lyrics when target is Spanish', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
     const result = await processLyrics('[00:01.00]Yo quiero tu amor', '', {
       lyricOriginal: true,
       lyricRomanization: false,
@@ -39,6 +42,20 @@ describe('lyrics language decisions', () => {
     });
 
     expect(result.synced).toBe('[00:01.00]Yo quiero tu amor');
+    expect(fetchMock).not.toHaveBeenCalled();
+    fetchMock.mockRestore();
+  });
+
+  it('deduplicates equal original, romanization, and translation layers per timestamp', () => {
+    expect(buildLRC(
+      '[00:01.00]Cómo te quiero',
+      ['Como te quiero'],
+      ['¿Cómo te quiero!'],
+      { original: true, romanization: true, translation: true },
+    )).toEqual({
+      synced: '[00:01.00]Cómo te quiero',
+      plain: 'Cómo te quiero',
+    });
   });
 
   it('romanizes Korean without Node-only modules', async () => {

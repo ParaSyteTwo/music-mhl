@@ -952,6 +952,7 @@ async function _combineLyrics(
   const {
     detectScript,
     detectLyricSourceLanguage,
+    areLyricLinesEquivalent,
     shouldTranslateLyrics,
     translateLines,
   } = await import('@/lib/lyricsProcessor')
@@ -973,17 +974,21 @@ async function _combineLyrics(
     // Timestamp — usar el de LRCLIB si existe, si no estimator
     const ts = timestamps?.[i] ?? `${String(Math.floor(i / 20) + 0).padStart(2, '0')}:${String((i % 20) * 3).padStart(2, '0')}.00`
 
-    if (p.lyricOriginal && letras.original[i]) {
-      result.push(`[${ts}]${letras.original[i]}`)
+    const selectedLines: string[] = []
+    const pushDistinct = (line: string | undefined) => {
+      if (
+        !line?.trim() ||
+        selectedLines.some((selected) => areLyricLinesEquivalent(selected, line))
+      ) {
+        return
+      }
+      selectedLines.push(line)
+      result.push(`[${ts}]${line}`)
     }
 
-    if (p.lyricRomanization && letras.romaji[i]) {
-      result.push(`[${ts}]${letras.romaji[i]}`)
-    }
-
-    if (shouldTranslate && translated?.[i]) {
-      result.push(`[${ts}]${translated[i]}`)
-    }
+    if (p.lyricOriginal) pushDistinct(letras.original[i])
+    if (p.lyricRomanization) pushDistinct(letras.romaji[i])
+    if (shouldTranslate) pushDistinct(translated?.[i])
   }
 
   return { synced: result.join('\n'), plain: result.join('\n') }
