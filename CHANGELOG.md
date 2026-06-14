@@ -1,8 +1,9 @@
 # Changelog
 
-## Sin publicar
+## v1.4.7-beta.1 - 2026-06-14
 
 - Corregido el canal beta para aceptar inmediatamente la release más reciente, sea estable o prerelease.
+- Mejorada la detección de letras en español y eliminadas capas duplicadas entre original, romanización y traducción.
 
 ## v1.4.6 - 2026-06-14
 
