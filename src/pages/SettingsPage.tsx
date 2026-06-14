@@ -8,6 +8,7 @@ import { Capacitor } from '@capacitor/core';
 import { isPyWebView } from '@/lib/platform';
 import type { AudioPlayer } from '@/lib/openFileBridge';
 import { useAppUpdateStore } from '@/store/appUpdateStore';
+import { getRemainingSafetyDays } from '@/lib/appUpdatePolicy';
 
 const isAndroid = Capacitor.getPlatform() === 'android';
 
@@ -15,8 +16,6 @@ export default function SettingsPage() {
   const { t } = useI18n();
   const {
     downloadFolderName, setDownloadFolder, clearDownloadFolder,
-    downloadFormat, setDownloadFormat,
-    mp3Quality, setMp3Quality,
     downloadWifiOnly, setDownloadWifiOnly,
     ytDlpVersion, ytDlpUpdateAvailable, ytDlpUpdating,
     setYtDlpVersion, setYtDlpUpdateAvailable, setYtDlpUpdating,
@@ -34,21 +33,16 @@ export default function SettingsPage() {
   const [loadingPlayers, setLoadingPlayers] = useState(false);
   const appUpdateStatus = useAppUpdateStore((state) => state.status);
 
-  useEffect(() => {
-    if (downloadFormat === 'aac') {
-      setDownloadFormat('mp3');
-    }
-  }, [downloadFormat, setDownloadFormat]);
   const appUpdateError = useAppUpdateStore((state) => state.error);
+  const appUpdateDecision = useAppUpdateStore((state) => state.decision);
+  const appUpdateTrustedTimeMs = useAppUpdateStore((state) => state.lastTrustedTimeMs);
   const installedBuild = useAppUpdateStore((state) => state.installedBuild);
   const remoteBuild = useAppUpdateStore((state) => state.remoteBuild);
-  const checkForAppUpdate = useAppUpdateStore((state) => state.checkForUpdate);
-  const downloadAvailableUpdate = useAppUpdateStore((state) => state.downloadAvailableUpdate);
+  const updateApp = useAppUpdateStore((state) => state.updateApp);
   const cancelAvailableUpdateDownload = useAppUpdateStore(
     (state) => state.cancelAvailableUpdateDownload,
   );
   const appUpdateProgress = useAppUpdateStore((state) => state.downloadProgress);
-  const installReadyUpdate = useAppUpdateStore((state) => state.installReadyUpdate);
   const openInstallPermission = useAppUpdateStore((state) => state.openInstallPermission);
   const resumeInstallAfterPermission = useAppUpdateStore(
     (state) => state.resumeInstallAfterPermission,
@@ -196,38 +190,6 @@ export default function SettingsPage() {
           </label>
         </div>
       </section>
-
-      {/* Formato de descarga */}
-      <section className="mb-8">
-        <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">{t('downloadFormat')}</h2>
-        <div className="flex gap-4 items-center p-4 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)]">
-            <label className="flex items-center gap-2 cursor-pointer">
-            <input type="radio" name="format" value="mp3" checked={downloadFormat === 'mp3'} onChange={() => setDownloadFormat('mp3')} />
-            <span className="text-sm">{t('mp3')}</span>
-          </label>
-        </div>
-      </section>
-
-      {/* Calidad MP3 */}
-      {downloadFormat === 'mp3' && (
-        <section className="mb-8">
-          <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">{t('mp3Quality')}</h2>
-          <div className="flex gap-4 items-center p-4 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)]">
-              <label className="flex items-center gap-2 cursor-pointer">
-              <input type="radio" name="mp3q" value="alta" checked={mp3Quality === 'alta'} onChange={() => setMp3Quality('alta')} />
-              <span className="text-sm">{t('qualityHigh')}</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input type="radio" name="mp3q" value="media" checked={mp3Quality === 'media'} onChange={() => setMp3Quality('media')} />
-              <span className="text-sm">{t('qualityMedium')}</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input type="radio" name="mp3q" value="baja" checked={mp3Quality === 'baja'} onChange={() => setMp3Quality('baja')} />
-              <span className="text-sm">{t('qualityLow')}</span>
-            </label>
-          </div>
-        </section>
-      )}
 
       {/* Solo WiFi */}
       <section className="mb-8">
@@ -425,7 +387,11 @@ export default function SettingsPage() {
           <div className="p-4 rounded-lg bg-[#18181A] border border-[#232325] flex items-center gap-3">
             <RefreshCw className={`w-6 h-6 flex-shrink-0 ${
               appUpdateStatus === 'available' ? 'text-[#C8F04B]' : 'text-[#8A8A8A]'
-            } ${appUpdateStatus === 'checking' ? 'animate-spin' : ''}`} />
+            } ${
+              ['checking', 'downloading', 'validating', 'installing'].includes(appUpdateStatus)
+                ? 'animate-spin'
+                : ''
+            }`} />
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-[#F5F5F0]">
                 {t('installedVersion', { version: installedBuild?.versionName ?? '…' })}
@@ -442,6 +408,17 @@ export default function SettingsPage() {
               {appUpdateStatus === 'available' && remoteBuild && (
                 <p className="text-xs text-[#C8F04B] mt-1">
                   {t('appUpdateReady', { version: remoteBuild.versionName })}
+                </p>
+              )}
+              {appUpdateStatus === 'waiting' && remoteBuild && appUpdateDecision?.status === 'waiting' && (
+                <p className="text-xs text-amber-400 mt-1">
+                  {t('appUpdateSafetyDetail', {
+                    version: remoteBuild.versionName,
+                    days: getRemainingSafetyDays(
+                      appUpdateDecision.eligibleAt,
+                      appUpdateTrustedTimeMs || Date.now(),
+                    ),
+                  })}
                 </p>
               )}
               {appUpdateStatus === 'downloading' && (
@@ -473,24 +450,6 @@ export default function SettingsPage() {
               )}
             </div>
             <div className="flex flex-col gap-2">
-              {appUpdateStatus === 'available' && (
-                <button
-                  type="button"
-                  onClick={() => void downloadAvailableUpdate()}
-                  className="px-3 py-2 rounded-md text-xs font-semibold bg-[#C8F04B] text-[#18181A]"
-                >
-                  {t('downloadUpdate')}
-                </button>
-              )}
-              {appUpdateStatus === 'readyToInstall' && (
-                <button
-                  type="button"
-                  onClick={() => void installReadyUpdate()}
-                  className="px-3 py-2 rounded-md text-xs font-semibold bg-[#C8F04B] text-[#18181A]"
-                >
-                  {t('installUpdate')}
-                </button>
-              )}
               {appUpdateStatus === 'downloading' && (
                 <button
                   type="button"
@@ -509,14 +468,24 @@ export default function SettingsPage() {
                   {t('allowInstallations')}
                 </button>
               )}
-              <button
-                type="button"
-                onClick={() => void checkForAppUpdate(true)}
-                disabled={appUpdateStatus === 'checking' || appUpdateStatus === 'downloading' || appUpdateStatus === 'validating' || appUpdateStatus === 'installing'}
-                className="px-3 py-2 rounded-md text-xs font-semibold bg-[#232325] text-[#B0B0B0] hover:text-[#F5F5F0] disabled:opacity-50"
-              >
-                {t('checkUpdates')}
-              </button>
+              {appUpdateStatus !== 'downloading' && appUpdateStatus !== 'permissionRequired' && (
+                <button
+                  type="button"
+                  onClick={() => void updateApp()}
+                  disabled={appUpdateStatus === 'checking' || appUpdateStatus === 'validating' || appUpdateStatus === 'installing'}
+                  className={`px-3 py-2 rounded-md text-xs font-semibold disabled:opacity-50 ${
+                    appUpdateStatus === 'available' || appUpdateStatus === 'readyToInstall' || appUpdateStatus === 'error'
+                      ? 'bg-[#C8F04B] text-[#18181A]'
+                      : 'bg-[#232325] text-[#B0B0B0] hover:text-[#F5F5F0]'
+                  }`}
+                >
+                  {appUpdateStatus === 'checking' || appUpdateStatus === 'validating' || appUpdateStatus === 'installing'
+                    ? t('updating')
+                    : appUpdateStatus === 'available' || appUpdateStatus === 'readyToInstall' || appUpdateStatus === 'error'
+                      ? t('update')
+                      : t('checkUpdates')}
+                </button>
+              )}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2 mt-2">
@@ -525,7 +494,12 @@ export default function SettingsPage() {
                 key={channel}
                 type="button"
                 onClick={() => void setUpdateChannel(channel)}
-                disabled={appUpdateStatus === 'downloading' || appUpdateStatus === 'installing'}
+                disabled={
+                  appUpdateStatus === 'checking' ||
+                  appUpdateStatus === 'downloading' ||
+                  appUpdateStatus === 'validating' ||
+                  appUpdateStatus === 'installing'
+                }
                 className={`px-3 py-2 rounded-md text-xs font-semibold transition-colors ${
                   updateChannel === channel
                     ? 'bg-[#C8F04B] text-[#18181A]'

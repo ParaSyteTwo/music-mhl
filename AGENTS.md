@@ -126,8 +126,9 @@ Types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`
 - Identidad de build: `versionCode + versionName + SHA-256`.
 - Incrementar siempre `versionCode` en releases normales.
 - Conservar `applicationId = com.mhl.music` y el certificado de firma actual.
-- Un asset nuevo o reemplazado debe madurar 7 días desde `asset.updated_at`.
-- No permitir descarga o instalación durante ese periodo.
+- Un asset estable nuevo o reemplazado debe madurar 7 días desde `asset.updated_at`.
+- Los prereleases del canal beta pueden descargarse desde su publicación.
+- No permitir descarga o instalación estable durante su periodo de maduración.
 - Validar digest, package, versión y certificado antes de instalar.
 - La instalación siempre requiere confirmación del sistema Android.
 - Implementar por slices en el orden definido por el contrato; no saltar directamente al instalador.

@@ -44,15 +44,15 @@ describe('app update policy', () => {
     });
   });
 
-  it('keeps a stable update unavailable for installation until seven days after upload', () => {
+  it('keeps a stable update waiting until seven days after upload', () => {
     const decision = evaluateAppUpdate(
       installed,
       remote(),
       Date.parse('2026-06-10T12:00:01Z'),
-      0,
+      Date.parse('2026-06-10T12:00:01Z'),
     );
     expect(decision).toMatchObject({
-      status: 'available',
+      status: 'waiting',
       replacementBuild: false,
       eligibleAt: '2026-06-17T12:00:00.000Z',
     });
@@ -105,27 +105,27 @@ describe('app update policy', () => {
     });
   });
 
-  it('derives eligibility from trusted GitHub asset metadata, not device time', () => {
+  it('does not trust a device clock that is ahead of GitHub time', () => {
     expect(evaluateAppUpdate(
       installed,
       remote(),
+      Date.parse('2026-06-20T12:00:00Z'),
       Date.parse('2026-06-11T12:00:00Z'),
-      0,
     )).toMatchObject({
-      status: 'available',
+      status: 'waiting',
       eligibleAt: '2026-06-17T12:00:00.000Z',
     });
   });
 
-  it('makes beta candidates available under the same validation policy', () => {
+  it('makes beta candidates available immediately after publication', () => {
     expect(evaluateAppUpdate(
       installed,
       remote({ channel: 'beta', versionName: '1.4.0-beta.1', versionCode: 15 }),
       Date.parse('2026-06-10T12:00:01Z'),
-      0,
+      Date.parse('2026-06-10T12:00:01Z'),
     )).toMatchObject({
       status: 'available',
-      eligibleAt: '2026-06-17T12:00:00.000Z',
+      eligibleAt: '2026-06-10T12:00:00.000Z',
     });
   });
 });

@@ -19,7 +19,6 @@ public class MainActivity extends BridgeActivity {
             WebView.setWebContentsDebuggingEnabled(true);
         }
         registerPlugin(YtDlpPlugin.class);
-        registerPlugin(NativeLibraryPlugin.class);
         registerPlugin(OpenFilePlugin.class);
         registerPlugin(AppUpdaterPlugin.class);
         super.onCreate(savedInstanceState);

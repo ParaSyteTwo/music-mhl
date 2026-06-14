@@ -357,8 +357,6 @@ export interface DownloadCandidate {
 }
 
 export interface DownloadOptions {
-  format?: 'mp3' | 'aac';
-  quality?: 'alta' | 'media' | 'baja';
   animeSearchEnabled?: boolean;
 }
 
@@ -728,8 +726,6 @@ export async function downloadTrackAudio(
       title,
       artist,
       queries,
-      options.format ?? 'mp3',
-      options.quality ?? 'alta',
       sourceUrlOverride ?? null,
     );
     if (!result.success) throw new Error(result.error || 'Error descargando audio');
@@ -745,8 +741,6 @@ export async function downloadTrackAudio(
       onProgress?.(10);
       try {
         return await downloadMp3Native(null, {
-          format: options.format,
-          quality: options.quality,
           sourceUrl: sourceUrlOverride,
         });
       } catch {
@@ -756,7 +750,7 @@ export async function downloadTrackAudio(
 
     if (videoIdOverride) {
       onProgress?.(10);
-      return downloadMp3Native(videoIdOverride, { format: options.format, quality: options.quality });
+      return downloadMp3Native(videoIdOverride);
     }
 
     onProgress?.(10);
@@ -771,10 +765,7 @@ export async function downloadTrackAudio(
 
     for (const candidate of scored) {
       try {
-        const buffer = await downloadMp3Native(candidate.videoId, {
-          format: options.format,
-          quality: options.quality,
-        });
+        const buffer = await downloadMp3Native(candidate.videoId);
         return buffer;
       } catch (e) {
         lastError = e instanceof Error ? e.message : 'Failed';
@@ -802,7 +793,7 @@ export async function downloadTrackAudio(
       title: getPreferredTrackTitle(track),
       artist: track.artist,
       album: getPreferredAlbumName(track),
-      format: options.format ?? 'mp3',
+      format: 'mp3',
       duration: track.duration ?? 0,
       ...(videoIdOverride ? { videoId: videoIdOverride } : {}),
     }),

@@ -5,12 +5,13 @@ import {
 } from '@/types/appUpdate';
 
 export const ANDROID_ASSET_SAFETY_PERIOD_MS = 7 * 24 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 export function evaluateAppUpdate(
   installed: InstalledAndroidBuild,
   remote: RemoteAndroidBuild,
   _deviceNowMs: number,
-  _lastTrustedTimeMs = 0,
+  lastTrustedTimeMs = 0,
 ): AppUpdateDecision {
   if (remote.versionCode < installed.versionCode) {
     return { status: 'upToDate', reason: 'installedBuildIsNewer' };
@@ -48,10 +49,29 @@ export function evaluateAppUpdate(
   }
 
   const replacementBuild = sameVersion && !sameDigest;
+  const safetyPeriodMs = remote.channel === 'stable'
+    ? ANDROID_ASSET_SAFETY_PERIOD_MS
+    : 0;
+  const eligibleAtMs = updatedAtMs + safetyPeriodMs;
+  const eligibleAt = new Date(eligibleAtMs).toISOString();
+
+  if (lastTrustedTimeMs < eligibleAtMs) {
+    return {
+      status: 'waiting',
+      replacementBuild,
+      eligibleAt,
+    };
+  }
 
   return {
     status: 'available',
     replacementBuild,
-    eligibleAt: new Date(updatedAtMs + ANDROID_ASSET_SAFETY_PERIOD_MS).toISOString(),
+    eligibleAt,
   };
+}
+
+export function getRemainingSafetyDays(eligibleAt: string, nowMs = Date.now()): number {
+  const eligibleAtMs = Date.parse(eligibleAt);
+  if (!Number.isFinite(eligibleAtMs) || eligibleAtMs <= nowMs) return 0;
+  return Math.ceil((eligibleAtMs - nowMs) / DAY_MS);
 }

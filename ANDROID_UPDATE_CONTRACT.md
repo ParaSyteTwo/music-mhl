@@ -72,12 +72,14 @@ Replacing an APK while retaining the same version is an exceptional recovery mec
 
 ## Update Channels
 
-- Stable is the default and offers the latest public release immediately.
+- Stable is the default and offers the latest public release after its safety period.
 - Beta is opt-in and offers the newest valid GitHub prerelease.
+- Stable assets mature for seven days from `asset.updated_at`.
+- Beta prereleases are eligible immediately after publication.
 - Users skip intermediate releases because each channel resolves only its newest candidate.
 - Re-query GitHub immediately before downloading and immediately before installing.
 - A changed asset ID, digest, size, or `updated_at` invalidates any downloaded APK.
-- Never weaken digest, package, version, downgrade, or signing-certificate validation by channel.
+- The beta timing exception never weakens digest, package, version, downgrade, or signing-certificate validation.
 
 ## Mandatory Validation
 
@@ -85,13 +87,14 @@ Before installation, perform these checks in order:
 
 1. The release and asset come from the immutable official endpoint.
 2. The asset metadata and Android manifest are internally consistent.
-3. The downloaded SHA-256 equals GitHub `assets[].digest`.
-4. The APK package is `com.mhl.music`.
-5. The version/digest comparison allows an update and never a downgrade.
-6. The downloaded APK signing certificate equals the installed app certificate.
-7. The selected stable/beta channel still contains the same asset.
-8. Re-query GitHub and confirm the asset did not change.
-9. Open the Android system installer for explicit user confirmation.
+3. Stable has completed seven days from `asset.updated_at`, or beta is a published prerelease.
+4. The downloaded SHA-256 equals GitHub `assets[].digest`.
+5. The APK package is `com.mhl.music`.
+6. The version/digest comparison allows an update and never a downgrade.
+7. The downloaded APK signing certificate equals the installed app certificate.
+8. The selected stable/beta channel still contains the same asset.
+9. Re-query GitHub and confirm the asset did not change.
+10. Open the Android system installer for explicit user confirmation.
 
 Any failed or unavailable validation must block installation without affecting normal app use.
 

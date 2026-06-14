@@ -1,5 +1,12 @@
 # Changelog
 
+## Sin publicar
+
+- Eliminada la biblioteca local, su navegación, estado, plugin Android y dependencia de selección de archivos.
+- Las descargas quedan fijadas a MP3 con la calidad máxima de yt-dlp; formato y calidad dejan de ser ajustes.
+- El updater usa una sola acción para comprobar, descargar, validar y abrir el instalador.
+- El canal estable conserva siete días de maduración; los prereleases beta son elegibles desde su publicación.
+
 ## v1.4.5 - 2026-06-13
 
 ### Anime
@@ -16,7 +23,7 @@
 
 ### Android y frontend
 
-- Restaurados la biblioteca y sus rutas de navegación, la cola atómica y la restauración de archivos reales.
+- Restauradas la cola atómica y la restauración de archivos reales.
 - Restaurado el periodo obligatorio de maduración de siete días y restringido el canal beta a prereleases.
 - Bloqueados downgrades, restringido FileProvider y corregidos los contratos TypeScript del updater.
 - `versionCode` incrementado a `19` con el paquete y certificado oficiales.
@@ -112,7 +119,7 @@
 - Detección automática de nuevas versiones publicadas únicamente en `ParaSyteTwo/music-mhl`.
 - Comprobación manual desde Ajustes y comprobación no bloqueante cada 24 horas.
 - Identidad de compilación mediante `versionCode`, `versionName` y SHA-256 del APK.
-- Periodo de seguridad de siete días desde el último cambio del asset APK.
+- Periodo de seguridad estable de siete días desde el último cambio del asset APK.
 - La hora confiable de GitHub impide acortar la espera modificando el reloj del dispositivo.
 - Descarga privada con progreso, cancelación y prevención de descargas duplicadas.
 - Validación de digest, paquete `com.mhl.music`, versión y certificado firmante.
@@ -152,7 +159,7 @@
 
 - Interfaz completa en español e inglés con detección del idioma del dispositivo y selección manual.
 - Modos de idioma `Sistema`, `Español` e `Inglés`.
-- Biblioteca, Descargas, Búsqueda, Ajustes, reproductor, avisos, estados y acciones respetan el idioma seleccionado.
+- Descargas, Búsqueda, Ajustes, reproductor, avisos, estados y acciones respetan el idioma seleccionado.
 - Migración automática de la preferencia de idioma anterior.
 
 ### 🎤 Letras sincronizadas multicapa

@@ -9,7 +9,6 @@ import { useAppUpdateStore } from "@/store/appUpdateStore";
 
 const SearchPage = lazy(() => import("./pages/SearchPage"));
 const DownloadsPage = lazy(() => import("./pages/DownloadsPage"));
-const LibraryPage = lazy(() => import("./pages/LibraryPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 
 function RouteFallback() {
@@ -34,7 +33,7 @@ const App = () => {
     return () => window.removeEventListener('pywebviewready', markFrontendReady);
   }, []);
 
-  // Rescan local library on Android to restore localFileRefs after app restart
+  // Initialize Android-native services without blocking the first render.
   useEffect(() => {
     if (Capacitor.isNativePlatform()) {
       // Initialize yt-dlp in background so it's ready for downloads
@@ -66,7 +65,6 @@ const App = () => {
           <Route element={<AppLayout />}>
             <Route path="/" element={<SearchPage />} />
             <Route path="/downloads" element={<DownloadsPage />} />
-            <Route path="/library" element={<LibraryPage />} />
             <Route path="/playlists" element={<Navigate to="/downloads" replace />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>

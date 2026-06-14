@@ -72,6 +72,7 @@ export type AppUpdateStatus =
   | 'idle'
   | 'checking'
   | 'upToDate'
+  | 'waiting'
   | 'available'
   | 'downloading'
   | 'validating'
@@ -106,6 +107,11 @@ export type AppUpdateDecision =
   | {
       status: 'rejected';
       error: AppUpdateError;
+    }
+  | {
+      status: 'waiting';
+      replacementBuild: boolean;
+      eligibleAt: string;
     }
   | {
       status: 'available';

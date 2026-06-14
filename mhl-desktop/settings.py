@@ -5,8 +5,6 @@ CONFIG_DIR = Path.home() / '.mhl-music'
 CONFIG_FILE = CONFIG_DIR / 'settings.json'
 
 DEFAULTS = {
-    'format': 'mp3',
-    'quality': '0',
     'download_folder': str(Path.home() / 'Music' / 'MHL Music'),
 }
 

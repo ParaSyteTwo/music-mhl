@@ -55,10 +55,6 @@ describe('useMusicStore', () => {
       downloadFolderName: '',
       dominantColor: null,
       uiLanguageMode: 'system',
-      localLibrary: [],
-      localFileRefs: new Map(),
-      isImporting: false,
-      savedLocalPaths: [],
     });
   });
 
@@ -375,124 +371,6 @@ describe('useMusicStore', () => {
       store.setDominantColor(null);
 
       expect(store.dominantColor).toBeNull();
-    });
-  });
-
-  describe('Local Library', () => {
-    it('should initialize with empty local library', () => {
-      const state = useMusicStore.getState();
-
-      expect(state.localLibrary).toEqual([]);
-      expect(state.localFileRefs.size).toBe(0);
-    });
-
-    it('should increment play count for local track', () => {
-      const localTrack = {
-        id: 'local-1',
-        title: 'Local Song',
-        artist: 'Local Artist',
-        album: 'Local Album',
-        duration: 180,
-        cover: '',
-        isLocal: true as const,
-        localPath: '/music/song.mp3',
-        genre: 'Rock',
-        playCount: 0,
-        importedAt: Date.now(),
-      };
-
-      const store = useMusicStore.getState();
-      store.localLibrary = [localTrack];
-
-      expect(() => {
-        store.incrementPlayCount('local-1');
-      }).not.toThrow();
-    });
-
-    it('should increment play count multiple times', () => {
-      const localTrack = {
-        id: 'local-1',
-        title: 'Song',
-        artist: 'Artist',
-        album: 'Album',
-        duration: 180,
-        cover: '',
-        isLocal: true as const,
-        localPath: '/music/song.mp3',
-        genre: 'Rock',
-        playCount: 0,
-        importedAt: Date.now(),
-      };
-
-      const store = useMusicStore.getState();
-      store.localLibrary = [localTrack];
-
-      expect(() => {
-        store.incrementPlayCount('local-1');
-        store.incrementPlayCount('local-1');
-        store.incrementPlayCount('local-1');
-      }).not.toThrow();
-    });
-
-    it('should remove local track', () => {
-      const localTrack = {
-        id: 'local-1',
-        title: 'Song',
-        artist: 'Artist',
-        album: 'Album',
-        duration: 180,
-        cover: '',
-        isLocal: true as const,
-        localPath: '/music/song.mp3',
-        genre: 'Rock',
-        playCount: 0,
-        importedAt: Date.now(),
-      };
-
-      const store = useMusicStore.getState();
-      store.localLibrary = [localTrack];
-
-      expect(() => {
-        store.removeLocalTrack('local-1');
-      }).not.toThrow();
-    });
-
-    it('should clear entire local library', () => {
-      const tracks = [
-        {
-          id: 'local-1',
-          title: 'Song 1',
-          artist: 'Artist',
-          album: 'Album',
-          duration: 180,
-          cover: '',
-          isLocal: true as const,
-          localPath: '/music/song1.mp3',
-          genre: 'Rock',
-          playCount: 0,
-          importedAt: Date.now(),
-        },
-        {
-          id: 'local-2',
-          title: 'Song 2',
-          artist: 'Artist',
-          album: 'Album',
-          duration: 200,
-          cover: '',
-          isLocal: true as const,
-          localPath: '/music/song2.mp3',
-          genre: 'Pop',
-          playCount: 5,
-          importedAt: Date.now(),
-        },
-      ];
-
-      const store = useMusicStore.getState();
-      store.localLibrary = tracks;
-
-      expect(() => {
-        store.clearLocalLibrary();
-      }).not.toThrow();
     });
   });
 

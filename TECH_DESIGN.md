@@ -48,7 +48,6 @@ despliega para el flujo real.
 |---|---|---|
 | Host | Capacitor 8 | `android/` |
 | YouTube/download | `YtDlpPlugin` | plugin nativo Android |
-| Library | `NativeLibraryPlugin` | plugin nativo Android |
 | File opening | `OpenFilePlugin` | plugin nativo Android |
 | App updates | `AppUpdaterPlugin` | plugin nativo Android |
 
@@ -64,7 +63,6 @@ music-mhl/
 |   |   |-- api/                 catalogo, anime y seleccion de audio
 |   |   |-- platform/            deteccion android/pywebview/web legado
 |   |   |-- ytdlpBridge.ts       adapter Capacitor
-|   |   |-- nativeLibraryBridge.ts
 |   |   `-- appUpdaterBridge.ts
 |   `-- types/
 |-- mhl-desktop/
@@ -170,8 +168,7 @@ capacidades nativas se exponen a TypeScript con adapters tipados.
 Plugins registrados:
 
 - `YtDlpPlugin`: busqueda, descarga y procesamiento de audio.
-- `NativeLibraryPlugin`: biblioteca local.
-- `OpenFilePlugin`: apertura y seleccion de archivos.
+- `OpenFilePlugin`: apertura externa de archivos descargados.
 - `AppUpdaterPlugin`: identidad, descarga, validacion e instalacion asistida.
 
 No se modifica el codigo Android sin una necesidad concreta y pruebas
@@ -190,7 +187,7 @@ consulta del usuario
   -> descargar audio
   -> escribir metadatos canonicos
   -> verificar archivo
-  -> incorporar a descargas/biblioteca
+  -> incorporar al historial de descargas
 ```
 
 YouTube es fuente de audio. Sus titulos, canales y miniaturas son senales para
@@ -241,13 +238,13 @@ La resolucion AnimeThemes debe comparar titulos romaji, ingles y nativo
 normalizados. Ante resultados ambiguos, debe fallar de forma controlada en vez
 de elegir silenciosamente otra serie.
 
-## 9. Metadatos y Formatos
+## 9. Metadatos y MP3
 
 - La identidad canonica procede del catalogo correspondiente: Deezer para
   musica normal; AnimeThemes/AniList para anime.
-- MP3 usa tags ID3.
-- Otros formatos solo se ofrecen cuando el pipeline puede escribir metadatos
-  compatibles; no se aplica un escritor ID3 a contenedores AAC/M4A.
+- Todas las descargas se convierten a MP3 con la calidad maxima de yt-dlp
+  (`--audio-quality 0`) y usan tags ID3.
+- Formato y calidad no son configurables.
 - El nombre de archivo se deriva de artista y titulo canonicos tras sanitizar
   caracteres y nombres reservados.
 - Una descarga solo termina con exito despues de comprobar escritura y tamano.
@@ -280,7 +277,7 @@ Flujo:
 
 ```text
 release oficial
-  -> validar manifiesto y madurez del asset
+  -> validar manifiesto y elegibilidad temporal del canal
   -> comparar build instalada
   -> descargar a almacenamiento privado
   -> validar digest, package, version y certificado
@@ -293,7 +290,8 @@ Reglas esenciales:
 
 - incrementar `versionCode` en releases normales;
 - conservar `applicationId = com.mhl.music` y el certificado actual;
-- respetar siete dias desde `asset.updated_at`;
+- respetar siete dias desde `asset.updated_at` en stable;
+- permitir prereleases beta desde su publicacion;
 - no permitir downgrade;
 - mantener separados updater de aplicacion y updater de yt-dlp;
 - no inicializar este flujo en Desktop ni en el branch web legado;

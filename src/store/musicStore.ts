@@ -1,17 +1,9 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { Track, Download, LocalTrack } from '@/types/music';
+import { Track, Download } from '@/types/music';
 import { audioEngine } from '@/lib/audioEngine';
 import { searchDeezer, downloadTrackAudio, getDeezerTrackMeta, getLyrics } from '@/lib/api/musicApi';
 import { writeID3Tags } from '@/lib/id3Writer';
-import {
-  type ImportedAudioFile,
-  resolveImportedTrackMeta,
-  resolveLocalPlaybackUrl,
-  shouldPersistLocalPath,
-  toImportedAudioFile,
-} from '@/lib/localTrackRuntime';
-import { parseLocalFiles } from '@/lib/metadataEnricher';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { toast } from 'sonner';
@@ -134,10 +126,6 @@ interface MusicStore {
   setDominantColor: (color: string | null) => void;
 
   // ─── Settings ───
-  downloadFormat: 'mp3' | 'aac';
-  setDownloadFormat: (format: 'mp3' | 'aac') => void;
-  mp3Quality: 'alta' | 'media' | 'baja';
-  setMp3Quality: (q: 'alta' | 'media' | 'baja') => void;
   downloadWifiOnly: boolean;
   setDownloadWifiOnly: (v: boolean) => void;
   uiLanguageMode: UiLanguageMode;
@@ -171,20 +159,6 @@ interface MusicStore {
   isMaintenanceMode: boolean;
   maintenanceUntil: number | null;
   setMaintenanceMode: (active: boolean, until?: number | null) => void;
-
-  // ─── Local Library ───
-  localLibrary: LocalTrack[];
-  localFileRefs: Map<string, File>;
-  isImporting: boolean;
-  savedLocalPaths: string[];
-
-  importLocalFiles: (files: FileList | File[], options?: { silent?: boolean }) => Promise<void>;
-  importScannedTracks: (tracks: LocalTrack[], options?: { silent?: boolean }) => void;
-  rescanLocalLibrary: () => Promise<void>;
-  playLocalTrack: (id: string) => Promise<void>;
-  removeLocalTrack: (id: string) => void;
-  clearLocalLibrary: () => void;
-  incrementPlayCount: (id: string) => void;
 
   // ─── Download history for suggestions ───
   mostDownloadedArtists: string[];
@@ -433,10 +407,8 @@ export const useMusicStore = create<MusicStore>()(
 
           updateDl({ status: 'downloading', progress: 5 });
 
-          const { downloadFormat, mp3Quality } = get();
           const maxAttempts = 3;
-          const fileExtension = downloadFormat === 'aac' ? 'm4a' : 'mp3';
-          const resolvedFileName = buildDownloadFileName(track, fileExtension);
+          const resolvedFileName = buildDownloadFileName(track, 'mp3');
           const supplementalDataPromise = Promise.all([
             track.deezerId
               ? getDeezerTrackMeta(track.deezerId).catch(() => ({ genre: null, year: null, trackNumber: null }))
@@ -483,8 +455,6 @@ export const useMusicStore = create<MusicStore>()(
                   track.canonicalTitle?.trim() || track.title,
                   track.artist,
                   queries,
-                  downloadFormat,
-                  mp3Quality,
                   sourceUrlOverride ?? null,
                 ),
                 supplementalDataPromise,
@@ -510,8 +480,7 @@ export const useMusicStore = create<MusicStore>()(
 
               updateDl({ progress: 90 });
               // Guardar archivo con nombre y ruta correcta
-              const ext = downloadFormat === 'aac' ? 'm4a' : 'mp3';
-              const fileName = buildDownloadFileName(track, ext);
+              const fileName = buildDownloadFileName(track, 'mp3');
               const filePath = outputDir + '/' + fileName;
               const taggedArr = await taggedBlob.arrayBuffer();
               const writeResult = await api.write_file_bytes(
@@ -564,8 +533,6 @@ export const useMusicStore = create<MusicStore>()(
                 downloadTrackAudio(track, (progress) => {
                   updateDl({ progress });
                 }, {
-                  format: downloadFormat,
-                  quality: mp3Quality,
                   animeSearchEnabled: get().animeSearchEnabled,
                 }, videoIdOverride, sourceUrlOverride),
                 supplementalDataPromise,
@@ -574,7 +541,7 @@ export const useMusicStore = create<MusicStore>()(
               // Preferir synced (LRC con timestamps) — Retro Music lo sincroniza automáticamente
               const lyrics = lyricsResult.synced || lyricsResult.plain || null;
 
-              if (downloadFormat === 'mp3' && Capacitor.isNativePlatform()) {
+              if (Capacitor.isNativePlatform()) {
                 const taggedBlob = await writeID3Tags(audioBuffer, {
                   title: track.canonicalTitle?.trim() || track.title,
                   artist: track.artist,
@@ -604,7 +571,7 @@ export const useMusicStore = create<MusicStore>()(
                     encoding: Encoding.UTF8,
                   }).catch(() => { /* silencioso — no bloquea la descarga */ });
                 }
-              } else if (!Capacitor.isNativePlatform()) {
+              } else {
                 // Web: escribir ID3 tags y guardar como .mp3
                 const taggedBlob = await writeID3Tags(audioBuffer, {
                   title: track.canonicalTitle?.trim() || track.title,
@@ -644,46 +611,6 @@ export const useMusicStore = create<MusicStore>()(
                   a.click();
                   document.body.removeChild(a);
                   setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
-                }
-              } else {
-                // AAC — save raw buffer as .m4a
-                updateDl({ progress: 95 });
-
-                if (Capacitor.isNativePlatform()) {
-                  const base64 = btoa(new Uint8Array(audioBuffer).reduce((data, byte) => data + String.fromCharCode(byte), ''));
-                  // Guardar en Music/MHL Music via MediaStore
-                  const { saveTaggedAudioToMusic } = await import('@/lib/ytdlpBridge');
-                  const mediaUri = await saveTaggedAudioToMusic(resolvedFileName, base64);
-                  updateDl({ mediaUri });
-                } else {
-                  const { downloadFolder } = get();
-                  const blob = new Blob([audioBuffer]);
-                  if (downloadFolder) {
-                    try {
-                      const fileHandle = await downloadFolder.getFileHandle(resolvedFileName, { create: true });
-                      const writable = await fileHandle.createWritable();
-                      await writable.write(blob);
-                      await writable.close();
-                    } catch {
-                      const blobUrl = URL.createObjectURL(blob);
-                      const a = document.createElement('a');
-                      a.href = blobUrl;
-                      a.download = resolvedFileName;
-                      document.body.appendChild(a);
-                      a.click();
-                      document.body.removeChild(a);
-                      setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
-                    }
-                  } else {
-                    const blobUrl = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = blobUrl;
-                    a.download = resolvedFileName;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
-                  }
                 }
               }
 
@@ -837,10 +764,6 @@ export const useMusicStore = create<MusicStore>()(
         setDominantColor: (color) => set({ dominantColor: color }),
 
         // ─── Settings ───
-        downloadFormat: 'mp3',
-        setDownloadFormat: (format) => set({ downloadFormat: format }),
-        mp3Quality: 'alta',
-        setMp3Quality: (q) => set({ mp3Quality: q }),
         downloadWifiOnly: false,
         setDownloadWifiOnly: (v) => set({ downloadWifiOnly: v }),
         uiLanguageMode: 'system',
@@ -877,285 +800,6 @@ export const useMusicStore = create<MusicStore>()(
         maintenanceUntil: null,
         setMaintenanceMode: (active, until = null) => set({ isMaintenanceMode: active, maintenanceUntil: until ?? null }),
 
-        // ─── Local Library ───
-        localLibrary: [],
-        localFileRefs: new Map(),
-        isImporting: false,
-        savedLocalPaths: [],
-
-        importLocalFiles: async (files, options) => {
-          set({ isImporting: true });
-          try {
-            const fileArray = Array.from(files) as ImportedAudioFile[];
-            const parsed = await parseLocalFiles(fileArray);
-            const parsedWithSource = parsed.map((track) => resolveImportedTrackMeta(track, fileArray));
-            const existingPaths = new Set(get().localLibrary.map((t) => t.localPath));
-            const newTracks = parsedWithSource.filter((t) => !existingPaths.has(t.localPath));
-
-            const newRefs = new Map(get().localFileRefs);
-            fileArray.forEach((file) => {
-              const match = newTracks.find((t) => t.localPath === file.name || t.localPath === file.__mhlRelativePath);
-              if (match && match.localSource !== 'documents') newRefs.set(match.id, file);
-            });
-
-            const newPaths = newTracks.filter(shouldPersistLocalPath).map((t) => t.localPath);
-
-            set((s) => ({
-              localLibrary: [...s.localLibrary, ...newTracks],
-              localFileRefs: newRefs,
-              savedLocalPaths: [...new Set([...s.savedLocalPaths, ...newPaths])],
-              isImporting: false,
-            }));
-
-            const skipped = parsed.length - newTracks.length;
-            if (newTracks.length > 0 && !options?.silent) {
-              const plural = newTracks.length > 1 ? 's' : '';
-              const duplicatePlural = skipped === 1 ? '' : 's';
-              const duplicates = skipped > 0
-                ? storeText(get().uiLanguageMode, 'duplicateTracks', {
-                    count: skipped,
-                    plural: duplicatePlural,
-                  })
-                : '';
-              toast.success(storeText(get().uiLanguageMode, 'importedTracks', {
-                count: newTracks.length,
-                plural,
-                duplicates,
-              }), { duration: 4000 });
-            } else if (!options?.silent) {
-              toast(storeText(get().uiLanguageMode, 'noNewTracks'), { duration: 3000 });
-            }
-          } catch (e) {
-            const errorMsg = e instanceof Error ? e.message : String(e);
-            console.error('Import failed:', e);
-            set({ isImporting: false });
-            if (!options?.silent) {
-              toast.error(storeText(get().uiLanguageMode, 'importFailed', { error: errorMsg }), { duration: 5000 });
-            }
-          }
-        },
-
-        importScannedTracks: (tracks, options) => {
-          const existingByPath = new Map(get().localLibrary.map((track) => [track.localPath, track]));
-          const nextTracks = tracks.map((track) => {
-            const existing = existingByPath.get(track.localPath);
-            return existing
-              ? {
-                  ...track,
-                  id: existing.id,
-                  playCount: existing.playCount ?? track.playCount ?? 0,
-                  importedAt: existing.importedAt ?? track.importedAt,
-                }
-              : track;
-          });
-
-          const scannedPaths = new Set(nextTracks.map((track) => track.localPath));
-          const nonDocumentTracks = get().localLibrary.filter((track) => track.localSource !== 'documents');
-          const mergedLibrary = [
-            ...nonDocumentTracks,
-            ...nextTracks,
-          ];
-
-          set((s) => ({
-            localLibrary: mergedLibrary,
-            localFileRefs: new Map(
-              Array.from(s.localFileRefs.entries()).filter(([id]) =>
-                mergedLibrary.some((track) => track.id === id && track.localSource !== 'documents')
-              )
-            ),
-            savedLocalPaths: [
-              ...new Set([
-                ...s.savedLocalPaths.filter((path) => !path.startsWith('MHL Music/')),
-                ...Array.from(scannedPaths),
-              ]),
-            ],
-          }));
-
-          if (!options?.silent) {
-            const plural = nextTracks.length === 1 ? '' : 's';
-            toast.success(storeText(get().uiLanguageMode, 'syncedTracks', {
-              count: nextTracks.length,
-              plural,
-            }), { duration: 3500 });
-          }
-        },
-
-        rescanLocalLibrary: async () => {
-          if (!Capacitor.isNativePlatform() || get().savedLocalPaths.length === 0) return;
-
-          try {
-            const filesData = await Promise.all(
-              get().savedLocalPaths.map(async (path) => {
-                try {
-                  const data = await Filesystem.readFile({
-                    path,
-                    directory: Directory.Documents,
-                  });
-                  const binaryStr = atob(data.data as string);
-                  const bytes = new Uint8Array(binaryStr.length);
-                  for (let i = 0; i < binaryStr.length; i++) {
-                    bytes[i] = binaryStr.charCodeAt(i);
-                  }
-                  return {
-                    file: new File([bytes], path.split('/').pop() || path, { type: 'audio/mpeg' }),
-                    path,
-                  };
-                } catch (e) {
-                  console.warn(`Could not read ${path}:`, e);
-                  return null;
-                }
-              })
-            );
-
-            const validFiles = filesData.filter((f) => f !== null) as Array<{ file: File; path: string }>;
-            if (validFiles.length === 0) return;
-
-            const restoredFiles = validFiles.map(({ file, path }) => (
-              toImportedAudioFile(file, { relativePath: path, source: 'documents' })
-            ));
-            const parsed = (await parseLocalFiles(restoredFiles)).map((track) =>
-              resolveImportedTrackMeta(track, restoredFiles)
-            );
-            const newRefs = new Map(get().localFileRefs);
-            restoredFiles.forEach((file) => {
-              const match = parsed.find((t) => t.localPath === file.__mhlRelativePath);
-              if (match && match.localSource !== 'documents') newRefs.set(match.id, file);
-            });
-
-            set((s) => ({
-              localLibrary: parsed.length > 0
-                ? s.localLibrary.map((track) => parsed.find((p) => p.localPath === track.localPath) || track)
-                : s.localLibrary,
-              localFileRefs: newRefs,
-            }));
-          } catch (e) {
-            console.error('Rescan failed:', e);
-          }
-        },
-
-        playLocalTrack: async (id) => {
-          const track = get().localLibrary.find((t) => t.id === id);
-          if (!track) return;
-
-          const localPlaybackUrl = await resolveLocalPlaybackUrl(track).catch((error) => {
-            console.error('Android local playback failed:', error);
-            return null;
-          });
-
-          if (localPlaybackUrl) {
-            try {
-              if (get().currentTrack?.preview?.startsWith('blob:')) {
-                URL.revokeObjectURL(get().currentTrack.preview);
-              }
-
-              set({
-                currentTrack: { ...track, preview: localPlaybackUrl },
-                isPlaying: false,
-                isLoading: true,
-                progress: 0,
-                duration: track.duration,
-              });
-
-              document.title = `${track.title} · ${track.artist} - MHL Music`;
-              set({ dominantColor: null });
-
-              audioEngine.load(localPlaybackUrl);
-              audioEngine.setVolume(get().volume);
-              audioEngine.updateMediaSession({
-                title: track.title,
-                artist: track.artist,
-                album: track.album,
-                artwork: track.cover || undefined,
-              });
-
-              let didStart = false;
-              const startTimeout = window.setTimeout(() => {
-                if (!didStart) {
-                  set({ isLoading: false, isPlaying: false });
-                  toast.error(storeText(get().uiLanguageMode, 'playbackTimeout'));
-                }
-              }, 4500);
-
-              await audioEngine.play();
-              didStart = true;
-              window.clearTimeout(startTimeout);
-              set({ isPlaying: true, isLoading: false });
-              get().incrementPlayCount(id);
-              return;
-            } catch (error) {
-              console.error('Native local playback branch failed:', error);
-            }
-          }
-
-          const fileRef = get().localFileRefs.get(id);
-          if (!fileRef) {
-            toast.error(storeText(get().uiLanguageMode, 'localFileUnavailable'));
-            return;
-          }
-
-          const objectUrl = URL.createObjectURL(fileRef);
-
-          if (get().currentTrack?.preview?.startsWith('blob:')) {
-            URL.revokeObjectURL(get().currentTrack.preview);
-          }
-
-          set({
-            currentTrack: { ...track, preview: objectUrl },
-            isPlaying: false,
-            isLoading: true,
-            progress: 0,
-            duration: track.duration,
-          });
-
-          document.title = `${track.title} · ${track.artist} — MHL Music`;
-
-          set({ dominantColor: null });
-
-          audioEngine.load(objectUrl);
-          audioEngine.setVolume(get().volume);
-          audioEngine.updateMediaSession({
-            title: track.title,
-            artist: track.artist,
-            album: track.album,
-            artwork: track.cover || undefined,
-          });
-
-          audioEngine.play().then(() => {
-            set({ isPlaying: true, isLoading: false });
-            get().incrementPlayCount(id);
-          });
-        },
-
-        removeLocalTrack: (id) => {
-          const track = get().localLibrary.find((t) => t.id === id);
-          if (track?.cover?.startsWith('blob:')) {
-            URL.revokeObjectURL(track.cover);
-          }
-          const newRefs = new Map(get().localFileRefs);
-          newRefs.delete(id);
-          set((s) => ({
-            localLibrary: s.localLibrary.filter((t) => t.id !== id),
-            localFileRefs: newRefs,
-            savedLocalPaths: track ? s.savedLocalPaths.filter((path) => path !== track.localPath) : s.savedLocalPaths,
-          }));
-        },
-
-        clearLocalLibrary: () => {
-          get().localLibrary.forEach((track) => {
-            if (track.cover?.startsWith('blob:')) {
-              URL.revokeObjectURL(track.cover);
-            }
-          });
-          set({ localLibrary: [], localFileRefs: new Map(), savedLocalPaths: [] });
-        },
-
-        incrementPlayCount: (id) =>
-          set((s) => ({
-            localLibrary: s.localLibrary.map((t) =>
-              t.id === id ? { ...t, playCount: (t.playCount ?? 0) + 1 } : t
-            ),
-          })),
-
         // ─── Download history for suggestions ───
         mostDownloadedArtists: [],
         addMostDownloadedArtist: (artist) =>
@@ -1174,10 +818,6 @@ export const useMusicStore = create<MusicStore>()(
         downloads: state.downloads.filter((d) => d.status === 'completed' || d.status === 'error'),
         volume: state.volume,
         downloadFolderName: state.downloadFolderName,
-        localLibrary: state.localLibrary,
-        savedLocalPaths: state.savedLocalPaths,
-        downloadFormat: state.downloadFormat,
-        mp3Quality: state.mp3Quality,
         downloadWifiOnly: state.downloadWifiOnly,
         uiLanguageMode: state.uiLanguageMode,
         lyricOriginal: state.lyricOriginal,
@@ -1195,10 +835,6 @@ export const useMusicStore = create<MusicStore>()(
         downloads: persisted?.downloads || [],
         volume: persisted?.volume ?? 0.8,
         downloadFolderName: persisted?.downloadFolderName || '',
-        localLibrary: persisted?.localLibrary || [],
-        savedLocalPaths: persisted?.savedLocalPaths || [],
-        downloadFormat: persisted?.downloadFormat ?? 'mp3',
-        mp3Quality: persisted?.mp3Quality ?? 'alta',
         downloadWifiOnly: persisted?.downloadWifiOnly ?? false,
         uiLanguageMode: isUiLanguageMode(persisted?.uiLanguageMode)
           ? persisted.uiLanguageMode
@@ -1212,7 +848,6 @@ export const useMusicStore = create<MusicStore>()(
         animeSearchEnabled: persisted?.animeSearchEnabled ?? false,
         mostDownloadedArtists: persisted?.mostDownloadedArtists ?? [],
         preferredPlayerPackage: persisted?.preferredPlayerPackage ?? null,
-        localFileRefs: new Map(),
       }),
     }
   )

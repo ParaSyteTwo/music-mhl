@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 from contextlib import contextmanager
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -733,6 +734,28 @@ def test_get_raw_audio_rejects_untrusted_source_url():
     )
 
     assert result == {"success": False, "error": "Unsupported source URL"}
+
+
+def test_get_raw_audio_always_uses_highest_quality_mp3():
+    bridge = Bridge()
+
+    def fake_run(args, **_kwargs):
+        output_path = Path(args[args.index("-o") + 1])
+        output_path.write_bytes(b"mp3-data")
+        return MagicMock(returncode=0, stderr="")
+
+    with patch("bridge.subprocess.run", side_effect=fake_run) as run:
+        result = bridge.get_raw_audio(
+            "video-id",
+            "Song",
+            "Artist",
+            ["Song Artist"],
+        )
+
+    args = run.call_args.args[0]
+    assert result["success"] is True
+    assert args[args.index("--audio-format") + 1] == "mp3"
+    assert args[args.index("--audio-quality") + 1] == "0"
 
 
 if __name__ == "__main__":

@@ -293,8 +293,6 @@ public class YtDlpPlugin extends Plugin {
     public void downloadAudio(PluginCall call) {
         String videoId = call.getString("videoId");
         String sourceUrl = call.getString("sourceUrl");
-        String format = call.getString("format");
-        String quality = call.getString("quality");
         if ((videoId == null || videoId.isEmpty()) && (sourceUrl == null || sourceUrl.isEmpty())) {
             call.reject("Missing videoId or sourceUrl parameter");
             return;

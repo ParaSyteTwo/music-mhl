@@ -23,6 +23,7 @@ import type {
 } from '@/types/appUpdate';
 
 const AUTO_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
+let appUpdateOperation: Promise<void> | null = null;
 
 interface AppUpdateState {
   status: AppUpdateStatus;
@@ -37,6 +38,7 @@ interface AppUpdateState {
   downloadedApkPath: string | null;
   updateChannel: AppUpdateChannel;
   setUpdateChannel: (channel: AppUpdateChannel) => Promise<void>;
+  updateApp: () => Promise<void>;
   checkForUpdate: (force?: boolean) => Promise<void>;
   downloadAvailableUpdate: () => Promise<void>;
   cancelAvailableUpdateDownload: () => Promise<void>;
@@ -61,6 +63,40 @@ export const useAppUpdateStore = create<AppUpdateState>()(
       downloadedApkPath: null,
       updateChannel: 'stable',
 
+      updateApp: async () => {
+        if (appUpdateOperation) {
+          await appUpdateOperation;
+          return;
+        }
+
+        const operation = (async () => {
+          const initialStatus = get().status;
+          if (initialStatus === 'readyToInstall' || initialStatus === 'permissionRequired') {
+            await get().installReadyUpdate();
+            return;
+          }
+
+          if (initialStatus !== 'available') {
+            await get().checkForUpdate(true);
+          }
+          if (get().status !== 'available') return;
+
+          await get().downloadAvailableUpdate();
+          if (get().status === 'readyToInstall') {
+            await get().installReadyUpdate();
+          }
+        })();
+
+        appUpdateOperation = operation;
+        try {
+          await operation;
+        } finally {
+          if (appUpdateOperation === operation) {
+            appUpdateOperation = null;
+          }
+        }
+      },
+
       setUpdateChannel: async (channel) => {
         set({
           updateChannel: channel,
@@ -76,15 +112,19 @@ export const useAppUpdateStore = create<AppUpdateState>()(
       checkForUpdate: async (force = false) => {
         if (Capacitor.getPlatform() !== 'android') return;
         const now = Date.now();
+        const decision = get().decision;
+        const waitingMayBeEligible = decision?.status === 'waiting' &&
+          now >= Date.parse(decision.eligibleAt);
         if (
           !force &&
           get().installedBuild &&
+          !waitingMayBeEligible &&
           now - get().lastCheckedAt < AUTO_CHECK_INTERVAL_MS
         ) {
           return;
         }
 
-        set({ status: 'checking', error: null, lastCheckedAt: now });
+        set({ status: 'checking', error: null });
         try {
           const [installedResult, releaseResult] = await Promise.all([
             getInstalledAppIdentity(),
@@ -121,6 +161,7 @@ export const useAppUpdateStore = create<AppUpdateState>()(
               remoteBuild: releaseResult.data.build,
               decision,
               error: decision.error,
+              lastCheckedAt: now,
               lastTrustedTimeMs: trustedTimeMs,
             });
             return;
@@ -132,6 +173,7 @@ export const useAppUpdateStore = create<AppUpdateState>()(
             remoteBuild: releaseResult.data.build,
             decision,
             error: null,
+            lastCheckedAt: now,
             lastTrustedTimeMs: trustedTimeMs,
           });
         } catch (error) {
@@ -202,7 +244,9 @@ export const useAppUpdateStore = create<AppUpdateState>()(
           );
           if (refreshedDecision.status !== 'available') {
             set({
-              status: 'error',
+              status: refreshedDecision.status === 'rejected'
+                ? 'error'
+                : refreshedDecision.status,
               decision: refreshedDecision,
               error: refreshedDecision.status === 'rejected' ? refreshedDecision.error : null,
             });

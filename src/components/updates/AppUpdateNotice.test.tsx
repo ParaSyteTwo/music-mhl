@@ -8,7 +8,8 @@ const updateState = vi.hoisted(() => ({
     versionName: '1.3.6',
     digest: `sha256:${'a'.repeat(64)}`,
   },
-  decision: { status: 'available' },
+  decision: { status: 'available' } as { status: string; eligibleAt?: string },
+  lastTrustedTimeMs: Date.now(),
   dismissedDigest: null,
   dismissCurrentBuild: vi.fn(),
 }));
@@ -39,5 +40,23 @@ describe('AppUpdateNotice', () => {
     expect(screen.getByText(/ya está disponible/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /descargar|download/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /instalar|install/i })).not.toBeInTheDocument();
+  });
+
+  it('shows the safety-period message before download is allowed', () => {
+    updateState.status = 'waiting';
+    updateState.decision = {
+      status: 'waiting',
+      eligibleAt: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
+    };
+
+    render(
+      <MemoryRouter>
+        <AppUpdateNotice />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText(/appUpdateSafetyNotice/)).toBeInTheDocument();
+    updateState.status = 'available';
+    updateState.decision = { status: 'available' };
   });
 });

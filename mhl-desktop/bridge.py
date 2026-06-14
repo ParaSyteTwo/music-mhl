@@ -40,10 +40,6 @@ def _bin(name: str) -> str:
 
 # ── Helpers internos ──────────────────────────────────────────────────────────
 
-def _quality_arg(quality: str) -> str:
-    return {'alta': '0', 'media': '5', 'baja': '9'}.get(quality, '0')
-
-
 def _safe(s: str) -> str:
     return re.sub(r'[/\\?%*:|"<>]', '', s).strip()
 
@@ -845,8 +841,6 @@ class Bridge:
         year = params.get('year')
         track_number = params.get('trackNumber')
         lyrics = params.get('lyrics')
-        audio_format = params.get('format', 'mp3')
-        quality = params.get('quality', 'alta')
         queries = params.get('queries') or [f'{title} {artist}', f'{title} {artist} official audio']
 
         print(f'[DEBUG] download_and_save: title={title}, artist={artist}, cover_url={cover_url[:50] if cover_url else "EMPTY"}...')
@@ -866,7 +860,7 @@ class Bridge:
         if not video_id:
             return {'success': False, 'error': 'No se encontró el video en YouTube'}
 
-        ext = 'mp3' if audio_format == 'mp3' else 'm4a'
+        ext = 'mp3'
         output_dir = settings.get('download_folder', str(Path.home() / 'Music' / 'MHL Music'))
         os.makedirs(output_dir, exist_ok=True)
         safe_filename = f'{_safe(title)} - {_safe(artist)}.{ext}'
@@ -879,8 +873,8 @@ class Bridge:
             args = [
                 _bin('yt-dlp.exe'),
                 f'https://www.youtube.com/watch?v={video_id}',
-                '-x', '--audio-format', audio_format,
-                '--audio-quality', _quality_arg(quality),
+                '-x', '--audio-format', 'mp3',
+                '--audio-quality', '0',
                 '-o', tmppath,
                 '--no-playlist', '--force-overwrites',
                 '--ffmpeg-location', _bin('ffmpeg.exe'),
@@ -917,8 +911,6 @@ class Bridge:
         title: str,
         artist: str,
         queries: list,
-        audio_format: str = 'mp3',
-        quality: str = 'alta',
         source_url: str | None = None,
     ) -> dict:
         """
@@ -945,7 +937,7 @@ class Bridge:
         if not video_id and not source_url:
             return {'success': False, 'error': 'No se encontró el video en YouTube'}
 
-        ext = 'mp3' if audio_format == 'mp3' else 'm4a'
+        ext = 'mp3'
         tmpdir = tempfile.mkdtemp(prefix='mhl_')
         tmppath = os.path.join(tmpdir, f'audio.{ext}')
 
@@ -954,8 +946,8 @@ class Bridge:
             args = [
                 _bin('yt-dlp.exe'),
                 input_url,
-                '-x', '--audio-format', audio_format,
-                '--audio-quality', _quality_arg(quality),
+                '-x', '--audio-format', 'mp3',
+                '--audio-quality', '0',
                 '-o', tmppath,
                 '--no-playlist', '--force-overwrites',
                 '--ffmpeg-location', _bin('ffmpeg.exe'),
@@ -975,8 +967,6 @@ class Bridge:
                     title,
                     artist,
                     queries,
-                    audio_format,
-                    quality,
                     None,
                 )
 
@@ -1022,8 +1012,6 @@ class Bridge:
 
     def get_settings(self) -> dict:
         return {
-            'format': settings.get('format', 'mp3'),
-            'quality': settings.get('quality', 'alta'),
             'download_folder': settings.get(
                 'download_folder',
                 str(Path.home() / 'Music' / 'MHL Music'),

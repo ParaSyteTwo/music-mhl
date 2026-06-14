@@ -115,7 +115,7 @@ describe('app update store', () => {
     expect(mocks.identity).not.toHaveBeenCalled();
   });
 
-  it('shows a stable candidate immediately', async () => {
+  it('shows a stable candidate as waiting during its safety period', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-06-11T12:00:00Z'));
     mocks.release.mockResolvedValue({
       success: true,
@@ -126,7 +126,7 @@ describe('app update store', () => {
     });
     await useAppUpdateStore.getState().checkForUpdate(true);
     expect(useAppUpdateStore.getState()).toMatchObject({
-      status: 'available',
+      status: 'waiting',
       remoteBuild: { versionName: '1.3.6' },
       error: null,
     });
@@ -144,6 +144,44 @@ describe('app update store', () => {
     expect(mocks.identity).not.toHaveBeenCalled();
     await useAppUpdateStore.getState().checkForUpdate(true);
     expect(mocks.identity).toHaveBeenCalledOnce();
+    vi.restoreAllMocks();
+  });
+
+  it('rechecks a waiting build when its eligibility time arrives', async () => {
+    const now = Date.parse('2026-06-17T12:00:00Z');
+    vi.spyOn(Date, 'now').mockReturnValue(now);
+    useAppUpdateStore.setState({
+      status: 'waiting',
+      lastCheckedAt: now - 1000,
+      installedBuild: installed,
+      remoteBuild: build,
+      decision: {
+        status: 'waiting',
+        replacementBuild: false,
+        eligibleAt: '2026-06-17T12:00:00.000Z',
+      },
+    });
+
+    await useAppUpdateStore.getState().checkForUpdate(false);
+
+    expect(mocks.identity).toHaveBeenCalledOnce();
+    expect(useAppUpdateStore.getState().status).toBe('available');
+    vi.restoreAllMocks();
+  });
+
+  it('does not cache a failed automatic check for 24 hours', async () => {
+    const now = Date.parse('2026-06-20T12:00:00Z');
+    vi.spyOn(Date, 'now').mockReturnValue(now);
+    mocks.release.mockResolvedValueOnce({
+      success: false,
+      error: { code: 'NETWORK', detail: 'Offline.' },
+    });
+
+    await useAppUpdateStore.getState().checkForUpdate(false);
+    await useAppUpdateStore.getState().checkForUpdate(false);
+
+    expect(mocks.identity).toHaveBeenCalledTimes(2);
+    expect(mocks.release).toHaveBeenCalledTimes(2);
     vi.restoreAllMocks();
   });
 
@@ -213,6 +251,40 @@ describe('app update store', () => {
     vi.restoreAllMocks();
   });
 
+  it('runs check, download, validation, and install from one update action', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-06-20T12:00:00Z'));
+
+    await useAppUpdateStore.getState().updateApp();
+
+    expect(mocks.identity).toHaveBeenCalledOnce();
+    expect(mocks.release).toHaveBeenCalledTimes(3);
+    expect(mocks.download).toHaveBeenCalledOnce();
+    expect(mocks.inspect).toHaveBeenCalledTimes(2);
+    expect(mocks.install).toHaveBeenCalledOnce();
+    expect(useAppUpdateStore.getState().status).toBe('installing');
+    vi.restoreAllMocks();
+  });
+
+  it('does not start duplicate app update operations', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-06-20T12:00:00Z'));
+    let resolveIdentity:
+      | ((value: { success: true; data: InstalledAndroidBuild }) => void)
+      | undefined;
+    mocks.identity.mockImplementation(() => new Promise((resolve) => {
+      resolveIdentity = resolve;
+    }));
+
+    const first = useAppUpdateStore.getState().updateApp();
+    const second = useAppUpdateStore.getState().updateApp();
+    resolveIdentity?.({ success: true, data: installed });
+    await Promise.all([first, second]);
+
+    expect(mocks.identity).toHaveBeenCalledOnce();
+    expect(mocks.download).toHaveBeenCalledOnce();
+    expect(mocks.install).toHaveBeenCalledOnce();
+    vi.restoreAllMocks();
+  });
+
   it('does not download when the GitHub asset changes', async () => {
     useAppUpdateStore.setState({
       status: 'available',
@@ -239,7 +311,7 @@ describe('app update store', () => {
 
     await useAppUpdateStore.getState().downloadAvailableUpdate();
     expect(mocks.download).not.toHaveBeenCalled();
-    expect(useAppUpdateStore.getState().status).toBe('available');
+    expect(useAppUpdateStore.getState().status).toBe('waiting');
   });
 
   it('switches to beta and checks prereleases immediately', async () => {

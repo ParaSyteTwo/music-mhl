@@ -21,7 +21,7 @@ pero no forman parte de los requisitos, QA ni releases.
 | Plataforma | Usuario | Caso de uso |
 |---|---|---|
 | Desktop | Usuario principal | Buscar, reproducir y descargar musica localmente en Windows |
-| Android | Usuario principal | Usar la aplicacion nativa, descargar musica y gestionar la biblioteca |
+| Android | Usuario principal | Usar la aplicacion nativa, descargar musica y abrir archivos guardados |
 
 ## 3. Core Features
 
@@ -32,8 +32,7 @@ pero no forman parte de los requisitos, QA ni releases.
 | Descarga de audio | Desktop + Android | P0 | Seleccionar una fuente de audio de YouTube y guardar el archivo local |
 | Metadatos | Desktop + Android | P0 | Conservar titulo, artista, album y portada de la identidad musical seleccionada |
 | Busqueda anime opt-in | Desktop + Android | P1 | Buscar anime y listar sus openings/endings solo cuando el usuario activa el modo |
-| Biblioteca local | Desktop + Android | P1 | Acceder y reproducir archivos descargados o importados |
-| Ajustes | Desktop + Android | P1 | Calidad, formato, carpeta cuando aplique, idioma y modo anime |
+| Ajustes | Desktop + Android | P1 | Carpeta cuando aplique, idioma, letras, reproductor y modo anime |
 | Updater asistido | Android | P1 | Detectar una release oficial, verificarla y abrir la instalacion con confirmacion del sistema |
 
 ## 4. Requisitos por Plataforma
@@ -54,8 +53,7 @@ pero no forman parte de los requisitos, QA ni releases.
 
 - Runtime: Capacitor 8 con plugins nativos registrados en `android/`.
 - La busqueda y descarga YouTube se realizan mediante el plugin `YtDlp`.
-- Biblioteca, apertura de archivos y updater usan sus respectivos plugins
-  nativos.
+- Apertura de archivos y updater usan sus respectivos plugins nativos.
 - Las releases deben conservar `applicationId = com.mhl.music`, el certificado
   de firma actual e incrementar `versionCode` en releases normales.
 - `ANDROID_UPDATE_CONTRACT.md` es la especificacion normativa del updater.
@@ -102,7 +100,7 @@ musical normal de un usuario que no haya optado por la feature.
 
 ### Android
 
-- [ ] Busqueda, reproduccion, descargas y biblioteca no sufren regresiones.
+- [ ] Busqueda, reproduccion, descargas y apertura externa no sufren regresiones.
 - [ ] La release genera un APK firmado en `release/`.
 - [ ] El updater cumple integramente `ANDROID_UPDATE_CONTRACT.md`.
 - [ ] Toda instalacion requiere confirmacion del sistema Android.
@@ -136,7 +134,6 @@ como parte del proceso normal.
 - Despliegue o ampliacion funcional de `services/ytdlp-service/`.
 - Instalador Windows, salvo peticion explicita.
 - macOS y Linux.
-- Sincronizacion de biblioteca entre dispositivos.
 - Login o cuentas de usuario.
 - Auto-update de Desktop.
 

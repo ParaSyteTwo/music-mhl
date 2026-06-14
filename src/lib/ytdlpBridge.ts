@@ -21,7 +21,7 @@ interface YtDlpPluginInterface {
   search(options: { query: string }): Promise<{ success: boolean; results: YtDlpSearchResult[] }>;
   getStreamUrl(options: { videoId: string }): Promise<{ success: boolean; url: string }>;
   downloadAsMp3?: (options: { videoId: string }) => Promise<{ success: boolean; data: string; size: number }>;
-  downloadAudio?: (options: { videoId?: string; sourceUrl?: string; format?: string; quality?: string }) => Promise<{ success: boolean; data: string; size: number; fileName?: string }>;
+  downloadAudio?: (options: { videoId?: string; sourceUrl?: string }) => Promise<{ success: boolean; data: string; size: number; fileName?: string }>;
   saveAudioToMusicMediaStore?: (options: { videoId: string; fileName: string }) => Promise<{ success: boolean; uri: string }>;
   saveTaggedAudioToMusic?: (options: { fileName: string; data: string }) => Promise<{ success: boolean; uri: string }>;
   addListener(eventName: 'downloadProgress', listenerFunc: (event: YtDlpProgressEvent) => void): Promise<PluginListenerHandle>;
@@ -73,7 +73,7 @@ export async function searchYouTubeNative(query: string): Promise<YtDlpSearchRes
 
 export async function downloadMp3Native(
   videoId: string | null,
-  opts?: { format?: string; quality?: string; sourceUrl?: string },
+  opts?: { sourceUrl?: string },
 ): Promise<ArrayBuffer> {
   if (!initialized) await initYtDlp();
 
@@ -81,8 +81,6 @@ export async function downloadMp3Native(
     ? await YtDlp.downloadAudio({
         ...(videoId ? { videoId } : {}),
         ...(opts?.sourceUrl ? { sourceUrl: opts.sourceUrl } : {}),
-        format: opts?.format,
-        quality: opts?.quality,
       })
     : (await YtDlp.downloadAsMp3!({ videoId: videoId ?? '' }));
 

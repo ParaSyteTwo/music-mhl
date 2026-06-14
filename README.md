@@ -32,14 +32,13 @@ Sin cuentas obligatorias, sin anuncios y sin seguimiento.
 
 > Desktop funciona sin el backend de MHL Music. Solo necesita Internet para consultar los servicios externos de música y letras.
 
-### 📱 Android — Descargas y biblioteca local
+### 📱 Android — Descargas locales
 
 - Descargas procesadas directamente en el dispositivo
 - Actualizaciones desde las releases oficiales del proyecto, sin compartir el APK manualmente
 - Verificación de versión, SHA-256, paquete y certificado antes de instalar
-- Canal estable inmediato y canal beta opcional
+- Canal estable tras 7 días de maduración y canal beta inmediato opcional
 - Instalación asistida mediante la confirmación nativa de Android
-- Biblioteca organizada por canciones, artistas, álbumes y géneros
 - Apertura en **VLC, Retro Music, Music Player** y otros reproductores
 - Detección automática de aplicaciones de audio instaladas
 - Reproductor predeterminado configurable desde Ajustes
@@ -80,7 +79,7 @@ Sin cuentas obligatorias, sin anuncios y sin seguimiento.
 - Interfaz completa disponible en ambos idiomas
 - Detección automática del idioma del dispositivo
 - Selector manual en Ajustes
-- Biblioteca, Descargas, Buscar, Ajustes, reproductor y avisos comparten el idioma elegido
+- Descargas, Buscar, Ajustes, reproductor y avisos comparten el idioma elegido
 
 ---
 
