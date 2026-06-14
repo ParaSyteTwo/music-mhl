@@ -204,11 +204,10 @@ export async function fetchLatestOfficialAndroidRelease(
       : Array.isArray(responseValue)
         ? responseValue.find((value) => {
             const candidate = parseRelease(value);
-            return candidate && !candidate.draft && candidate.prerelease;
+            return candidate && !candidate.draft;
           })
         : null;
     const release = parseRelease(releaseValue);
-    const resolvedChannel: AppUpdateChannel = release?.prerelease ? 'beta' : 'stable';
     if (
       !release ||
       release.draft ||
@@ -273,7 +272,7 @@ export async function fetchLatestOfficialAndroidRelease(
       manifestValue = await manifestResponse.json();
     }
 
-    const parsedRelease = parseOfficialAndroidRelease(releaseValue, manifestValue, resolvedChannel);
+    const parsedRelease = parseOfficialAndroidRelease(releaseValue, manifestValue, channel);
     if (parsedRelease.success === false) {
       return { success: false, error: parsedRelease.error };
     }
@@ -303,10 +302,17 @@ export function parseOfficialAndroidRelease(
   channel: AppUpdateChannel = 'stable',
 ): AppUpdateResult<RemoteAndroidBuild> {
   const release = parseRelease(releaseValue);
-  if (!release || release.draft || release.prerelease !== (channel === 'beta')) {
+  if (
+    !release ||
+    release.draft ||
+    (channel === 'stable' && release.prerelease)
+  ) {
     return {
       success: false,
-      error: { code: 'INVALID_RELEASE', detail: 'Release is invalid, draft, or prerelease.' },
+      error: {
+        code: 'INVALID_RELEASE',
+        detail: 'Release is invalid, draft, or incompatible with the selected channel.',
+      },
     };
   }
 

@@ -117,10 +117,10 @@ describe('app update policy', () => {
     });
   });
 
-  it('makes beta candidates available immediately after publication', () => {
+  it('makes any beta-channel candidate available immediately after publication', () => {
     expect(evaluateAppUpdate(
       installed,
-      remote({ channel: 'beta', versionName: '1.4.0-beta.1', versionCode: 15 }),
+      remote({ channel: 'beta', versionName: '1.4.0', versionCode: 15 }),
       Date.parse('2026-06-10T12:00:01Z'),
       Date.parse('2026-06-10T12:00:01Z'),
     )).toMatchObject({

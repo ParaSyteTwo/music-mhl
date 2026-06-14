@@ -1,5 +1,9 @@
 # Changelog
 
+## Sin publicar
+
+- Corregido el canal beta para aceptar inmediatamente la release más reciente, sea estable o prerelease.
+
 ## v1.4.6 - 2026-06-14
 
 - Eliminada la biblioteca local, su navegación, estado, plugin Android y dependencia de selección de archivos.

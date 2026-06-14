@@ -170,16 +170,47 @@ describe('official GitHub Android release', () => {
     expect(fetchMock.mock.calls[0][0]).toContain('/releases?per_page=20');
   });
 
-  it('rejects a stable-only release list for the beta channel', async () => {
+  it('selects the newest stable release for beta testers without rejecting it', async () => {
     const fetchMock = vi.fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify([createRelease()]), { status: 200 }));
+      .mockResolvedValueOnce(new Response(JSON.stringify([createRelease()]), {
+        status: 200,
+        headers: { date: 'Wed, 10 Jun 2026 12:00:00 GMT' },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(createManifest()), { status: 200 }));
 
     const result = await fetchLatestOfficialAndroidRelease('beta', fetchMock);
     expect(result).toMatchObject({
+      success: true,
+      data: { build: { channel: 'beta', versionName: '1.3.6' } },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('lets beta parse stable or prerelease builds while stable rejects prereleases', () => {
+    expect(parseOfficialAndroidRelease(
+      createRelease(),
+      createManifest(),
+      'beta',
+    )).toMatchObject({
+      success: true,
+      data: { channel: 'beta' },
+    });
+    expect(parseOfficialAndroidRelease(
+      { ...createRelease(), prerelease: true },
+      createManifest(),
+      'beta',
+    )).toMatchObject({
+      success: true,
+      data: { channel: 'beta' },
+    });
+    expect(parseOfficialAndroidRelease(
+      { ...createRelease(), prerelease: true },
+      createManifest(),
+      'stable',
+    )).toMatchObject({
       success: false,
       error: { code: 'INVALID_RELEASE' },
     });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('rejects drafts, prereleases, and mismatched tags', () => {

@@ -291,7 +291,7 @@ Reglas esenciales:
 - incrementar `versionCode` en releases normales;
 - conservar `applicationId = com.mhl.music` y el certificado actual;
 - respetar siete dias desde `asset.updated_at` en stable;
-- permitir prereleases beta desde su publicacion;
+- permitir en beta cualquier release publicada, estable o prerelease, sin maduracion;
 - no permitir downgrade;
 - mantener separados updater de aplicacion y updater de yt-dlp;
 - no inicializar este flujo en Desktop ni en el branch web legado;

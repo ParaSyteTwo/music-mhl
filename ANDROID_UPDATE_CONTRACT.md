@@ -15,7 +15,7 @@ This document is the canonical compatibility contract for the future MHL Music A
   `https://api.github.com/repos/ParaSyteTwo/music-mhl/releases?per_page=20`
 - Do not make the owner, repository, API URL, or download host remotely configurable.
 - Stable accepts published non-prereleases.
-- Beta accepts published prereleases only and is explicitly enabled by the user.
+- Beta accepts the newest published release, stable or prerelease, and is explicitly enabled by the user.
 - Drafts are always rejected.
 - Do not use Fly.io, mirrors, URL shorteners, or third-party update services.
 
@@ -73,9 +73,9 @@ Replacing an APK while retaining the same version is an exceptional recovery mec
 ## Update Channels
 
 - Stable is the default and offers the latest public release after its safety period.
-- Beta is opt-in and offers the newest valid GitHub prerelease.
+- Beta is opt-in and offers the newest valid GitHub release, stable or prerelease.
 - Stable assets mature for seven days from `asset.updated_at`.
-- Beta prereleases are eligible immediately after publication.
+- Every release selected through beta is eligible immediately after publication.
 - Users skip intermediate releases because each channel resolves only its newest candidate.
 - Re-query GitHub immediately before downloading and immediately before installing.
 - A changed asset ID, digest, size, or `updated_at` invalidates any downloaded APK.
@@ -87,7 +87,7 @@ Before installation, perform these checks in order:
 
 1. The release and asset come from the immutable official endpoint.
 2. The asset metadata and Android manifest are internally consistent.
-3. Stable has completed seven days from `asset.updated_at`, or beta is a published prerelease.
+3. Stable has completed seven days from `asset.updated_at`, or beta selected the published release.
 4. The downloaded SHA-256 equals GitHub `assets[].digest`.
 5. The APK package is `com.mhl.music`.
 6. The version/digest comparison allows an update and never a downgrade.

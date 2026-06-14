@@ -116,6 +116,8 @@ Types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`
 - Cada release debe generar un ZIP portable de Windows y un APK Android.
 - Ambos artefactos deben quedar en la carpeta `release/` del proyecto.
 - No generar instalador de Windows salvo petición explícita.
+- Publicar cambios incrementales como prerelease hasta que el conjunto de
+  mejoras y correcciones justifique una release estable.
 
 ## Android Update Compatibility
 
@@ -127,7 +129,7 @@ Types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`
 - Incrementar siempre `versionCode` en releases normales.
 - Conservar `applicationId = com.mhl.music` y el certificado de firma actual.
 - Un asset estable nuevo o reemplazado debe madurar 7 días desde `asset.updated_at`.
-- Los prereleases del canal beta pueden descargarse desde su publicación.
+- El canal beta acepta cualquier release publicada, estable o prerelease, desde el minuto cero.
 - No permitir descarga o instalación estable durante su periodo de maduración.
 - Validar digest, package, versión y certificado antes de instalar.
 - La instalación siempre requiere confirmación del sistema Android.

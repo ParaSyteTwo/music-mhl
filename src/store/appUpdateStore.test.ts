@@ -314,7 +314,7 @@ describe('app update store', () => {
     expect(useAppUpdateStore.getState().status).toBe('waiting');
   });
 
-  it('switches to beta and checks prereleases immediately', async () => {
+  it('switches to beta and checks the newest release immediately', async () => {
     await useAppUpdateStore.getState().setUpdateChannel('beta');
     expect(mocks.release).toHaveBeenCalledWith('beta');
     expect(useAppUpdateStore.getState().updateChannel).toBe('beta');
