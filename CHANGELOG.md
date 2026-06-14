@@ -1,6 +1,6 @@
 # Changelog
 
-## Sin publicar
+## v1.4.6 - 2026-06-14
 
 - Eliminada la biblioteca local, su navegación, estado, plugin Android y dependencia de selección de archivos.
 - Las descargas quedan fijadas a MP3 con la calidad máxima de yt-dlp; formato y calidad dejan de ser ajustes.

@@ -105,7 +105,7 @@ La edición Web/PWA está abandonada y no forma parte de las releases. Las plata
 
 **Portable (recomendada):**
 
-1. Descarga [`MHL-Music-Portable-1.4.5.zip`](../../releases/latest)
+1. Descarga [`MHL-Music-Portable-1.4.6.zip`](../../releases/latest)
 2. Descomprime el ZIP en cualquier carpeta
 3. Ejecuta `MHL Music.exe`
 
@@ -113,7 +113,7 @@ La edición Web/PWA está abandonada y no forma parte de las releases. Las plata
 
 ### 📱 Android
 
-1. Descarga [`MHL-Music-1.4.5.apk`](../../releases/latest)
+1. Descarga [`MHL-Music-1.4.6.apk`](../../releases/latest)
 2. Abre el archivo en tu dispositivo
 3. Autoriza la instalación desde esa fuente si Android lo solicita
 

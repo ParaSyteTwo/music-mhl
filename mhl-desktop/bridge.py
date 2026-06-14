@@ -57,7 +57,7 @@ _ANILIST_ENDPOINT = 'https://graphql.anilist.co'
 _ANIMETHEMES_ENDPOINT = 'https://api.animethemes.moe'
 _ANIME_HEADERS = {
     'Content-Type': 'application/json',
-    'User-Agent': 'MHLMusic/1.4.5',
+    'User-Agent': 'MHLMusic/1.4.6',
 }
 _ANIME_TIMEOUT = 10
 
