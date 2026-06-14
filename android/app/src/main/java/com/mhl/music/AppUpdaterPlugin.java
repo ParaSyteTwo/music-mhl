@@ -320,7 +320,7 @@ public class AppUpdaterPlugin extends Plugin {
 
                 Uri apkUri = FileProvider.getUriForFile(
                     getContext(),
-                    getContext().getPackageName() + ".updateprovider",
+                    getContext().getPackageName() + ".fileprovider",
                     apkFile
                 );
                 Intent intent = new Intent(Intent.ACTION_INSTALL_PACKAGE);
