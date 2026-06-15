@@ -13,8 +13,6 @@ class AudioEngine {
   private _onError: ((error: string) => void) | null = null;
   private _onPlayControlPressed: (() => void) | null = null;
   private _onPauseControlPressed: (() => void) | null = null;
-  private _onNextControlPressed: (() => void) | null = null;
-  private _onPrevControlPressed: (() => void) | null = null;
 
   constructor() {
     this.audio = new Audio();
@@ -171,14 +169,6 @@ class AudioEngine {
     this._onPauseControlPressed = fn;
   }
 
-  set onNextControlPressed(fn: (() => void) | null) {
-    this._onNextControlPressed = fn;
-  }
-
-  set onPrevControlPressed(fn: (() => void) | null) {
-    this._onPrevControlPressed = fn;
-  }
-
   // MediaSession API for background playback & lock screen controls
   updateMediaSession(metadata: {
     title: string;
@@ -211,14 +201,6 @@ class AudioEngine {
     navigator.mediaSession.setActionHandler('pause', () => {
       this.pause();
       this._onPauseControlPressed?.();
-    });
-
-    navigator.mediaSession.setActionHandler('nexttrack', () => {
-      this._onNextControlPressed?.();
-    });
-
-    navigator.mediaSession.setActionHandler('previoustrack', () => {
-      this._onPrevControlPressed?.();
     });
 
     navigator.mediaSession.playbackState = this.isPlaying ? 'playing' : 'paused';

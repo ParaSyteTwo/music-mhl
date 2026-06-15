@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { audioEngine } from './audioEngine';
 
 describe('AudioEngine', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     audioEngine.pause();
     audioEngine.seek(0);
   });
@@ -86,7 +87,7 @@ describe('AudioEngine', () => {
 
   describe('Event Handlers', () => {
     it('should accept onTimeUpdate handler', () => {
-      const handler = (time: number) => {};
+      const handler = (_time: number) => {};
       expect(() => {
         audioEngine.onTimeUpdate = handler;
       }).not.toThrow();
@@ -100,7 +101,7 @@ describe('AudioEngine', () => {
     });
 
     it('should accept onError handler', () => {
-      const handler = (error: string) => {};
+      const handler = (_error: string) => {};
       expect(() => {
         audioEngine.onError = handler;
       }).not.toThrow();
@@ -121,6 +122,19 @@ describe('AudioEngine', () => {
 
     it('should have setPlaybackState method', () => {
       expect(typeof audioEngine.setPlaybackState).toBe('function');
+    });
+
+    it('registers only play and pause actions', () => {
+      audioEngine.updateMediaSession({
+        title: 'Song',
+        artist: 'Artist',
+      });
+
+      const registeredActions = vi.mocked(navigator.mediaSession.setActionHandler)
+        .mock.calls
+        .map(([action]) => action);
+
+      expect(registeredActions).toEqual(['play', 'pause']);
     });
   });
 

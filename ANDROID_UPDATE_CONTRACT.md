@@ -2,9 +2,11 @@
 
 > Status: implemented architecture contract
 > Applies to: every Android build and release after `1.3.5`
-> Last updated: 2026-06-10
+> Last updated: 2026-06-15
 
-This document is the canonical compatibility contract for the future MHL Music Android updater. Every Codex session, contributor, build script, and release process must follow it even before the updater is implemented.
+This document is the canonical compatibility contract for the implemented MHL
+Music Android updater. Every contributor, build script, maintenance change, and
+release process must follow it.
 
 ## Immutable Source
 
@@ -167,4 +169,4 @@ remains authoritative for the updater.
 - Product requirements: `PRD.md`
 - Technical design: `TECH_DESIGN.md`
 - Project rules: `AGENTS.md`
-- Detailed planning note: Android Obsidian vault, `wiki/workflows/mhl-music-auto-update-github-releases.md`
+- Documentation index: `docs/README.md`

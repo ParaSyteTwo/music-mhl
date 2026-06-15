@@ -29,6 +29,16 @@ export function parseAndroidVersion(buildGradle) {
   };
 }
 
+export function parseDesktopVersion(bridgeSource) {
+  const versionMatch = bridgeSource.match(
+    /['"]User-Agent['"]\s*:\s*['"]MHLMusic\/([^'"]+)['"]/,
+  );
+  if (!versionMatch) {
+    throw new Error("No se pudo leer la versión Desktop de mhl-desktop/bridge.py.");
+  }
+  return versionMatch[1];
+}
+
 export function parseAaptIdentity(output) {
   const packageLine = output.split(/\r?\n/, 1)[0] ?? "";
   const packageName = packageLine.match(/\bname='([^']+)'/)?.[1];
@@ -67,12 +77,18 @@ export function createUpdateManifest({ versionCode, versionName }) {
 export function validateReleaseIdentity({
   packageVersion,
   gradleVersion,
+  desktopVersion,
   apkIdentity,
   signerDigest,
 }) {
   if (packageVersion !== gradleVersion.versionName) {
     throw new Error(
       `package.json (${packageVersion}) y Android (${gradleVersion.versionName}) no coinciden.`,
+    );
+  }
+  if (packageVersion !== desktopVersion) {
+    throw new Error(
+      `package.json (${packageVersion}) y Desktop (${desktopVersion}) no coinciden.`,
     );
   }
   if (
@@ -151,6 +167,9 @@ export function prepareAndroidRelease({
   const gradleVersion = parseAndroidVersion(
     readFileSync(path.join(repoRoot, "android", "app", "build.gradle"), "utf8"),
   );
+  const desktopVersion = parseDesktopVersion(
+    readFileSync(path.join(repoRoot, "mhl-desktop", "bridge.py"), "utf8"),
+  );
   const buildTools = findLatestBuildTools(repoRoot);
   const javaExecutable = findJavaExecutable(repoRoot);
 
@@ -174,6 +193,7 @@ export function prepareAndroidRelease({
   validateReleaseIdentity({
     packageVersion: packageJson.version,
     gradleVersion,
+    desktopVersion,
     apkIdentity,
     signerDigest,
   });

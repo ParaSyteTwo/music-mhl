@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Settings, Folder, Wifi, RefreshCw, CheckCircle2, FolderOpen, X, Music2 } from 'lucide-react';
+import { Settings, Folder, RefreshCw, CheckCircle2, FolderOpen, X, Music2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useMusicStore } from '@/store/musicStore';
 import { useI18n } from '@/lib/useI18n';
@@ -16,7 +16,6 @@ export default function SettingsPage() {
   const { t } = useI18n();
   const {
     downloadFolderName, setDownloadFolder, clearDownloadFolder,
-    downloadWifiOnly, setDownloadWifiOnly,
     ytDlpVersion, ytDlpUpdateAvailable, ytDlpUpdating,
     setYtDlpVersion, setYtDlpUpdateAvailable, setYtDlpUpdating,
     preferredPlayerPackage, setPreferredPlayerPackage,
@@ -187,18 +186,6 @@ export default function SettingsPage() {
               <p className="text-sm text-[#F5F5F0]">{t('animeToggleTitle')}</p>
               <p className="text-xs text-[#666660] mt-0.5">{t('animeToggleDescription')}</p>
             </div>
-          </label>
-        </div>
-      </section>
-
-      {/* Solo WiFi */}
-      <section className="mb-8">
-        <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">{t('wifiOnly')}</h2>
-        <div className="flex items-center gap-3 p-4 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)]">
-          <Wifi className="w-5 h-5 text-[#C8F04B] flex-shrink-0" />
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={downloadWifiOnly} onChange={e => setDownloadWifiOnly(e.target.checked)} />
-            <span className="text-sm">{t('wifiOnlyHelp')}</span>
           </label>
         </div>
       </section>

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { getDownloadQueueDelayMs, useMusicStore } from './musicStore';
 import { searchDeezer } from '@/lib/api/musicApi';
 
@@ -308,6 +308,43 @@ describe('useMusicStore', () => {
       expect(queued.status).toBe('queued');
       expect(queued.sourceUrlOverride).toBe('https://a.animethemes.moe/Naruto-OP2.ogg');
       expect(useMusicStore.getState().downloadQueue).toContain(queued.id);
+    });
+
+    it('queues downloads regardless of the reported network type', async () => {
+      Object.defineProperty(navigator, 'connection', {
+        configurable: true,
+        value: { type: 'cellular', effectiveType: '4g' },
+      });
+      const track = {
+        id: 'mobile-network-track',
+        title: 'Song',
+        artist: 'Artist',
+        album: 'Album',
+        duration: 180,
+        cover: '',
+      };
+      useMusicStore.setState({ activeDownloads: 2, downloadQueue: [], downloads: [] });
+
+      await useMusicStore.getState().startDownload(track);
+
+      const queued = useMusicStore.getState().downloads[0];
+      expect(queued.status).toBe('queued');
+      expect(useMusicStore.getState().downloadQueue).toContain(queued.id);
+    });
+
+    it('ignores the removed Wi-Fi preference in persisted state', async () => {
+      localStorage.setItem('mhl-store', JSON.stringify({
+        state: {
+          downloadWifiOnly: true,
+          volume: 0.45,
+        },
+        version: 0,
+      }));
+
+      await useMusicStore.persist.rehydrate();
+
+      expect(useMusicStore.getState().volume).toBe(0.45);
+      expect('downloadWifiOnly' in useMusicStore.getState()).toBe(false);
     });
 
     it('should remove download by id', () => {

@@ -7,6 +7,7 @@ import {
   createUpdateManifest,
   parseAaptIdentity,
   parseAndroidVersion,
+  parseDesktopVersion,
   parseSignerDigest,
   validateReleaseIdentity,
 } from "./release-contract.mjs";
@@ -19,6 +20,14 @@ test("lee versionCode y versionName desde Gradle", () => {
     `),
     { versionCode: 14, versionName: "1.3.6" },
   );
+});
+
+test("lee la versión Desktop desde el User-Agent", () => {
+  assert.equal(
+    parseDesktopVersion(`HEADERS = {'User-Agent': 'MHLMusic/1.3.6'}`),
+    "1.3.6",
+  );
+  assert.throws(() => parseDesktopVersion("HEADERS = {}"), /versión Desktop/);
 });
 
 test("lee identidad y certificado desde las herramientas Android", () => {
@@ -61,6 +70,7 @@ test("rechaza versiones desalineadas y certificados distintos", () => {
       validateReleaseIdentity({
         packageVersion: "1.3.5",
         gradleVersion: { versionCode: 14, versionName: "1.3.6" },
+        desktopVersion: "1.3.6",
         apkIdentity: validIdentity,
         signerDigest: RELEASE_CERT_SHA256,
       }),
@@ -71,6 +81,18 @@ test("rechaza versiones desalineadas y certificados distintos", () => {
       validateReleaseIdentity({
         packageVersion: "1.3.6",
         gradleVersion: { versionCode: 14, versionName: "1.3.6" },
+        desktopVersion: "1.3.5",
+        apkIdentity: validIdentity,
+        signerDigest: RELEASE_CERT_SHA256,
+      }),
+    /Desktop/,
+  );
+  assert.throws(
+    () =>
+      validateReleaseIdentity({
+        packageVersion: "1.3.6",
+        gradleVersion: { versionCode: 14, versionName: "1.3.6" },
+        desktopVersion: "1.3.6",
         apkIdentity: validIdentity,
         signerDigest: "0".repeat(64),
       }),

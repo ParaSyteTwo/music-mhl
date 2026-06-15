@@ -27,8 +27,6 @@ describe('i18n language resolution', () => {
   });
 
   it('translates store notifications without React or Zustand', () => {
-    expect(translate('es', 'wifiOnlyCancelled')).toContain('solo WiFi');
-    expect(translate('en', 'wifiOnlyCancelled')).toContain('WiFi-only');
     expect(translate('en', 'downloadCompletedToast', {
       title: 'Song',
       artist: 'Artist',

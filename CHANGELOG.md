@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.4.7-beta.3 - 2026-06-15
+
+- Alineada la documentación con el alcance real Desktop + Android y archivados
+  los handoffs y convenios del backend legado.
+- Retiradas las opciones incompletas de descarga solo por Wi-Fi y los controles
+  multimedia de pista siguiente/anterior; se conservan la cola interna de
+  descargas, reproducción, pausa, seek, volumen y metadatos.
+- Eliminados los restos PWA, la pantalla de playlists sin uso, el escaneo de
+  biblioteca Desktop y dependencias frontend huérfanas.
+- El contrato de release ahora valida también la versión del bridge Desktop.
+- Android verifica el asset `yt-dlp` durante el build y CI ejecuta sus tests
+  nativos.
+- Activadas las comprobaciones TypeScript de símbolos no usados y actualizadas
+  dependencias compatibles sin cambios mayores.
+
 ## v1.4.7-beta.2 - 2026-06-14
 
 - Corregida la lectura nativa de tamaños, versiones y timestamps enviados por Capacitor al descargar e instalar actualizaciones.

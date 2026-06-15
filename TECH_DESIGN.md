@@ -1,8 +1,8 @@
 # Technical Design Document
 > Project: MHL Music
 > Stack: React/Vite + pywebview/Python + Capacitor/Android
-> Version: 2.2
-> Last updated: 2026-06-13
+> Version: 2.3
+> Last updated: 2026-06-15
 > Scope: Desktop + Android
 
 ## 1. Alcance Normativo
@@ -12,10 +12,10 @@ Las unicas plataformas activas son:
 - Desktop Windows: pywebview, Python y PyInstaller.
 - Android: Capacitor 8 y plugins nativos.
 
-El codigo Web/PWA y `services/ytdlp-service/` es legado fuera de scope. Puede
-mantenerse compilando, pero no recibe features nuevas, no forma parte de QA de
-release y no debe condicionar decisiones de arquitectura. FastAPI no se
-despliega para el flujo real.
+El codigo Web y `services/ytdlp-service/` es legado fuera de scope. No recibe
+features nuevas, no forma parte de QA de release y no debe condicionar
+decisiones de arquitectura. FastAPI no se despliega para el flujo real. No hay
+manifest PWA ni registro de service worker activos.
 
 ## 2. Tech Stack
 
@@ -135,8 +135,8 @@ evitan CORS:
 - lectura y escritura controlada de archivos;
 - seleccion de carpeta y settings Desktop.
 
-Los metodos async del frontend deben capturar errores y trabajar con respuestas
-tipadas:
+Las fronteras async de red, bridge, filesystem y plugins deben capturar errores
+y trabajar con respuestas tipadas:
 
 ```typescript
 type BridgeResult<T> =
@@ -302,7 +302,7 @@ Reglas esenciales:
 | Target | Preparacion | Artefacto requerido |
 |---|---|---|
 | Desktop | `mhl-desktop/scripts/build-portable.ps1` | ZIP portable Windows en `release/` |
-| Android | `npm run android` y proceso de firma | APK firmado en `release/` |
+| Android | `npm run build`, `npx cap sync android` y Gradle firmado | APK firmado en `release/` |
 | Android contract | `npm run android:prepare-release -- --apk <ruta>` | JSON y assets canonicos |
 
 No hay target Web/PWA de release. `npm run build` produce assets compartidos
@@ -318,8 +318,7 @@ para los hosts activos; por si solo no representa una entrega web.
   archivo en Desktop y Android.
 - Release smoke test: abrir el ZIP portable y el APK firmado en targets reales.
 
-Los tests del branch web legado pueden mantenerse para evitar roturas de
-compilacion, pero no son criterios de aceptacion ni bloquean una release.
+El branch web legado no es criterio de aceptacion ni bloquea una release.
 
 ## 13. Reglas de Evolucion
 
@@ -330,7 +329,7 @@ compilacion, pero no son criterios de aceptacion ni bloquean una release.
 - Centralizar deteccion de plataforma y tipos de bridge.
 - No agregar dependencias externas sin aprobacion.
 - Toda feature incluye tests unitarios.
-- Todo async captura errores y devuelve errores tipados.
+- Las fronteras async externas capturan errores y devuelven fallos tipados.
 - No subir binarios yt-dlp o ffmpeg a git.
 - No crear otro mecanismo de actualizacion Android que contradiga
   `ANDROID_UPDATE_CONTRACT.md`.

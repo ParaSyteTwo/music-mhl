@@ -1,7 +1,11 @@
 # Backend conventions — ytdlp-service (FastAPI)
 
-> Topic file for `services/ytdlp-service/`. Reusable for any future
-> route module. Last updated: 2026-06-11 (Slice 1 of anime feature).
+> Legacy-only reference for `services/ytdlp-service/`.
+> Last updated: 2026-06-15.
+>
+> FastAPI is outside the active Desktop + Android product. Use this document
+> only when maintenance of the retained legacy service is explicitly requested.
+> Do not add active product features here.
 
 ## Canonical route skeleton
 

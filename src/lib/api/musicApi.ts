@@ -126,35 +126,6 @@ export function railwayHeaders(): HeadersInit {
 
 // ─── Helpers para Desktop Python ───────────────────────────────────────────────────────
 
-function cleanTrackTitleForFileName(title: string): string {
-  const normalized = title
-    .replace(/\s+/g, ' ')
-    .replace(/\b(opening|ending)\s+theme\s+song\b/gi, '')
-    .replace(/\b(opening|ending)\s+theme\b/gi, '')
-    .replace(/\btheme\s+song\b/gi, '')
-    .replace(/\b(ost|original soundtrack|soundtrack)\b/gi, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-  const parts = normalized.split(/\s[-–—]\s/);
-  if (parts.length > 1) {
-    const [first, ...rest] = parts;
-    const suffix = rest.join(' - ');
-    if (/(opening|ending|theme|ost|soundtrack|season|anime|ver\.?|version)/i.test(suffix)) {
-      return first.trim() || normalized;
-    }
-  }
-  return normalized || title.trim();
-}
-
-function buildDownloadFileName(track: Track, fileExtension: string): string {
-  const preferredTitle = track.canonicalTitle?.trim() || track.title;
-  const cleanTitle = cleanTrackTitleForFileName(preferredTitle);
-  return `${cleanTitle} - ${track.artist}.${fileExtension}`
-    .replace(/[/\\?%*:|"<>]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
 // ─── Map pre-transformed data from backend ───
 function mapProxiedTrack(t: ProxiedTrack): Track {
   return {

@@ -1,7 +1,7 @@
 # PRD - Product Requirements Document
 > Project: MHL Music
-> Version: 2.1
-> Last updated: 2026-06-13
+> Version: 2.2
+> Last updated: 2026-06-15
 > Scope: Desktop (Windows, pywebview) + Android (Capacitor)
 
 ## 1. Overview
@@ -13,8 +13,8 @@ musica en dos plataformas activas:
 - Android mediante React/Vite dentro de Capacitor y plugins nativos.
 
 El frontend compartido vive en `src/`. Web/PWA y el backend FastAPI son codigo
-legado fuera del producto entregado. Deben seguir compilando mientras existan,
-pero no forman parte de los requisitos, QA ni releases.
+legado fuera del producto entregado. No reciben nuevas features ni forman parte
+de los requisitos, QA o releases de Desktop y Android.
 
 ## 2. Target Audience
 
@@ -28,7 +28,7 @@ pero no forman parte de los requisitos, QA ni releases.
 | Feature | Plataforma | Priority | Descripcion |
 |---|---|---|---|
 | Busqueda musical | Desktop + Android | P0 | Buscar canciones, artistas y albumes usando Deezer como catalogo |
-| Reproductor | Desktop + Android | P0 | Play, pause, skip, seek, volumen y cola |
+| Reproductor | Desktop + Android | P0 | Play, pause, seek y volumen |
 | Descarga de audio | Desktop + Android | P0 | Seleccionar una fuente de audio de YouTube y guardar el archivo local |
 | Metadatos | Desktop + Android | P0 | Conservar titulo, artista, album y portada de la identidad musical seleccionada |
 | Busqueda anime opt-in | Desktop + Android | P1 | Buscar anime y listar sus openings/endings solo cuando el usuario activa el modo |
@@ -132,6 +132,8 @@ como parte del proceso normal.
 
 - Web/PWA y compatibilidad de navegador como producto entregable.
 - Despliegue o ampliacion funcional de `services/ytdlp-service/`.
+- Biblioteca local, importacion de archivos y gestion de playlists dentro de la
+  aplicacion. La pantalla activa conserva solo el historial de descargas.
 - Instalador Windows, salvo peticion explicita.
 - macOS y Linux.
 - Login o cuentas de usuario.

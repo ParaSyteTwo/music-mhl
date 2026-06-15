@@ -34,3 +34,23 @@ jobs:
           cache-dependency-path: mhl-desktop/requirements.txt
       - run: python -m pip install -r requirements.txt pytest
       - run: python -m pytest -q test_bridge_candidates.py tests
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+      - run: npm ci
+      - run: npm run build
+      - run: npx cap sync android
+      - run: chmod +x android/gradlew
+      - run: ./gradlew testDebugUnitTest --no-daemon
+        working-directory: android

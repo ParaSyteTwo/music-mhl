@@ -125,13 +125,6 @@ function parseLetrasTranslationPage(html: string): string[] | null {
 
 // ─── Buscar canción en letras.com ────────────────────────────────────────────
 
-interface SongCandidate {
-  artist: string
-  title: string
-  url: string
-  score: number
-}
-
 async function searchLetrasSong(title: string, artist: string): Promise<string | null> {
   const query = encodeURIComponent(`${title} ${artist}`)
   const html = await letrasFetch(`/search/?lookup=${query}&from=header`)

@@ -126,8 +126,6 @@ interface MusicStore {
   setDominantColor: (color: string | null) => void;
 
   // ─── Settings ───
-  downloadWifiOnly: boolean;
-  setDownloadWifiOnly: (v: boolean) => void;
   uiLanguageMode: UiLanguageMode;
   setUiLanguageMode: (mode: UiLanguageMode) => void;
   preferredPlayerPackage: string | null;
@@ -163,21 +161,6 @@ interface MusicStore {
   // ─── Download history for suggestions ───
   mostDownloadedArtists: string[];
   addMostDownloadedArtist: (artist: string) => void;
-}
-
-// WiFi-only detection (web Network Information API)
-function isOnWifi(): boolean {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const nav = navigator as any;
-    const conn = nav.connection || nav.mozConnection || nav.webkitConnection;
-    if (!conn) return true; // unknown → allow
-    const type = (conn.type || conn.effectiveType || '').toString().toLowerCase();
-    if (!type) return true;
-    return type.includes('wifi') || type.includes('ethernet');
-  } catch {
-    return true;
-  }
 }
 
 export const useMusicStore = create<MusicStore>()(
@@ -675,12 +658,6 @@ export const useMusicStore = create<MusicStore>()(
         },
 
         startDownload: async (track) => {
-          // Check WiFi-only setting
-          if (get().downloadWifiOnly && !isOnWifi()) {
-            toast.error(storeText(get().uiLanguageMode, 'wifiOnlyCancelled'), { duration: 4000 });
-            return;
-          }
-
           // Si ya está en cola o descargando, ignorar
           const existing = get().downloads.find((d) => d.track.id === track.id);
           if (existing && (existing.status === 'downloading' || existing.status === 'queued')) return;
@@ -698,10 +675,6 @@ export const useMusicStore = create<MusicStore>()(
         },
 
         startDownloadWithSourceUrl: (track, sourceUrl) => {
-          if (get().downloadWifiOnly && !isOnWifi()) {
-            toast.error(storeText(get().uiLanguageMode, 'wifiOnlyCancelled'), { duration: 4000 });
-            return;
-          }
           const existing = get().downloads.find((d) => d.track.id === track.id);
           if (existing && (existing.status === 'downloading' || existing.status === 'queued')) return;
 
@@ -723,10 +696,6 @@ export const useMusicStore = create<MusicStore>()(
         },
 
         startDownloadWithVideoId: (track, videoId) => {
-          if (get().downloadWifiOnly && !isOnWifi()) {
-            toast.error(storeText(get().uiLanguageMode, 'wifiOnlyCancelled'), { duration: 4000 });
-            return;
-          }
           const existing = get().downloads.find((d) => d.track.id === track.id);
           if (existing && (existing.status === 'downloading' || existing.status === 'queued')) return;
 
@@ -764,8 +733,6 @@ export const useMusicStore = create<MusicStore>()(
         setDominantColor: (color) => set({ dominantColor: color }),
 
         // ─── Settings ───
-        downloadWifiOnly: false,
-        setDownloadWifiOnly: (v) => set({ downloadWifiOnly: v }),
         uiLanguageMode: 'system',
         setUiLanguageMode: (mode) => set({ uiLanguageMode: mode }),
 
@@ -818,7 +785,6 @@ export const useMusicStore = create<MusicStore>()(
         downloads: state.downloads.filter((d) => d.status === 'completed' || d.status === 'error'),
         volume: state.volume,
         downloadFolderName: state.downloadFolderName,
-        downloadWifiOnly: state.downloadWifiOnly,
         uiLanguageMode: state.uiLanguageMode,
         lyricOriginal: state.lyricOriginal,
         lyricRomanization: state.lyricRomanization,
@@ -835,7 +801,6 @@ export const useMusicStore = create<MusicStore>()(
         downloads: persisted?.downloads || [],
         volume: persisted?.volume ?? 0.8,
         downloadFolderName: persisted?.downloadFolderName || '',
-        downloadWifiOnly: persisted?.downloadWifiOnly ?? false,
         uiLanguageMode: isUiLanguageMode(persisted?.uiLanguageMode)
           ? persisted.uiLanguageMode
           : isUiLanguageMode(persisted?.appLanguage)

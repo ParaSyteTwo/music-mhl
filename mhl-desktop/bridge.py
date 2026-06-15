@@ -57,7 +57,7 @@ _ANILIST_ENDPOINT = 'https://graphql.anilist.co'
 _ANIMETHEMES_ENDPOINT = 'https://api.animethemes.moe'
 _ANIME_HEADERS = {
     'Content-Type': 'application/json',
-    'User-Agent': 'MHLMusic/1.4.7-beta.2',
+    'User-Agent': 'MHLMusic/1.4.7-beta.3',
 }
 _ANIME_TIMEOUT = 10
 
@@ -1052,22 +1052,6 @@ class Bridge:
             return {'success': True}
         except Exception as e:
             return {'success': False, 'error': str(e)}
-
-    def scan_library(self) -> list[dict]:
-        """Escanea la carpeta de descargas y devuelve metadatos básicos."""
-        folder = settings.get(
-            'download_folder',
-            str(Path.home() / 'Music' / 'MHL Music'),
-        )
-        tracks = []
-        for ext in ('mp3', 'm4a', 'aac', 'flac', 'ogg', 'wav'):
-            for p in Path(folder).glob(f'**/*.{ext}'):
-                tracks.append({
-                    'path': str(p),
-                    'filename': p.name,
-                    'size': p.stat().st_size,
-                })
-        return tracks
 
     # ── yt-dlp info ───────────────────────────────────────────────────────────
 

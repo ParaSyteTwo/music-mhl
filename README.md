@@ -2,7 +2,7 @@
 
 ## Tu música. Sin límites.
 
-**MHL Music** es una aplicación de código abierto para buscar, descargar, reproducir y organizar música en Windows y Android.
+**MHL Music** es una aplicación de código abierto para buscar, reproducir y descargar música en Windows y Android.
 
 Usa **Deezer** como catálogo y **YouTube** como fuente de audio. Las descargas se procesan localmente con `yt-dlp` y `ffmpeg`, se convierten a MP3 y se completan con portada, metadatos ID3 y letras sincronizadas.
 
@@ -24,13 +24,13 @@ Sin cuentas obligatorias, sin anuncios y sin seguimiento.
 - **`yt-dlp.exe` + `ffmpeg.exe` incluidos** en el portable
 - Interfaz de escritorio con **pywebview** y WebView nativo de Windows
 - No requiere instalar **Python**, **Node.js** ni usar permisos de administrador
-- Búsqueda directa en Deezer sin depender del backend Web
+- Búsqueda directa en Deezer sin depender del backend legado
 - Descarga y conversión local a MP3
 - Portada, metadatos ID3 y letras integrados
 - Frame nativo del sistema operativo
 - Sin ventanas CMD durante las descargas
 
-> Desktop funciona sin el backend de MHL Music. Solo necesita Internet para consultar los servicios externos de música y letras.
+> Desktop funciona sin el servicio FastAPI legado. Solo necesita Internet para consultar los servicios externos de música, audio y letras.
 
 ### 📱 Android — Descargas locales
 
@@ -105,17 +105,19 @@ La edición Web/PWA está abandonada y no forma parte de las releases. Las plata
 
 **Portable (recomendada):**
 
-1. Descarga [`MHL-Music-Portable-1.4.6.zip`](../../releases/latest)
-2. Descomprime el ZIP en cualquier carpeta
-3. Ejecuta `MHL Music.exe`
+1. Abre la [última release estable](../../releases/latest)
+2. Descarga el archivo `MHL-Music-Portable-{version}.zip`
+3. Descomprime el ZIP en cualquier carpeta
+4. Ejecuta `MHL Music.exe`
 
 **Requisitos:** Windows 10/11 x64
 
 ### 📱 Android
 
-1. Descarga [`MHL-Music-1.4.6.apk`](../../releases/latest)
-2. Abre el archivo en tu dispositivo
-3. Autoriza la instalación desde esa fuente si Android lo solicita
+1. Abre la [última release estable](../../releases/latest)
+2. Descarga el archivo `MHL-Music-{version}.apk`
+3. Abre el archivo en tu dispositivo
+4. Autoriza la instalación desde esa fuente si Android lo solicita
 
 **Requisitos:** Android 7.0+ (API 24+)
 
@@ -144,7 +146,7 @@ MP3 con portada, metadatos ID3 y letras opcionales
 | Windows | pywebview + PyInstaller |
 | Android | Capacitor + puente nativo |
 | Actualizaciones Android | GitHub Releases + validación nativa |
-| Backend Web/PWA | FastAPI |
+| Legado no entregado | Web/PWA + FastAPI |
 | Audio | yt-dlp + ffmpeg |
 | Metadatos | browser-id3-writer |
 | Pruebas | Vitest + pytest |
@@ -154,7 +156,7 @@ music-mhl/
 ├── src/                       # Interfaz compartida
 ├── android/                   # Aplicación Capacitor
 ├── mhl-desktop/               # Aplicación portable de Windows
-├── services/ytdlp-service/    # Backend exclusivo de Web/PWA
+├── services/ytdlp-service/    # Backend legado, fuera del producto
 └── release/                   # APK y ZIP generados localmente
 ```
 
@@ -175,18 +177,23 @@ npm run build
 ### Windows
 
 ```bash
-cd mhl-desktop
-python -m pytest
-python -m PyInstaller MHLMusic.spec --noconfirm
+powershell -ExecutionPolicy Bypass -File mhl-desktop/scripts/build-portable.ps1
 ```
 
 ### Android
 
 ```bash
+npm run build
 npx cap sync android
 cd android
+gradlew testDebugUnitTest
 gradlew assembleRelease
+cd ..
+npm run android:prepare-release -- --apk android/app/build/outputs/apk/release/app-release.apk
 ```
+
+Las reglas de trabajo y las fuentes de verdad documentales están resumidas en
+[`docs/README.md`](docs/README.md).
 
 ---
 
@@ -195,7 +202,7 @@ gradlew assembleRelease
 - Sin registro obligatorio
 - Sin publicidad, tracking ni cuentas de usuario
 - Windows y Android procesan el audio localmente
-- El audio no pasa por el backend Web de MHL Music
+- El audio no pasa por el servicio FastAPI legado
 - Solo se contactan los servicios externos necesarios para buscar música, audio y letras
 - Código abierto y auditable
 

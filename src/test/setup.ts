@@ -66,3 +66,13 @@ Object.defineProperty(navigator, 'mediaSession', {
     setActionHandler: vi.fn(),
   },
 });
+
+Object.defineProperty(globalThis, 'MediaMetadata', {
+  writable: true,
+  configurable: true,
+  value: class {
+    constructor(init: MediaMetadataInit) {
+      Object.assign(this, init);
+    }
+  },
+});

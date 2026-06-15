@@ -1,7 +1,8 @@
 # AGENTS.md — Project Rules
 > Project: MHL Music
-> Stack: TypeScript / React + pywebview + Capacitor + FastAPI
-> Last updated: 2026-06-11
+> Active stack: TypeScript / React + pywebview/Python + Capacitor/Android
+> Legacy retained code: Web/PWA + FastAPI
+> Last updated: 2026-06-15
 
 ## ⚠️ Plataformas activas: SOLO Desktop y Android. La web está fuera de scope.
 
@@ -17,9 +18,9 @@ explícitamente.
   embebido) y Android (Capacitor + plugin nativo). Cualquier feature nueva se
   implementa y prueba solo en estos dos targets.
 - El branch web del switch de plataforma en `src/lib/api/animeApi.ts` (y
-  cualquier código equivalente en otras features futuras) es **código muerto
-  en producción**. Mantenlo compilando pero no inviertas tiempo en él: no
-  agregues tests E2E, no lo documentes, no lo consideres para releases.
+  cualquier código equivalente) es **código muerto en producción**. No
+  inviertas tiempo en ampliarlo, probarlo como producto ni documentarlo como
+  plataforma soportada.
 - El backend FastAPI en `services/ytdlp-service/` existe pero **no se
   despliega ni se usa** en el flujo real. El Desktop llama directo a AniList /
   animethemes desde Python. No agregues features nuevas al backend pensando
@@ -41,8 +42,6 @@ explícitamente.
 - Estás agregando un endpoint al FastAPI "para que la web lo consuma" —
   nadie lo va a consumir. Ponlo en el bridge Desktop o plugin Android.
 
-## Stack & Constraints
-
 ## Anime Search Activation Contract
 
 - El modo anime está desactivado por defecto.
@@ -58,21 +57,20 @@ explícitamente.
 | Plataforma | Estado | Technology | Notes |
 |-----------|--------|-----------|-------|
 | **Desktop** | ✅ ACTIVA | pywebview + PyInstaller | yt-dlp.exe y ffmpeg.exe bundleados. **Target principal de release.** |
-| **Android** | ✅ ACTIVA | Capacitor 8 + plugin nativo | Ya funciona al 100% — no tocar sin razón. |
+| **Android** | ✅ ACTIVA | Capacitor 8 + plugins nativos | Modificar solo con una necesidad concreta y pruebas proporcionales. |
 | ~~Web/PWA~~ | ❌ FUERA DE SCOPE | (código legado) | No se entrega. No invertir tiempo. |
 | Frontend | Compartido | React 18 + Vite + TypeScript | Compartido entre Desktop y Android (no web). |
-| Backend | (legado) | FastAPI (Fly.io) | No se despliega. El Desktop llama APIs externas directo. |
+| Backend | (legado) | FastAPI | No se despliega ni forma parte de QA o releases activas. |
 | State | Compartido | Zustand 5 | Compartido en todo el frontend. |
-| PWA | (legado) | vite-plugin-pwa | No se usa. No configurar. |
+| PWA | (eliminada) | Restos históricos | No hay manifest ni service worker activos. |
 
 **Prohibido:**
-- ~~Llamar backend Fly.io desde Desktop~~ (regla obsoleta — el backend no se
-  usa, el Desktop ya no llama a nada de Fly.io)
+- Llamar al backend legado desde Desktop o Android
 - Asumir web como plataforma soportada en planes / SDD / docs
 - Crear endpoints nuevos en `services/ytdlp-service/` "por si la web los
   necesita" — el Desktop y Android los necesitan en su propio código
 - Tocar código Android sin motivo
-- Subir binarios a git (yt-dlp.exe, ffmpeg.exe)
+- Subir los binarios Desktop `yt-dlp.exe` o `ffmpeg.exe` a git
 - Cambiar el certificado de firma Android o publicar un APK con otra firma
 - Reutilizar `versionCode` en una release normal
 - Crear otro mecanismo de auto-update que contradiga @ANDROID_UPDATE_CONTRACT.md
@@ -82,8 +80,9 @@ explícitamente.
 1. **Plan first**: Antes de escribir código, generar un plan de archivos a crear/modificar
 2. **No AI Slop**: Sin abstracciones innecesarias, sin comentarios boilerplate, sin TODOs placeholder
 3. **Confidence scoring**: Si no estás seguro de una API, decir el confidence score (0-100%)
-4. **Tests required**: Cada feature debe incluir tests unitarios
-5. **Error handling**: Todo async envuelto en try/catch con respuestas de error tipadas
+4. **Tests required**: Cada feature debe incluir tests proporcionales al riesgo
+5. **Error handling**: Las fronteras async de red, bridge, filesystem y plugins
+   deben capturar errores y devolver fallos tipados
 
 ## Workflow — SDD Super Prompt
 
@@ -94,7 +93,7 @@ Para cada request de feature, estructurar como:
 [MISIÓN ACTUAL] La tarea específica a implementar
 [REGLAS DE ORO]
   - Plan antes de código
-  - Cambios atómicos (un archivo/concern por PR/commit)
+  - Cambios atómicos (un concern coherente por PR/commit)
   - Tests junto al código (nunca después)
   - No deps externas sin aprobación
 [CONFIDENCIA] Score en decisiones clave
@@ -121,7 +120,7 @@ Types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`
 
 ## Android Update Compatibility
 
-`@ANDROID_UPDATE_CONTRACT.md` es normativo para toda iteración Android posterior a `1.3.5`, incluso antes de implementar el updater.
+`@ANDROID_UPDATE_CONTRACT.md` es normativo para toda iteración Android posterior a `1.3.5`.
 
 - Fuente única: GitHub Releases de `ParaSyteTwo/music-mhl`.
 - Cada release Android debe incluir `MHL-Music-Android.json` y `MHL-Music-{versionName}.apk`.
@@ -140,5 +139,7 @@ Types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`
 - Requisitos completos: @PRD.md
 - Decisiones de arquitectura: @TECH_DESIGN.md
 - Contrato de compatibilidad Android: @ANDROID_UPDATE_CONTRACT.md
-- Convenciones backend (FastAPI routes, rate-limit, tests): @docs/backend-conventions.md
+- Índice documental y fuentes de verdad: @docs/README.md
+- Convenciones del backend legado, solo si se mantiene expresamente:
+  @docs/legacy/backend-conventions.md
 - Reglas globales: ~/.Codex/AGENTS.md
