@@ -22,6 +22,7 @@ export default function SettingsPage() {
     lyricOriginal, setLyricOriginal,
     lyricRomanization, setLyricRomanization,
     lyricTranslation, setLyricTranslation,
+    lyricLatinOnly, setLyricLatinOnly,
     saveLrcFile, setSaveLrcFile,
     uiLanguageMode, setUiLanguageMode,
     animeSearchEnabled, setAnimeSearchEnabled,
@@ -221,6 +222,18 @@ export default function SettingsPage() {
           <label className="flex items-start gap-3 cursor-pointer">
             <input
               type="checkbox"
+              checked={lyricLatinOnly}
+              onChange={e => setLyricLatinOnly(e.target.checked)}
+              className="mt-0.5"
+            />
+            <div>
+              <p className="text-sm text-[#F5F5F0]">{t('lyricsLatinOnly')}</p>
+              <p className="text-xs text-[#666660] mt-0.5">{t('lyricsLatinOnlyHelp')}</p>
+            </div>
+          </label>
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
               checked={lyricTranslation}
               onChange={e => setLyricTranslation(e.target.checked)}
               className="mt-0.5"
@@ -230,7 +243,7 @@ export default function SettingsPage() {
               <p className="text-xs text-[#666660] mt-0.5">{t('lyricsTranslationHelp')}</p>
             </div>
           </label>
-          {!lyricOriginal && !lyricRomanization && !lyricTranslation && (
+          {!lyricOriginal && !lyricRomanization && !lyricTranslation && !lyricLatinOnly && (
             <p className="text-xs text-[#666660] italic pt-1">{t('lyricsNoneSelected')}</p>
           )}
           {isPyWebView && (

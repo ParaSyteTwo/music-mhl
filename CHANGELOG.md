@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.4.7-beta.4 - 2026-06-15
+
+- Corregida la extracción de romanización desde letras.com usando el HTML real
+  actual, incluyendo spans anidados y `class = "romanization"`.
+- Añadida la opción "Solo letras latinas / romaji" para ocultar kanji, kana,
+  hangul o hanzi y guardar la romanización como letra principal.
+- Desktop obtiene letras.com mediante el bridge Python para evitar bloqueos del
+  WebView y se cachean resultados positivos durante la sesión.
+- La combinación con LRCLIB alinea timestamps por texto cuando hay intros o
+  líneas extra, en vez de asumir el mismo índice.
+
 ## v1.4.7-beta.3 - 2026-06-15
 
 - Alineada la documentación con el alcance real Desktop + Android y archivados

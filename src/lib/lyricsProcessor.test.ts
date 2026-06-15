@@ -62,4 +62,29 @@ describe('lyrics language decisions', () => {
     const result = await romanizeLines(['사랑해'], 'korean');
     expect(result[0]).not.toBe('사랑해');
   });
+
+  it('uses romanization as the primary line when latin-only lyrics are enabled', async () => {
+    const result = await processLyrics('[00:01.00]사랑해', '', {
+      lyricOriginal: true,
+      lyricRomanization: false,
+      lyricTranslation: false,
+      lyricLatinOnly: true,
+      deviceLang: 'es',
+    });
+
+    expect(result.synced).not.toContain('사랑해');
+    expect(result.synced).toMatch(/^\[00:01\.00\][a-z]+/i);
+  });
+
+  it('keeps Latin-script lyrics when latin-only lyrics are enabled', async () => {
+    const result = await processLyrics('[00:01.00]Yo quiero tu amor', '', {
+      lyricOriginal: false,
+      lyricRomanization: false,
+      lyricTranslation: false,
+      lyricLatinOnly: true,
+      deviceLang: 'es',
+    });
+
+    expect(result.synced).toBe('[00:01.00]Yo quiero tu amor');
+  });
 });

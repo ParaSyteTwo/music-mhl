@@ -261,6 +261,7 @@ interface LyricFlags {
   original: boolean
   romanization: boolean
   translation: boolean
+  latinOnly?: boolean
 }
 
 function normalizeLyricLine(text: string): string {
@@ -309,9 +310,13 @@ export function buildLRC(
       plain.push(line)
     }
 
-    if (flags.original) pushDistinct(text)
     const rom = romanized?.[idx]
-    if (flags.romanization) pushDistinct(rom)
+    if (flags.latinOnly) {
+      pushDistinct(rom || text)
+    } else {
+      if (flags.original) pushDistinct(text)
+      if (flags.romanization) pushDistinct(rom)
+    }
 
     const tra = translated?.[idx]
     if (flags.translation) pushDistinct(tra)
@@ -326,6 +331,7 @@ export interface LyricPrefs {
   lyricOriginal: boolean
   lyricRomanization: boolean
   lyricTranslation: boolean
+  lyricLatinOnly?: boolean
   deviceLang: Lang
 }
 
@@ -334,7 +340,14 @@ export async function processLyrics(
   plainLrc: string,
   prefs: LyricPrefs,
 ): Promise<{ synced: string | null; plain: string | null }> {
-  if (!syncedLrc) return { synced: null, plain: plainLrc || null }
+  if (!syncedLrc) {
+    if (!plainLrc || !prefs.lyricLatinOnly) return { synced: null, plain: plainLrc || null }
+    const plainLines = plainLrc.split('\n')
+    const script = detectScript(plainLines.join('\n').slice(0, 500))
+    if (script === 'latin') return { synced: null, plain: plainLrc }
+    const romanized = await romanizeLines(plainLines, script)
+    return { synced: null, plain: romanized.join('\n') || null }
+  }
 
   const rawLines = syncedLrc.split('\n').map(l => {
     const m = LRC_RE.exec(l); return m ? m[2] : l
@@ -346,7 +359,7 @@ export async function processLyrics(
   const shouldTranslate = shouldTranslateLyrics(sourceLang, prefs.deviceLang, prefs.lyricTranslation)
 
   const [romanized, translated] = await Promise.all([
-    prefs.lyricRomanization && !isLatin
+    (prefs.lyricRomanization || prefs.lyricLatinOnly) && !isLatin
       ? romanizeLines(rawLines, script)
       : Promise.resolve(null),
     shouldTranslate
@@ -358,6 +371,7 @@ export async function processLyrics(
     original:     prefs.lyricOriginal,
     romanization: prefs.lyricRomanization,
     translation:  shouldTranslate,
+    latinOnly:    prefs.lyricLatinOnly,
   })
 
   return { synced: synced || null, plain: plain || null }

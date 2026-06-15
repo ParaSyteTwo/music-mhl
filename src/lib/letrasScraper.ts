@@ -6,12 +6,34 @@
  */
 
 const LETRAS_BASE = 'https://www.letras.com'
+const LETRAS_CACHE_TTL_MS = 10 * 60 * 1000
+const LETRAS_CACHE_MAX_ENTRIES = 50
+
+interface PyWebViewLetrasApi {
+  letras_fetch?: (url: string) => Promise<{ success?: boolean; html?: string }>
+}
+
+interface PyWebViewWindow extends Window {
+  pywebview?: {
+    api?: PyWebViewLetrasApi
+  }
+}
+
+const letrasCache = new Map<string, { value: LetrasSongResult; expiresAt: number }>()
 
 // ─── Fetch con retry y timeout ───────────────────────────────────────────────
 
 async function letrasFetch(path: string, attempt = 0): Promise<string | null> {
   const url = path.startsWith('http') ? path : `${LETRAS_BASE}${path}`
   try {
+    const pyapi = typeof window === 'undefined'
+      ? undefined
+      : (window as PyWebViewWindow).pywebview?.api
+    if (pyapi?.letras_fetch) {
+      const result = await pyapi.letras_fetch(url)
+      return result?.success && result.html ? result.html : null
+    }
+
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 12000)
     const res = await fetch(url, {
@@ -37,9 +59,12 @@ function slugify(text: string): string {
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\b(feat|ft|featuring)\b.*$/i, '')
+    .replace(/\([^)]*\)|\[[^\]]*\]/g, '')
     .replace(/[^a-z0-9\s-]/g, '')
     .replace(/\s+/g, '-')
     .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
     .trim()
 }
 
@@ -56,6 +81,32 @@ function cleanHtml(text: string): string {
     .trim()
 }
 
+function cleanText(text: string | null | undefined): string {
+  return cleanHtml(text ?? '').replace(/\s+/g, ' ').trim()
+}
+
+function getCachedLyrics(key: string): LetrasSongResult | null {
+  const cached = letrasCache.get(key)
+  if (!cached) return null
+  if (Date.now() > cached.expiresAt) {
+    letrasCache.delete(key)
+    return null
+  }
+  return cached.value
+}
+
+function setCachedLyrics(key: string, value: LetrasSongResult) {
+  if (!value.sourceUrl || value.original.length === 0) return
+  if (letrasCache.size >= LETRAS_CACHE_MAX_ENTRIES) {
+    const oldest = letrasCache.keys().next().value as string | undefined
+    if (oldest) letrasCache.delete(oldest)
+  }
+  letrasCache.set(key, {
+    value,
+    expiresAt: Date.now() + LETRAS_CACHE_TTL_MS,
+  })
+}
+
 // ─── Parsear página de letras.com ──────────────────────────────────────────
 
 interface LetrasSongResult {
@@ -66,42 +117,23 @@ interface LetrasSongResult {
 }
 
 function parseLetrasSongPage(html: string): { original: string[]; romaji: string[] } | null {
-  // Estructura real en letras.com:
-  // <div class="lyric-content ...">
-  //   <p><span class="verse">
-  //     <span>kanji original</span>
-  //     <span class="romanization">romaji</span>
-  //   </span></p>
-  //   ...
-  // </div>
-
   const originalLines: string[] = []
   const romajiLines: string[] = []
 
-  // Buscar bloque lyric-content
-  const contentMatch = html.match(/class="lyric-content[^"]*"[^>]*>([\s\S]*?)<\/div>/i)
-  if (!contentMatch) return null
+  if (typeof DOMParser === 'undefined') return null
 
-  const block = contentMatch[1]
+  const doc = new DOMParser().parseFromString(html, 'text/html')
+  const verses = [...doc.querySelectorAll('.lyric-content .verse')]
+  for (const verse of verses) {
+    const romanization = verse.querySelector('.romanization')
+    const clone = verse.cloneNode(true) as Element
+    clone.querySelectorAll('.romanization').forEach((node) => node.remove())
 
-  // Extraer todos los .verse
-  const verseMatches = [...block.matchAll(/<span class="verse"[^>]*>([\s\S]*?)<\/span>/gi)]
-  for (const vm of verseMatches) {
-    const verseHtml = vm[1]
+    const original = cleanText(clone.textContent)
+    const romaji = cleanText(romanization?.textContent)
 
-    // span:first-child = texto original (kanji/hangul/etc)
-    const origMatch = verseHtml.match(/^<span[^>]*>([\s\S]*?)<\/span>/i)
-    if (origMatch) {
-      const text = cleanHtml(origMatch[1])
-      if (text) originalLines.push(text)
-    }
-
-    // span.romanization = romaji
-    const romaMatch = verseHtml.match(/<span class="romanization"[^>]*>([\s\S]*?)<\/span>/i)
-    if (romaMatch) {
-      const text = cleanHtml(romaMatch[1])
-      if (text) romajiLines.push(text)
-    }
+    if (original) originalLines.push(original)
+    if (romaji) romajiLines.push(romaji)
   }
 
   return originalLines.length > 0
@@ -110,6 +142,20 @@ function parseLetrasSongPage(html: string): { original: string[]; romaji: string
 }
 
 function parseLetrasTranslationPage(html: string): string[] | null {
+  if (typeof DOMParser !== 'undefined') {
+    const doc = new DOMParser().parseFromString(html, 'text/html')
+    const rightColumn = doc.querySelector('.lyric-content .lyric-translation-right')
+    const translated = [...(rightColumn?.querySelectorAll('p .verse, p > span') ?? [])]
+      .map((node) => {
+        const clone = node.cloneNode(true) as Element
+        clone.querySelectorAll('.romanization').forEach((child) => child.remove())
+        return cleanText(clone.textContent)
+      })
+      .filter(Boolean)
+
+    if (translated.length > 0) return translated
+  }
+
   const lines: string[] = []
   const transMatch = html.match(/class="lyric-translation"[^>]*>([\s\S]*?)<\/div>/i)
   if (transMatch) {
@@ -125,7 +171,22 @@ function parseLetrasTranslationPage(html: string): string[] | null {
 
 // ─── Buscar canción en letras.com ────────────────────────────────────────────
 
-async function searchLetrasSong(title: string, artist: string): Promise<string | null> {
+interface LetrasSongPage {
+  url: string
+  html?: string
+}
+
+async function searchLetrasSong(title: string, artist: string): Promise<LetrasSongPage | null> {
+  const titleSlug = slugify(title)
+  const artistSlug = slugify(artist)
+  if (titleSlug && artistSlug) {
+    const directUrl = `${LETRAS_BASE}/${artistSlug}/${titleSlug}/`
+    const directHtml = await letrasFetch(directUrl)
+    if (directHtml && parseLetrasSongPage(directHtml)) {
+      return { url: directUrl, html: directHtml }
+    }
+  }
+
   const query = encodeURIComponent(`${title} ${artist}`)
   const html = await letrasFetch(`/search/?lookup=${query}&from=header`)
   if (!html) return null
@@ -147,9 +208,6 @@ async function searchLetrasSong(title: string, artist: string): Promise<string |
 
   if (songLinks.length === 0) return null
 
-  const titleSlug = slugify(title)
-  const artistSlug = slugify(artist)
-
   // Scoring: mejor coincidencia
   let best: string | null = null
   let bestScore = 0
@@ -170,7 +228,7 @@ async function searchLetrasSong(title: string, artist: string): Promise<string |
     }
   }
 
-  return bestScore > 0 ? best! : null
+  return bestScore > 0 && best ? { url: best } : null
 }
 
 // ─── Fetch desde letras.com ─────────────────────────────────────────────────
@@ -179,26 +237,39 @@ export async function fetchLetrasLyrics(
   title: string,
   artist: string,
 ): Promise<LetrasSongResult> {
+  const cacheKey = `${slugify(artist)}|${slugify(title)}`
+  const cached = getCachedLyrics(cacheKey)
+  if (cached) return cached
+
   // 1. Buscar URL de la canción
-  const songUrl = await searchLetrasSong(title, artist)
-  if (!songUrl) {
+  const songPageResult = await searchLetrasSong(title, artist)
+  if (!songPageResult) {
     return { original: [], romaji: [], translated: [], sourceUrl: '' }
   }
 
   // 2. Fetch página original y de traducción en paralelo
   const [songPage, transPage] = await Promise.all([
-    letrasFetch(songUrl),
-    letrasFetch(`${songUrl}traduccion.html`),
+    songPageResult.html ?? letrasFetch(songPageResult.url),
+    letrasFetch(`${songPageResult.url}traduccion.html`),
   ])
 
   // 3. Parsear
   const parsed = songPage ? parseLetrasSongPage(songPage) : null
   const translated = transPage ? parseLetrasTranslationPage(transPage) : null
 
-  return {
+  const result = {
     original: parsed?.original ?? [],
     romaji: parsed?.romaji ?? [],
     translated: translated ?? [],
-    sourceUrl: songUrl,
+    sourceUrl: songPageResult.url,
   }
+  setCachedLyrics(cacheKey, result)
+  return result
+}
+
+export const __testing = {
+  parseLetrasSongPage,
+  parseLetrasTranslationPage,
+  slugify,
+  clearCache: () => letrasCache.clear(),
 }

@@ -79,6 +79,60 @@ describe('musicApi lyrics combination', () => {
     expect(result?.synced?.match(/I love you/g)).toHaveLength(2);
     expect(result?.synced).toContain('Te amo');
   });
+
+  it('aligns letras.com lines to matching LRCLIB timestamps instead of raw index order', async () => {
+    const result = await __testing.combineLyrics(
+      {
+        original: ['無敵の笑顔', '知りたい秘密'],
+        romaji: ['muteki no egao', 'shiritai himitsu'],
+        translated: [],
+        sourceUrl: 'https://www.letras.com/yoasobi/idol/',
+      },
+      {
+        syncedLrc: [
+          '[00:03.00]Intro line',
+          '[00:10.00]無敵の笑顔',
+          '[00:17.00]知りたい秘密',
+        ].join('\n'),
+        plainLrc: '',
+      },
+      {
+        lyricOriginal: true,
+        lyricRomanization: true,
+        lyricTranslation: false,
+        deviceLang: 'es',
+      },
+    );
+
+    expect(result?.synced).toContain('[00:10.00]無敵の笑顔');
+    expect(result?.synced).toContain('[00:10.00]muteki no egao');
+    expect(result?.synced).toContain('[00:17.00]知りたい秘密');
+    expect(result?.synced).not.toContain('[00:03.00]無敵の笑顔');
+  });
+
+  it('uses letras.com romaji as the primary lyrics when latin-only mode is enabled', async () => {
+    const result = await __testing.combineLyrics(
+      {
+        original: ['無敵の笑顔', '知りたい秘密'],
+        romaji: ['muteki no egao', 'shiritai himitsu'],
+        translated: [],
+        sourceUrl: 'https://www.letras.com/yoasobi/idol/',
+      },
+      null,
+      {
+        lyricOriginal: true,
+        lyricRomanization: true,
+        lyricTranslation: false,
+        lyricLatinOnly: true,
+        deviceLang: 'es',
+      },
+    );
+
+    expect(result?.synced).toContain('muteki no egao');
+    expect(result?.synced).toContain('shiritai himitsu');
+    expect(result?.synced).not.toContain('無敵の笑顔');
+    expect(result?.synced).not.toContain('知りたい秘密');
+  });
 });
 
 describe('musicApi request reuse', () => {

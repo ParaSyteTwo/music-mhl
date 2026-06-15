@@ -57,7 +57,7 @@ _ANILIST_ENDPOINT = 'https://graphql.anilist.co'
 _ANIMETHEMES_ENDPOINT = 'https://api.animethemes.moe'
 _ANIME_HEADERS = {
     'Content-Type': 'application/json',
-    'User-Agent': 'MHLMusic/1.4.7-beta.3',
+    'User-Agent': 'MHLMusic/1.4.7-beta.4',
 }
 _ANIME_TIMEOUT = 10
 
@@ -824,6 +824,26 @@ class Bridge:
         if score >= 90:
             return 'media'
         return 'baja'
+
+    def letras_fetch(self, url: str) -> dict:
+        parsed = urlparse(url or '')
+        if parsed.scheme != 'https' or parsed.netloc not in {'www.letras.com', 'letras.com'}:
+            return {'success': False, 'error': 'URL de letras.com inválida'}
+
+        try:
+            response = requests.get(
+                url,
+                timeout=12,
+                headers={
+                    'User-Agent': 'Mozilla/5.0 (Android; Mobile)',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml',
+                },
+            )
+            if not response.ok:
+                return {'success': False, 'error': f'letras.com respondió HTTP {response.status_code}'}
+            return {'success': True, 'html': response.text, 'url': response.url}
+        except requests.RequestException as exc:
+            return {'success': False, 'error': str(exc)}
 
     # ── Download audio ────────────────────────────────────────────────────────
 

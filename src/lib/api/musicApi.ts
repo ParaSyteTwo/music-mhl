@@ -829,9 +829,15 @@ export async function getLyrics(
   duration?: number,
   prefs?: LyricPrefs,
 ): Promise<{ synced: string | null; plain: string | null }> {
-  const p = prefs ?? { lyricOriginal: true, lyricRomanization: true, lyricTranslation: true, deviceLang: 'es' }
+  const p = prefs ?? {
+    lyricOriginal: true,
+    lyricRomanization: true,
+    lyricTranslation: true,
+    lyricLatinOnly: false,
+    deviceLang: 'es',
+  }
 
-  if (!p.lyricOriginal && !p.lyricRomanization && !p.lyricTranslation) {
+  if (!p.lyricOriginal && !p.lyricRomanization && !p.lyricTranslation && !p.lyricLatinOnly) {
     return { synced: null, plain: null }
   }
 
@@ -901,6 +907,55 @@ interface LetrasResult {
   sourceUrl: string
 }
 
+interface TimedLyricLine {
+  timestamp: string
+  text: string
+}
+
+function parseTimedLyricLines(syncedLrc: string): TimedLyricLine[] {
+  return syncedLrc
+    .split('\n')
+    .map((line) => {
+      const match = /^\[(\d+:\d+\.\d+)\](.*)$/.exec(line)
+      return match ? { timestamp: match[1], text: match[2].trim() } : null
+    })
+    .filter((line): line is TimedLyricLine => Boolean(line?.timestamp && line.text))
+}
+
+function estimateTimestamp(index: number): string {
+  return `${String(Math.floor(index / 20)).padStart(2, '0')}:${String((index % 20) * 3).padStart(2, '0')}.00`
+}
+
+function alignLetrasTimestamps(
+  originalLines: string[],
+  syncedLrc: string,
+  areEquivalent: (left: string, right: string) => boolean,
+): Array<string | undefined> | null {
+  const timedLines = parseTimedLyricLines(syncedLrc)
+  if (!timedLines.length) return null
+
+  const used = new Set<number>()
+  const aligned = originalLines.map((line, index) => {
+    const indexedLine = timedLines[index]
+    if (indexedLine && !used.has(index) && areEquivalent(indexedLine.text, line)) {
+      used.add(index)
+      return indexedLine.timestamp
+    }
+
+    const matchIndex = timedLines.findIndex((timedLine, candidateIndex) => (
+      !used.has(candidateIndex) && areEquivalent(timedLine.text, line)
+    ))
+    if (matchIndex < 0) return undefined
+    used.add(matchIndex)
+    return timedLines[matchIndex].timestamp
+  })
+
+  const matchCount = aligned.filter(Boolean).length
+  return matchCount >= Math.max(1, Math.ceil(originalLines.length * 0.5))
+    ? aligned
+    : null
+}
+
 async function _combineLyrics(
   letras: LetrasResult,
   lrclib: LrclibResult | null,
@@ -908,42 +963,39 @@ async function _combineLyrics(
 ): Promise<{ synced: string | null; plain: string | null } | null> {
   if (letras.original.length === 0) return null
 
-  // Generar timestamps si tenemos LRC de LRCLIB, si no crear fijos cada 3s
-  let timestamps: string[] | null = null
-  if (lrclib?.syncedLrc) {
-    const LRC_RE = /^\[(\d+:\d+\.\d+)\]/g
-    const matches = [...lrclib.syncedLrc.matchAll(LRC_RE)]
-    if (matches.length >= letras.original.length * 0.5) {
-      timestamps = matches.map(m => m[1])
-    }
-  }
-
   const result: string[] = []
   const sample = letras.original.join('\n').slice(0, 500)
   const {
     detectScript,
     detectLyricSourceLanguage,
     areLyricLinesEquivalent,
+    romanizeLines,
     shouldTranslateLyrics,
     translateLines,
   } = await import('@/lib/lyricsProcessor')
-  const sourceLang = detectLyricSourceLanguage(sample, detectScript(sample))
+  const sourceScript = detectScript(sample)
+  const sourceLang = detectLyricSourceLanguage(sample, sourceScript)
+  const timestamps = lrclib?.syncedLrc
+    ? alignLetrasTimestamps(letras.original, lrclib.syncedLrc, areLyricLinesEquivalent)
+    : null
   const shouldTranslate = shouldTranslateLyrics(sourceLang, p.deviceLang, p.lyricTranslation)
   const translated = shouldTranslate
     ? p.deviceLang === 'es' && letras.translated.length > 0
       ? letras.translated
       : await translateLines(letras.original, p.deviceLang)
     : null
+  const romaji = p.lyricLatinOnly && sourceScript !== 'latin' && letras.romaji.length === 0
+    ? await romanizeLines(letras.original, sourceScript)
+    : letras.romaji
 
   const maxLines = Math.max(
     letras.original.length,
-    letras.romaji.length || 0,
+    romaji.length || 0,
     translated?.length || 0,
   )
 
   for (let i = 0; i < maxLines; i++) {
-    // Timestamp — usar el de LRCLIB si existe, si no estimator
-    const ts = timestamps?.[i] ?? `${String(Math.floor(i / 20) + 0).padStart(2, '0')}:${String((i % 20) * 3).padStart(2, '0')}.00`
+    const ts = timestamps?.[i] ?? estimateTimestamp(i)
 
     const selectedLines: string[] = []
     const pushDistinct = (line: string | undefined) => {
@@ -957,8 +1009,12 @@ async function _combineLyrics(
       result.push(`[${ts}]${line}`)
     }
 
-    if (p.lyricOriginal) pushDistinct(letras.original[i])
-    if (p.lyricRomanization) pushDistinct(letras.romaji[i])
+    if (p.lyricLatinOnly) {
+      pushDistinct(romaji[i] || letras.original[i])
+    } else {
+      if (p.lyricOriginal) pushDistinct(letras.original[i])
+      if (p.lyricRomanization) pushDistinct(romaji[i])
+    }
     if (shouldTranslate) pushDistinct(translated?.[i])
   }
 

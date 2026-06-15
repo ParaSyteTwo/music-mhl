@@ -135,10 +135,12 @@ interface MusicStore {
   lyricOriginal: boolean;
   lyricRomanization: boolean;
   lyricTranslation: boolean;
+  lyricLatinOnly: boolean;
   saveLrcFile: boolean;
   setLyricOriginal: (v: boolean) => void;
   setLyricRomanization: (v: boolean) => void;
   setLyricTranslation: (v: boolean) => void;
+  setLyricLatinOnly: (v: boolean) => void;
   setSaveLrcFile: (v: boolean) => void;
 
   // ─── Anime search (opt-in, off by default) ───
@@ -404,6 +406,7 @@ export const useMusicStore = create<MusicStore>()(
                 lyricOriginal: get().lyricOriginal,
                 lyricRomanization: get().lyricRomanization,
                 lyricTranslation: get().lyricTranslation,
+                lyricLatinOnly: get().lyricLatinOnly,
                 deviceLang: resolveEffectiveLanguage(get().uiLanguageMode),
               },
             ).catch(() => ({ synced: null, plain: null })),
@@ -740,10 +743,12 @@ export const useMusicStore = create<MusicStore>()(
         lyricOriginal: true,
         lyricRomanization: true,
         lyricTranslation: true,
+        lyricLatinOnly: false,
         saveLrcFile: true,
         setLyricOriginal: (v) => set({ lyricOriginal: v }),
         setLyricRomanization: (v) => set({ lyricRomanization: v }),
         setLyricTranslation: (v) => set({ lyricTranslation: v }),
+        setLyricLatinOnly: (v) => set({ lyricLatinOnly: v }),
         setSaveLrcFile: (v) => set({ saveLrcFile: v }),
 
         // ─── Anime search (opt-in, off by default) ───
@@ -789,6 +794,7 @@ export const useMusicStore = create<MusicStore>()(
         lyricOriginal: state.lyricOriginal,
         lyricRomanization: state.lyricRomanization,
         lyricTranslation: state.lyricTranslation,
+        lyricLatinOnly: state.lyricLatinOnly,
         saveLrcFile: state.saveLrcFile,
         animeSearchEnabled: state.animeSearchEnabled,
         mostDownloadedArtists: state.mostDownloadedArtists,
@@ -809,6 +815,7 @@ export const useMusicStore = create<MusicStore>()(
         lyricOriginal: persisted?.lyricOriginal ?? true,
         lyricRomanization: persisted?.lyricRomanization ?? true,
         lyricTranslation: persisted?.lyricTranslation ?? true,
+        lyricLatinOnly: persisted?.lyricLatinOnly ?? false,
         saveLrcFile: persisted?.saveLrcFile ?? true,
         animeSearchEnabled: persisted?.animeSearchEnabled ?? false,
         mostDownloadedArtists: persisted?.mostDownloadedArtists ?? [],

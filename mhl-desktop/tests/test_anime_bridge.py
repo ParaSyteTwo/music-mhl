@@ -587,7 +587,32 @@ def test_anime_requests_carry_user_agent_and_json_content_type_headers():
         bridge.anime_search("naruto", 5)
 
     assert captured_headers.get("Content-Type") == "application/json"
-    assert captured_headers.get("User-Agent") == "MHLMusic/1.4.7-beta.3"
+    assert captured_headers.get("User-Agent") == "MHLMusic/1.4.7-beta.4"
+
+
+def test_letras_fetch_returns_html_from_letras_domain():
+    response = MagicMock(spec=requests.Response)
+    response.ok = True
+    response.status_code = 200
+    response.text = '<html>lyrics</html>'
+    response.url = 'https://www.letras.com/yoasobi/idol/'
+
+    with patch("bridge.requests.get", return_value=response) as get_mock:
+        result = Bridge().letras_fetch('https://www.letras.com/yoasobi/idol/')
+
+    assert result == {
+        'success': True,
+        'html': '<html>lyrics</html>',
+        'url': 'https://www.letras.com/yoasobi/idol/',
+    }
+    assert get_mock.call_args.kwargs['timeout'] == 12
+
+
+def test_letras_fetch_rejects_non_letras_domain():
+    result = Bridge().letras_fetch('https://example.com/yoasobi/idol/')
+
+    assert result['success'] is False
+    assert 'letras.com' in result['error']
 
 
 def test_anime_requests_always_have_timeout():
