@@ -49,11 +49,13 @@ const toneStyles: Record<CandidateMatchTone, {
 export function CandidatePicker({
   track,
   animeSearchEnabled,
+  androidFastSearchMode,
   onClose,
   onSelect,
 }: {
   track: Track;
   animeSearchEnabled: boolean;
+  androidFastSearchMode: boolean;
   onClose: () => void;
   onSelect: (videoId: string) => void;
 }) {
@@ -79,7 +81,9 @@ export function CandidatePicker({
     setCandidates([]);
     const loadCandidates = async () => {
       try {
-        const cands = await getDownloadCandidates(track, animeSearchEnabled);
+        const cands = await getDownloadCandidates(track, animeSearchEnabled, {
+          fastMode: androidFastSearchMode,
+        });
         if (!active) return;
         setCandidates(cands);
         if (cands.length === 0) {
@@ -99,7 +103,7 @@ export function CandidatePicker({
     return () => {
       active = false;
     };
-  }, [animeSearchEnabled, track, t]);
+  }, [androidFastSearchMode, animeSearchEnabled, track, t]);
 
   function fmt(s: number) {
     const m = Math.floor(s / 60);
@@ -111,7 +115,9 @@ export function CandidatePicker({
     setLoadingMore(true);
     setError(null);
     try {
-      const cands = await getExpandedDownloadCandidates(track, animeSearchEnabled);
+      const cands = await getExpandedDownloadCandidates(track, animeSearchEnabled, {
+        fastMode: androidFastSearchMode,
+      });
       setCandidates(cands);
       if (cands.length === 0) {
         toast.warning(t('noDownloadCandidates'));
@@ -131,7 +137,7 @@ export function CandidatePicker({
       type="button"
       onClick={handleSearchMore}
       disabled={loadingMore}
-      className="mt-3 w-full h-9 rounded-lg border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.04)] text-[11px] font-semibold text-[#D8D8D0] flex items-center justify-center gap-2 disabled:opacity-50"
+      className="w-full h-10 rounded-lg border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.04)] text-[11px] font-semibold text-[#D8D8D0] flex items-center justify-center gap-2 disabled:opacity-50"
     >
       <RefreshCw className={`w-3.5 h-3.5 ${loadingMore ? 'animate-spin' : ''}`} />
       {loadingMore ? t('candidateSearchingMore') : t('candidateSearchMore')}
@@ -196,12 +202,10 @@ export function CandidatePicker({
           ) : error ? (
             <div className="py-8">
               <p className="text-center text-xs text-red-400">{error}</p>
-              {searchMoreButton}
             </div>
           ) : candidates.length === 0 ? (
             <div className="py-8">
               <p className="text-center text-xs text-[#555]">{t('noResults')}</p>
-              {searchMoreButton}
             </div>
           ) : (
             <div className="space-y-1.5 mt-1">
@@ -258,10 +262,14 @@ export function CandidatePicker({
                   </motion.button>
                 );
               })}
-              {searchMoreButton}
             </div>
           )}
         </div>
+        {isNativeMobile && !loading && (
+          <div className="flex-shrink-0 px-3 py-3 border-t border-[rgba(255,255,255,0.06)] bg-[#111]">
+            {searchMoreButton}
+          </div>
+        )}
       </motion.div>
     </motion.div>
   );

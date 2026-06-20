@@ -329,6 +329,11 @@ export interface DownloadCandidate {
 
 export interface DownloadOptions {
   animeSearchEnabled?: boolean;
+  androidFastSearchMode?: boolean;
+}
+
+export interface CandidateSearchOptions {
+  fastMode?: boolean;
 }
 
 interface TimedCacheEntry<T> {
@@ -339,15 +344,21 @@ interface TimedCacheEntry<T> {
 const SEARCH_CACHE_TTL_MS = 2 * 60 * 1000;
 const CANDIDATE_CACHE_TTL_MS = 10 * 60 * 1000;
 const EMPTY_CANDIDATE_CACHE_TTL_MS = 15 * 1000;
+const PERSISTENT_CANDIDATE_CACHE_TTL_MS = 3 * 24 * 60 * 60 * 1000;
 const SEARCH_CACHE_MAX_ENTRIES = 100;
 const CANDIDATE_CACHE_MAX_ENTRIES = 40;
-const ANDROID_PRIMARY_CANDIDATE_LIMIT = 12;
+const PERSISTENT_CANDIDATE_CACHE_MAX_ENTRIES = 80;
+const PERSISTENT_CANDIDATE_CACHE_KEY = 'mhl-android-candidate-cache-v1';
+const ANDROID_NORMAL_CANDIDATE_LIMIT = 12;
+const ANDROID_FAST_CANDIDATE_LIMIT = 8;
 const ANDROID_EXTRA_CANDIDATE_LIMIT = 5;
 
 const searchCache = new Map<string, TimedCacheEntry<Track[]>>();
 const searchRequests = new Map<string, Promise<Track[]>>();
 const candidateCache = new Map<string, TimedCacheEntry<DownloadCandidate[]>>();
 const candidateRequests = new Map<string, Promise<DownloadCandidate[]>>();
+const candidatePrefetchRequests = new Set<string>();
+let activeCandidatePrefetches = 0;
 
 function getCachedValue<T>(cache: Map<string, TimedCacheEntry<T>>, key: string): T | undefined {
   const entry = cache.get(key);
@@ -372,6 +383,67 @@ function setCachedValue<T>(
   }
   cache.delete(key);
   cache.set(key, { value, expiresAt: Date.now() + ttlMs });
+}
+
+function canUsePersistentCandidateCache(): boolean {
+  return typeof localStorage !== 'undefined' && Capacitor.isNativePlatform();
+}
+
+function readPersistentCandidateCache(): Record<string, TimedCacheEntry<DownloadCandidate[]>> {
+  if (!canUsePersistentCandidateCache()) return {};
+  try {
+    return JSON.parse(localStorage.getItem(PERSISTENT_CANDIDATE_CACHE_KEY) || '{}') as Record<string, TimedCacheEntry<DownloadCandidate[]>>;
+  } catch {
+    return {};
+  }
+}
+
+function writePersistentCandidateCache(entries: Record<string, TimedCacheEntry<DownloadCandidate[]>>): void {
+  if (!canUsePersistentCandidateCache()) return;
+  try {
+    localStorage.setItem(PERSISTENT_CANDIDATE_CACHE_KEY, JSON.stringify(entries));
+  } catch {
+    // Cache persistence is a speed hint only.
+  }
+}
+
+function getPersistentCandidateCacheValue(key: string): DownloadCandidate[] | undefined {
+  const entries = readPersistentCandidateCache();
+  const entry = entries[key];
+  if (!entry) return undefined;
+  if (entry.expiresAt <= Date.now()) {
+    delete entries[key];
+    writePersistentCandidateCache(entries);
+    return undefined;
+  }
+  return entry.value;
+}
+
+function setPersistentCandidateCacheValue(key: string, value: DownloadCandidate[]): void {
+  if (value.length === 0) return;
+  const entries = readPersistentCandidateCache();
+  const sorted = Object.entries(entries)
+    .filter(([, entry]) => entry.expiresAt > Date.now())
+    .sort((a, b) => a[1].expiresAt - b[1].expiresAt);
+  while (!entries[key] && sorted.length >= PERSISTENT_CANDIDATE_CACHE_MAX_ENTRIES) {
+    const [oldestKey] = sorted.shift() ?? [];
+    if (oldestKey) delete entries[oldestKey];
+  }
+  entries[key] = { value, expiresAt: Date.now() + PERSISTENT_CANDIDATE_CACHE_TTL_MS };
+  writePersistentCandidateCache(entries);
+}
+
+function getAndroidPrimaryCandidateLimit(options: CandidateSearchOptions = {}): number {
+  return options.fastMode ? ANDROID_FAST_CANDIDATE_LIMIT : ANDROID_NORMAL_CANDIDATE_LIMIT;
+}
+
+function buildCandidateCacheKey(
+  track: Track,
+  animeSearchEnabled: boolean,
+  expanded: boolean,
+  options: CandidateSearchOptions = {},
+): string {
+  return `${track.deezerId ?? track.id}|${getPreferredTrackTitle(track)}|${track.artist}|${getPreferredAlbumName(track)}|anime:${animeSearchEnabled}|expanded:${expanded}|fast:${options.fastMode === true}`;
 }
 
 function normalizeSearchTerm(value: string): string {
@@ -568,10 +640,16 @@ async function fetchDownloadCandidates(
   track: Track,
   animeSearchEnabled: boolean,
   expanded = false,
+  options: CandidateSearchOptions = {},
 ): Promise<DownloadCandidate[]> {
-  const cacheKey = `${track.deezerId ?? track.id}|${getPreferredTrackTitle(track)}|${track.artist}|${getPreferredAlbumName(track)}|anime:${animeSearchEnabled}|expanded:${expanded}`;
+  const cacheKey = buildCandidateCacheKey(track, animeSearchEnabled, expanded, options);
   const cached = getCachedValue(candidateCache, cacheKey);
   if (cached) return cached;
+  const persistentCached = getPersistentCandidateCacheValue(cacheKey);
+  if (persistentCached) {
+    setCachedValue(candidateCache, cacheKey, persistentCached, CANDIDATE_CACHE_TTL_MS, CANDIDATE_CACHE_MAX_ENTRIES);
+    return persistentCached;
+  }
 
   if (isRunningInPyWebView()) {
     try {
@@ -608,7 +686,7 @@ async function fetchDownloadCandidates(
       // Más queries para anime (Opening/Ending numerados)
       const maxQueries = shouldUseAnimeEnhancements(track, animeSearchEnabled) ? 8 : 4;
       const primaryResults = await withTimeout(
-        searchYouTubeNative(queries[0], ANDROID_PRIMARY_CANDIDATE_LIMIT),
+        searchYouTubeNative(queries[0], getAndroidPrimaryCandidateLimit(options)),
         20000,
       ).catch(() => []);
       const merged = new Map<string, DownloadCandidate>();
@@ -645,6 +723,7 @@ async function fetchDownloadCandidates(
         finalCandidates = rankDownloadCandidates(track, [...merged.values()], animeSearchEnabled);
       }
       setCachedValue(candidateCache, cacheKey, finalCandidates, finalCandidates.length > 0 ? CANDIDATE_CACHE_TTL_MS : EMPTY_CANDIDATE_CACHE_TTL_MS, CANDIDATE_CACHE_MAX_ENTRIES);
+      setPersistentCandidateCacheValue(cacheKey, finalCandidates);
       return finalCandidates;
     } catch (err) {
       console.error('[getDownloadCandidates] Native error:', err);
@@ -681,16 +760,22 @@ async function fetchDownloadCandidates(
 export async function getDownloadCandidates(
   track: Track,
   animeSearchEnabled = false,
+  options: CandidateSearchOptions = {},
 ): Promise<DownloadCandidate[]> {
   try {
-    const cacheKey = `${track.deezerId ?? track.id}|${getPreferredTrackTitle(track)}|${track.artist}|${getPreferredAlbumName(track)}|anime:${animeSearchEnabled}|expanded:false`;
+    const cacheKey = buildCandidateCacheKey(track, animeSearchEnabled, false, options);
     const cached = getCachedValue(candidateCache, cacheKey);
     if (cached) return cached;
+    const persistentCached = getPersistentCandidateCacheValue(cacheKey);
+    if (persistentCached) {
+      setCachedValue(candidateCache, cacheKey, persistentCached, CANDIDATE_CACHE_TTL_MS, CANDIDATE_CACHE_MAX_ENTRIES);
+      return persistentCached;
+    }
 
     const pending = candidateRequests.get(cacheKey);
     if (pending) return pending;
 
-    const request = fetchDownloadCandidates(track, animeSearchEnabled).finally(() => {
+    const request = fetchDownloadCandidates(track, animeSearchEnabled, false, options).finally(() => {
       candidateRequests.delete(cacheKey);
     });
     candidateRequests.set(cacheKey, request);
@@ -704,16 +789,22 @@ export async function getDownloadCandidates(
 export async function getExpandedDownloadCandidates(
   track: Track,
   animeSearchEnabled = false,
+  options: CandidateSearchOptions = {},
 ): Promise<DownloadCandidate[]> {
   try {
-    const cacheKey = `${track.deezerId ?? track.id}|${getPreferredTrackTitle(track)}|${track.artist}|${getPreferredAlbumName(track)}|anime:${animeSearchEnabled}|expanded:true`;
+    const cacheKey = buildCandidateCacheKey(track, animeSearchEnabled, true, options);
     const cached = getCachedValue(candidateCache, cacheKey);
     if (cached) return cached;
+    const persistentCached = getPersistentCandidateCacheValue(cacheKey);
+    if (persistentCached) {
+      setCachedValue(candidateCache, cacheKey, persistentCached, CANDIDATE_CACHE_TTL_MS, CANDIDATE_CACHE_MAX_ENTRIES);
+      return persistentCached;
+    }
 
     const pending = candidateRequests.get(cacheKey);
     if (pending) return pending;
 
-    const request = fetchDownloadCandidates(track, animeSearchEnabled, true).finally(() => {
+    const request = fetchDownloadCandidates(track, animeSearchEnabled, true, options).finally(() => {
       candidateRequests.delete(cacheKey);
     });
     candidateRequests.set(cacheKey, request);
@@ -721,6 +812,28 @@ export async function getExpandedDownloadCandidates(
   } catch (error) {
     console.error('[getExpandedDownloadCandidates] Error:', error);
     throw error;
+  }
+}
+
+export async function prefetchDownloadCandidates(
+  track: Track,
+  animeSearchEnabled = false,
+  options: CandidateSearchOptions = {},
+): Promise<DownloadCandidate[] | null> {
+  const cacheKey = buildCandidateCacheKey(track, animeSearchEnabled, false, options);
+  const cached = getCachedValue(candidateCache, cacheKey) ?? getPersistentCandidateCacheValue(cacheKey);
+  if (cached) return cached;
+  if (candidatePrefetchRequests.has(cacheKey) || activeCandidatePrefetches >= 1) return null;
+
+  candidatePrefetchRequests.add(cacheKey);
+  activeCandidatePrefetches++;
+  try {
+    return await getDownloadCandidates(track, animeSearchEnabled, options);
+  } catch {
+    return null;
+  } finally {
+    activeCandidatePrefetches = Math.max(0, activeCandidatePrefetches - 1);
+    candidatePrefetchRequests.delete(cacheKey);
   }
 }
 
@@ -787,7 +900,9 @@ export async function downloadTrackAudio(
     onProgress?.(10);
 
     // Reutiliza el ranking escalonado y la caché del picker.
-    const scored = await getDownloadCandidates(track, options.animeSearchEnabled ?? false);
+    const scored = await getDownloadCandidates(track, options.animeSearchEnabled ?? false, {
+      fastMode: options.androidFastSearchMode ?? false,
+    });
     if (!scored.length) throw new Error('No se encontró en YouTube');
 
     onProgress?.(25);
@@ -1085,6 +1200,8 @@ export const __testing = {
   combineLyrics: _combineLyrics,
   buildCandidateQueries,
   buildAndroidCandidateQueries,
+  getAndroidPrimaryCandidateLimit,
+  buildCandidateCacheKey,
   rankDownloadCandidates,
   shouldExpandCandidateSearch,
   getCacheSizes: () => ({
@@ -1096,5 +1213,7 @@ export const __testing = {
     searchRequests.clear();
     candidateCache.clear();
     candidateRequests.clear();
+    candidatePrefetchRequests.clear();
+    activeCandidatePrefetches = 0;
   },
 }

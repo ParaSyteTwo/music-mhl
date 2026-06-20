@@ -1,12 +1,13 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Download, Play, Pause, Search, Loader2, Music, CheckCircle, X, ArrowLeft, Tv } from 'lucide-react';
+import { Download, Play, Pause, Search, Loader2, Music, CheckCircle, X, ArrowLeft, Tv, Zap } from 'lucide-react';
 import { useMusicStore } from '@/store/musicStore';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getDownloadCandidates } from '@/lib/api/musicApi';
+import { getDownloadCandidates, prefetchDownloadCandidates, type DownloadCandidate } from '@/lib/api/musicApi';
 import type { Track } from '@/types/music';
 import { buildAffinityPool, artistColor } from '@/data/globalArtists';
 import { useI18n } from '@/lib/useI18n';
 import { CandidatePicker } from '@/components/ui/CandidatePicker';
+import { getCandidateMatchPresentation } from '@/lib/candidateMatch';
 import { AnimeCard } from '@/components/ui/AnimeCard';
 import { ThemeRow } from '@/components/ui/ThemeRow';
 import { AnimeModeBadge } from '@/components/ui/AnimeModeBadge';
@@ -14,6 +15,7 @@ import { searchAnime, getAnimeThemes, downloadAnimeTheme } from '@/lib/api/anime
 import { looksAnimeLikeQuery } from '@/lib/util/animeDetector';
 import type { Anime, AnimeTheme } from '@/types/anime';
 import { toast } from 'sonner';
+import { Capacitor } from '@capacitor/core';
 
 function formatDuration(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -21,6 +23,13 @@ function formatDuration(seconds: number) {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+function candidateTrackKey(track: Track): string {
+  return String(track.deezerId ?? track.id);
+}
+
+type BestCandidateEntry = {
+  videoId: string;
+};
 
 function useRecentSearches() {
   const [recent, setRecent] = useState<string[]>(() => {
@@ -55,11 +64,15 @@ export default function SearchPage() {
     downloads,
     mostDownloadedArtists,
     animeSearchEnabled,
+    androidFastSearchMode,
   } = useMusicStore();
 
   const [query, setQuery] = useState(searchQuery);
   const [pickerTrack, setPickerTrack] = useState<Track | null>(null);
+  const [bestCandidates, setBestCandidates] = useState<Record<string, BestCandidateEntry>>({});
+  const [bestResolvingId, setBestResolvingId] = useState<string | null>(null);
   const { recent, remove: removeRecent, refresh: refreshRecent } = useRecentSearches();
+  const isAndroidNative = Capacitor.getPlatform() === 'android';
 
   // ─── Anime mode state ───
   const [animeMode, setAnimeMode] = useState(false);
@@ -78,9 +91,57 @@ export default function SearchPage() {
     setPickerTrack(track);
   };
 
+  const cacheBestCandidate = useCallback((track: Track, candidates: DownloadCandidate[] | null) => {
+    if (!isAndroidNative || !candidates?.[0]) return;
+    const match = getCandidateMatchPresentation(track, candidates[0]);
+    const key = candidateTrackKey(track);
+    setBestCandidates((current) => {
+      if (match.tone === 'exact' || match.tone === 'high') {
+        return { ...current, [key]: { videoId: candidates[0].videoId } };
+      }
+      if (!(key in current)) return current;
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+  }, [isAndroidNative]);
+
   const handleDownloadPrefetch = useCallback((track: Track) => {
-    getDownloadCandidates(track, animeSearchEnabled).catch(() => {});
-  }, [animeSearchEnabled]);
+    if (!isAndroidNative) return;
+    prefetchDownloadCandidates(track, animeSearchEnabled, {
+      fastMode: androidFastSearchMode,
+    }).then((candidates) => cacheBestCandidate(track, candidates));
+  }, [androidFastSearchMode, animeSearchEnabled, cacheBestCandidate, isAndroidNative]);
+
+  const handleBestDownloadClick = useCallback(async (e: React.MouseEvent, track: Track) => {
+    e.stopPropagation();
+    if (downloads.some((d) => d.track.id === track.id && d.status === 'downloading')) return;
+    const key = candidateTrackKey(track);
+    const cached = bestCandidates[key];
+    if (cached) {
+      startDownloadWithVideoId(track, cached.videoId);
+      return;
+    }
+
+    setBestResolvingId(key);
+    try {
+      const candidates = await getDownloadCandidates(track, animeSearchEnabled, {
+        fastMode: androidFastSearchMode,
+      });
+      cacheBestCandidate(track, candidates);
+      const top = candidates[0];
+      const match = top ? getCandidateMatchPresentation(track, top) : null;
+      if (top && (match?.tone === 'exact' || match?.tone === 'high')) {
+        startDownloadWithVideoId(track, top.videoId);
+      } else {
+        setPickerTrack(track);
+      }
+    } catch {
+      setPickerTrack(track);
+    } finally {
+      setBestResolvingId((current) => (current === key ? null : current));
+    }
+  }, [androidFastSearchMode, animeSearchEnabled, bestCandidates, cacheBestCandidate, downloads, startDownloadWithVideoId]);
 
   // ─── Anime mode handlers ───
   const handleAnimeCardClick = useCallback(async (anime: Anime) => {
@@ -181,6 +242,35 @@ export default function SearchPage() {
 
   const isDownloaded = (trackId: string) =>
     downloads.some((d) => d.track.id === trackId && d.status === 'completed');
+
+  useEffect(() => {
+    if (!isAndroidNative || animeMode || searchResults.length === 0 || isSearching) return;
+    let cancelled = false;
+    const limit = androidFastSearchMode ? 2 : 1;
+    const timeout = window.setTimeout(() => {
+      void (async () => {
+        for (const track of searchResults.slice(0, limit)) {
+          if (cancelled) return;
+          const candidates = await prefetchDownloadCandidates(track, animeSearchEnabled, {
+            fastMode: androidFastSearchMode,
+          });
+          if (!cancelled) cacheBestCandidate(track, candidates);
+        }
+      })();
+    }, 450);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+  }, [
+    androidFastSearchMode,
+    animeMode,
+    animeSearchEnabled,
+    cacheBestCandidate,
+    isAndroidNative,
+    isSearching,
+    searchResults,
+  ]);
 
   const observerCallback = useCallback(
     (entries: IntersectionObserverEntry[]) => {
@@ -510,6 +600,8 @@ export default function SearchPage() {
                 const isCurrent = currentTrack?.id === track.id;
                 const downloading = isDownloading(track.id);
                 const downloaded = isDownloaded(track.id);
+                const bestCandidate = bestCandidates[candidateTrackKey(track)];
+                const bestResolving = bestResolvingId === candidateTrackKey(track);
                 const isFeatured = i === 0 && searchResults.length >= 4;
 
                 return (
@@ -547,16 +639,28 @@ export default function SearchPage() {
                             <Play className="w-5 h-5 text-[#080808] fill-current ml-0.5" />
                           )}
                         </div>
-                        <button
-                          onClick={(e) => { if (!downloading) handleDownloadClick(e, track); }}
-                          onMouseEnter={() => { if (!downloading) handleDownloadPrefetch(track); }}
-                          onTouchStart={() => { if (!downloading) handleDownloadPrefetch(track); }}
-                          disabled={downloading}
-                          className="absolute top-2 right-2 p-2 rounded-lg bg-black/60 text-white hover:bg-black/80 transition-colors"
-                          title={t('downloadMp3')}
-                        >
-                          {downloading ? <Loader2 className="w-4 h-4 animate-spin" /> : downloaded ? <CheckCircle className="w-4 h-4 text-[#C8F04B]" /> : <Download className="w-4 h-4" />}
-                        </button>
+                        <div className="absolute top-2 right-2 flex items-center gap-1">
+                          {isAndroidNative && bestCandidate && !downloaded && (
+                            <button
+                              onClick={(e) => { if (!downloading && !bestResolving) void handleBestDownloadClick(e, track); }}
+                              disabled={downloading || bestResolving}
+                              className="p-2 rounded-lg bg-[#C8F04B] text-[#18181A] hover:bg-[#d4f56a] transition-colors disabled:opacity-60"
+                              title={t('downloadBestMatch')}
+                            >
+                              {bestResolving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                            </button>
+                          )}
+                          <button
+                            onClick={(e) => { if (!downloading) handleDownloadClick(e, track); }}
+                            onMouseEnter={() => { if (!downloading) handleDownloadPrefetch(track); }}
+                            onTouchStart={() => { if (!downloading) handleDownloadPrefetch(track); }}
+                            disabled={downloading}
+                            className="p-2 rounded-lg bg-black/60 text-white hover:bg-black/80 transition-colors"
+                            title={t('downloadMp3')}
+                          >
+                            {downloading ? <Loader2 className="w-4 h-4 animate-spin" /> : downloaded ? <CheckCircle className="w-4 h-4 text-[#C8F04B]" /> : <Download className="w-4 h-4" />}
+                          </button>
+                        </div>
                       </div>
                       <span className="absolute bottom-1.5 right-1.5 text-[10px] tabular-nums bg-black/70 text-white px-1.5 py-0.5 rounded">
                         {formatDuration(track.duration)}
@@ -590,6 +694,8 @@ export default function SearchPage() {
                 const isCurrent = currentTrack?.id === track.id;
                 const downloading = isDownloading(track.id);
                 const downloaded = isDownloaded(track.id);
+                const bestCandidate = bestCandidates[candidateTrackKey(track)];
+                const bestResolving = bestResolvingId === candidateTrackKey(track);
 
                 return (
                   <motion.div
@@ -640,6 +746,16 @@ export default function SearchPage() {
                     <span className="text-[10px] text-[#444] tabular-nums flex-shrink-0">
                       {formatDuration(track.duration)}
                     </span>
+                    {isAndroidNative && bestCandidate && !downloaded && (
+                      <button
+                        onClick={(e) => { if (!downloading && !bestResolving) void handleBestDownloadClick(e, track); }}
+                        disabled={downloading || bestResolving}
+                        className="p-2.5 rounded-xl transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center text-[#18181A] bg-[#C8F04B] active:bg-[#d4f56a] disabled:opacity-60"
+                        title={t('downloadBestMatch')}
+                      >
+                        {bestResolving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Zap className="w-5 h-5" />}
+                      </button>
+                    )}
                     <button
                       onClick={(e) => { if (!downloading) handleDownloadClick(e, track); }}
                       onMouseEnter={() => { if (!downloading) handleDownloadPrefetch(track); }}
@@ -697,6 +813,7 @@ export default function SearchPage() {
       <CandidatePicker
         track={pickerTrack}
         animeSearchEnabled={animeSearchEnabled}
+        androidFastSearchMode={androidFastSearchMode}
         onClose={() => setPickerTrack(null)}
             onSelect={(videoId) => {
               startDownloadWithVideoId(pickerTrack, videoId);

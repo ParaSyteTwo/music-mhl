@@ -55,6 +55,7 @@ describe('useMusicStore', () => {
       downloadFolderName: '',
       dominantColor: null,
       uiLanguageMode: 'system',
+      androidFastSearchMode: false,
     });
   });
 
@@ -77,6 +78,17 @@ describe('useMusicStore', () => {
     it('should have default volume of 0.8', () => {
       const state = useMusicStore.getState();
       expect(state.volume).toBe(0.8);
+    });
+  });
+
+  describe('Android search settings', () => {
+    it('should default fast search mode to off and allow toggling it', () => {
+      const store = useMusicStore.getState();
+
+      expect(store.androidFastSearchMode).toBe(false);
+      store.setAndroidFastSearchMode(true);
+
+      expect(useMusicStore.getState().androidFastSearchMode).toBe(true);
     });
   });
 

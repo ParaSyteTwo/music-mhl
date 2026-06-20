@@ -13,6 +13,7 @@ const track: Track = {
 
 beforeEach(() => {
   __testing.clearRequestCaches();
+  if (typeof localStorage !== 'undefined') localStorage.clear();
   vi.restoreAllMocks();
 });
 
@@ -220,6 +221,22 @@ describe('musicApi candidate ranking', () => {
     ]);
     expect(__testing.buildAndroidCandidateQueries(animeTrack, false)).not.toContain('naruto opening Opening 1');
     expect(__testing.buildAndroidCandidateQueries(animeTrack, true)).toContain('naruto opening Opening 1');
+  });
+
+  it('uses a smaller Android candidate limit only in fast mode', () => {
+    expect(__testing.getAndroidPrimaryCandidateLimit({ fastMode: false })).toBe(12);
+    expect(__testing.getAndroidPrimaryCandidateLimit({ fastMode: true })).toBe(8);
+  });
+
+  it('keeps fast-mode candidate caches separate from normal candidate caches', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => (
+      new Response(JSON.stringify({ success: true, candidates: [] }), { status: 200 })
+    ));
+
+    await getDownloadCandidates(track, false, { fastMode: false });
+    await getDownloadCandidates(track, false, { fastMode: true });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('keeps anime candidate caches separate from normal search caches', async () => {

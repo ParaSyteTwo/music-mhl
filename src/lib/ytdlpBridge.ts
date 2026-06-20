@@ -42,7 +42,7 @@ export async function initYtDlp(): Promise<boolean> {
     try {
       await YtDlp.initialize();
       initialized = true;
-      console.log('[YtDlp] Initialized successfully');
+      if (import.meta.env.DEV) console.log('[YtDlp] Initialized successfully');
       return true;
     } catch (e) {
       console.error('[YtDlp] Init failed:', e);
@@ -56,15 +56,15 @@ export async function initYtDlp(): Promise<boolean> {
 }
 
 export async function searchYouTubeNative(query: string, limit = 10): Promise<YtDlpSearchResult[]> {
-  console.log('[ytdlpBridge.searchYouTubeNative] Searching:', query, 'initialized:', initialized);
+  if (import.meta.env.DEV) console.log('[ytdlpBridge.searchYouTubeNative] Searching:', query, 'initialized:', initialized);
   if (!initialized) {
-    console.log('[ytdlpBridge.searchYouTubeNative] Not initialized, initializing...');
+    if (import.meta.env.DEV) console.log('[ytdlpBridge.searchYouTubeNative] Not initialized, initializing...');
     await initYtDlp();
   }
-  console.log('[ytdlpBridge.searchYouTubeNative] Calling YtDlp.search()...');
+  if (import.meta.env.DEV) console.log('[ytdlpBridge.searchYouTubeNative] Calling YtDlp.search()...');
   try {
     const result = await YtDlp.search({ query, limit });
-    console.log('[ytdlpBridge.searchYouTubeNative] Search result:', result);
+    if (import.meta.env.DEV) console.log('[ytdlpBridge.searchYouTubeNative] Search result:', result);
     return result.results || [];
   } catch (err) {
     console.error('[ytdlpBridge.searchYouTubeNative] Error:', err);

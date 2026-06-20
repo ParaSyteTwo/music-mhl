@@ -26,6 +26,7 @@ export default function SettingsPage() {
     saveLrcFile, setSaveLrcFile,
     uiLanguageMode, setUiLanguageMode,
     animeSearchEnabled, setAnimeSearchEnabled,
+    androidFastSearchMode, setAndroidFastSearchMode,
   } = useMusicStore();
 
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'done' | 'skipped' | 'error'>('idle');
@@ -527,6 +528,18 @@ export default function SettingsPage() {
             )}
           </h2>
           <div className="p-4 rounded-lg bg-[#18181A] border border-[#232325] flex flex-col gap-2">
+            <label className="flex items-start gap-3 cursor-pointer pb-3 mb-2 border-b border-[#232325]">
+              <input
+                type="checkbox"
+                checked={androidFastSearchMode}
+                onChange={(e) => setAndroidFastSearchMode(e.target.checked)}
+                className="mt-0.5 accent-[#C8F04B]"
+              />
+              <div>
+                <p className="text-sm font-semibold text-[#F5F5F0]">{t('androidFastSearchMode')}</p>
+                <p className="text-xs text-[#8A8A8A] mt-0.5">{t('androidFastSearchModeHelp')}</p>
+              </div>
+            </label>
             <div className="flex items-center gap-3">
               <div className={`rounded-full p-2 ${ytDlpUpdateAvailable ? 'bg-[#C8F04B]/10' : 'bg-[#232325]'}`}>
                 <RefreshCw className={`w-6 h-6 ${ytDlpUpdateAvailable ? 'text-[#C8F04B]' : 'text-[#8A8A8A]'}`} />

@@ -146,6 +146,8 @@ interface MusicStore {
   // ─── Anime search (opt-in, off by default) ───
   animeSearchEnabled: boolean;
   setAnimeSearchEnabled: (v: boolean) => void;
+  androidFastSearchMode: boolean;
+  setAndroidFastSearchMode: (v: boolean) => void;
 
   // ─── yt-dlp status ───
   ytDlpVersion: string | null;
@@ -520,6 +522,7 @@ export const useMusicStore = create<MusicStore>()(
                   updateDl({ progress });
                 }, {
                   animeSearchEnabled: get().animeSearchEnabled,
+                  androidFastSearchMode: get().androidFastSearchMode,
                 }, videoIdOverride, sourceUrlOverride),
                 supplementalDataPromise,
               ]);
@@ -754,6 +757,8 @@ export const useMusicStore = create<MusicStore>()(
         // ─── Anime search (opt-in, off by default) ───
         animeSearchEnabled: false,
         setAnimeSearchEnabled: (v) => set({ animeSearchEnabled: v }),
+        androidFastSearchMode: false,
+        setAndroidFastSearchMode: (v) => set({ androidFastSearchMode: v }),
 
         // ─── Reproductor externo preferido (Android) ───
         preferredPlayerPackage: null as string | null,
@@ -797,6 +802,7 @@ export const useMusicStore = create<MusicStore>()(
         lyricLatinOnly: state.lyricLatinOnly,
         saveLrcFile: state.saveLrcFile,
         animeSearchEnabled: state.animeSearchEnabled,
+        androidFastSearchMode: state.androidFastSearchMode,
         mostDownloadedArtists: state.mostDownloadedArtists,
         preferredPlayerPackage: state.preferredPlayerPackage,
         // localFileRefs excluded — File objects cannot be serialized
@@ -818,6 +824,7 @@ export const useMusicStore = create<MusicStore>()(
         lyricLatinOnly: persisted?.lyricLatinOnly ?? false,
         saveLrcFile: persisted?.saveLrcFile ?? true,
         animeSearchEnabled: persisted?.animeSearchEnabled ?? false,
+        androidFastSearchMode: persisted?.androidFastSearchMode ?? false,
         mostDownloadedArtists: persisted?.mostDownloadedArtists ?? [],
         preferredPlayerPackage: persisted?.preferredPlayerPackage ?? null,
       }),
