@@ -211,6 +211,17 @@ describe('musicApi candidate ranking', () => {
     expect(__testing.buildCandidateQueries(animeTrack, true)).toContain('naruto opening Opening 1');
   });
 
+  it('uses an artist-first official-audio query for Android candidate search', () => {
+    expect(__testing.buildAndroidCandidateQueries(track, false).slice(0, 4)).toEqual([
+      'artist - song official audio',
+      'artist song official audio',
+      'song artist official audio',
+      'song artist',
+    ]);
+    expect(__testing.buildAndroidCandidateQueries(animeTrack, false)).not.toContain('naruto opening Opening 1');
+    expect(__testing.buildAndroidCandidateQueries(animeTrack, true)).toContain('naruto opening Opening 1');
+  });
+
   it('keeps anime candidate caches separate from normal search caches', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => (
       new Response(JSON.stringify({ success: true, candidates: [] }), { status: 200 })
@@ -249,4 +260,5 @@ describe('musicApi candidate ranking', () => {
       { videoId: '1', title: 'Song', channel: 'Artist', duration: 180, score: 100, confidence: 'media' },
     ])).toBe(true);
   });
+
 });

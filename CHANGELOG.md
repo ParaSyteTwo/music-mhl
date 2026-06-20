@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.4.7-beta.5 - 2026-06-20
+
+- Optimizado el selector de candidatos en Android con una primera búsqueda
+  amplia y única (`ytsearch12`) para reducir esperas antes de elegir canción.
+- Añadida búsqueda manual de más opciones en Android; las queries extra se
+  ejecutan en paralelo desde el plugin nativo, no en cola por Capacitor.
+- Un candidato no oficial puede mostrarse como coincidencia azul muy alta si
+  título, artista y duración son fiables; el verde queda como señal extra de
+  fuente oficial.
+- La inicialización Android de yt-dlp ya no intenta actualizar el binario en el
+  camino crítico; la actualización sigue disponible desde Ajustes.
+- `versionCode` incrementado a `25` y versión alineada en frontend, Android y
+  Desktop.
+
 ## v1.4.7-beta.4 - 2026-06-15
 
 - Corregida la extracción de romanización desde letras.com usando el HTML real

@@ -31,9 +31,12 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import android.util.Base64;
 import java.util.LinkedHashMap;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.net.URI;
@@ -75,14 +78,6 @@ public class YtDlpPlugin extends Plugin {
             try {
                 YoutubeDL.getInstance().init(getContext());
                 Log.i(TAG, "yt-dlp initialized");
-                try {
-                    YoutubeDL.UpdateStatus updateStatus = YoutubeDL.getInstance().updateYoutubeDL(
-                        getContext(), YoutubeDL.UpdateChannel.STABLE.INSTANCE
-                    );
-                    Log.i(TAG, "yt-dlp update on init: " + updateStatus);
-                } catch (Exception e) {
-                    Log.w(TAG, "yt-dlp update on init failed (non-fatal): " + e.getMessage());
-                }
             } catch (Exception e) {
                 Log.e(TAG, "yt-dlp init error: " + e.getMessage());
                 throw e;
@@ -175,63 +170,13 @@ public class YtDlpPlugin extends Plugin {
             call.reject("Missing query parameter");
             return;
         }
+        Integer requestedLimit = call.getInt("limit");
+        int limit = requestedLimit != null ? Math.max(1, Math.min(requestedLimit, 20)) : 10;
 
         executor.execute(() -> {
             try {
                 ensureInitialized();
-
-                synchronized (searchCache) {
-                    JSArray cached = searchCache.get(query);
-                    if (cached != null) {
-                        Log.i(TAG, "Search cache hit for: " + query);
-                        JSObject result = new JSObject();
-                        result.put("success", true);
-                        result.put("results", cached);
-                        bridge.getActivity().runOnUiThread(() -> call.resolve(result));
-                        return;
-                    }
-                }
-
-                YoutubeDLRequest request = new YoutubeDLRequest("ytsearch5:" + query);
-                request.addOption("--dump-json");
-                request.addOption("--flat-playlist");
-                request.addOption("--no-download");
-
-                Log.i(TAG, "Searching: " + query);
-                YoutubeDLResponse response = YoutubeDL.getInstance().execute(request);
-                String output = response.getOut();
-                String errOutput = response.getErr();
-                Log.i(TAG, "Search stdout length: " + (output != null ? output.length() : 0));
-                if (errOutput != null && !errOutput.isEmpty()) {
-                    Log.w(TAG, "Search stderr: " + errOutput.substring(0, Math.min(500, errOutput.length())));
-                }
-
-                JSArray results = new JSArray();
-                if (output != null && !output.isEmpty()) {
-                    String[] lines = output.split("\n");
-                    for (String line : lines) {
-                        line = line.trim();
-                        if (line.isEmpty() || !line.startsWith("{")) continue;
-                        try {
-                            JSONObject json = new JSONObject(line);
-                            JSObject item = new JSObject();
-                            item.put("videoId", json.optString("id", json.optString("url", "")));
-                            item.put("title", json.optString("title", ""));
-                            item.put("duration", json.optDouble("duration", 0));
-                            item.put("channel", json.optString("channel", json.optString("uploader", "")));
-                            if (!item.getString("videoId").isEmpty()) {
-                                results.put(item);
-                            }
-                        } catch (Exception e) {
-                            Log.w(TAG, "Parse line error: " + e.getMessage());
-                        }
-                    }
-                }
-
-                Log.i(TAG, "Search found " + results.length() + " results");
-                synchronized (searchCache) {
-                    searchCache.put(query, results);
-                }
+                JSArray results = runSearch(query, limit);
                 JSObject result = new JSObject();
                 result.put("success", true);
                 result.put("results", results);
@@ -241,6 +186,109 @@ public class YtDlpPlugin extends Plugin {
                 bridge.getActivity().runOnUiThread(() -> call.reject("Search failed: " + e.getMessage()));
             }
         });
+    }
+
+    @PluginMethod
+    public void searchMany(PluginCall call) {
+        JSArray rawQueries = call.getArray("queries");
+        if (rawQueries == null || rawQueries.length() == 0) {
+            call.reject("Missing queries parameter");
+            return;
+        }
+        Integer requestedLimit = call.getInt("limit");
+        int limit = requestedLimit != null ? Math.max(1, Math.min(requestedLimit, 20)) : 5;
+
+        List<String> queries = new ArrayList<>();
+        for (int i = 0; i < rawQueries.length(); i++) {
+            String query = rawQueries.optString(i, "").trim();
+            if (!query.isEmpty()) {
+                queries.add(query);
+            }
+        }
+        if (queries.isEmpty()) {
+            call.reject("No valid queries");
+            return;
+        }
+
+        executor.execute(() -> {
+            ExecutorService searchExecutor = Executors.newFixedThreadPool(Math.min(queries.size(), 3));
+            try {
+                ensureInitialized();
+
+                List<Future<JSArray>> futures = new ArrayList<>();
+                for (String query : queries) {
+                    futures.add(searchExecutor.submit(() -> runSearch(query, limit)));
+                }
+
+                JSArray batches = new JSArray();
+                for (Future<JSArray> future : futures) {
+                    batches.put(future.get());
+                }
+
+                JSObject result = new JSObject();
+                result.put("success", true);
+                result.put("results", batches);
+                bridge.getActivity().runOnUiThread(() -> call.resolve(result));
+            } catch (Exception e) {
+                Log.e(TAG, "searchMany failed: " + e.getMessage(), e);
+                bridge.getActivity().runOnUiThread(() -> call.reject("Search failed: " + e.getMessage()));
+            } finally {
+                searchExecutor.shutdownNow();
+            }
+        });
+    }
+
+    private JSArray runSearch(String query, int limit) throws Exception {
+        String cacheKey = query + "|limit:" + limit;
+        synchronized (searchCache) {
+            JSArray cached = searchCache.get(cacheKey);
+            if (cached != null) {
+                Log.i(TAG, "Search cache hit for: " + cacheKey);
+                return cached;
+            }
+        }
+
+        YoutubeDLRequest request = new YoutubeDLRequest("ytsearch" + limit + ":" + query);
+        request.addOption("--dump-json");
+        request.addOption("--flat-playlist");
+        request.addOption("--no-download");
+
+        Log.i(TAG, "Searching: " + query + " limit=" + limit);
+        YoutubeDLResponse response = YoutubeDL.getInstance().execute(request);
+        String output = response.getOut();
+        String errOutput = response.getErr();
+        Log.i(TAG, "Search stdout length: " + (output != null ? output.length() : 0));
+        if (errOutput != null && !errOutput.isEmpty()) {
+            Log.w(TAG, "Search stderr: " + errOutput.substring(0, Math.min(500, errOutput.length())));
+        }
+
+        JSArray results = new JSArray();
+        if (output != null && !output.isEmpty()) {
+            String[] lines = output.split("\n");
+            for (String line : lines) {
+                line = line.trim();
+                if (line.isEmpty() || !line.startsWith("{")) continue;
+                try {
+                    JSONObject json = new JSONObject(line);
+                    JSObject item = new JSObject();
+                    item.put("videoId", json.optString("id", json.optString("url", "")));
+                    item.put("title", json.optString("title", ""));
+                    item.put("duration", json.optDouble("duration", 0));
+                    item.put("channel", json.optString("channel", json.optString("uploader", "")));
+                    if (!item.getString("videoId").isEmpty()) {
+                        results.put(item);
+                    }
+                } catch (Exception e) {
+                    Log.w(TAG, "Parse line error: " + e.getMessage());
+                }
+            }
+        }
+
+        Log.i(TAG, "Search found " + results.length() + " results");
+        synchronized (searchCache) {
+            searchCache.put(cacheKey, results);
+        }
+        return results;
     }
 
     @PluginMethod

@@ -39,6 +39,18 @@ describe('candidate match presentation', () => {
     ]);
   });
 
+  it('allows a non-official exact-duration candidate to be a high match', () => {
+    const result = getCandidateMatchPresentation(track, candidate({
+      title: 'Artist - Song',
+      channel: 'Uploader',
+      score: 210,
+    }));
+
+    expect(result.tone).toBe('high');
+    expect(result.percent).toBe(95);
+    expect(result.badgeKeys).toContain('candidateExactDuration');
+  });
+
   it('does not color an altered version as a recommended match', () => {
     const result = getCandidateMatchPresentation(track, candidate({
       title: 'Artist - Song (Sped Up Remix)',

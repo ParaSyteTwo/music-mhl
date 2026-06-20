@@ -341,6 +341,8 @@ const CANDIDATE_CACHE_TTL_MS = 10 * 60 * 1000;
 const EMPTY_CANDIDATE_CACHE_TTL_MS = 15 * 1000;
 const SEARCH_CACHE_MAX_ENTRIES = 100;
 const CANDIDATE_CACHE_MAX_ENTRIES = 40;
+const ANDROID_PRIMARY_CANDIDATE_LIMIT = 12;
+const ANDROID_EXTRA_CANDIDATE_LIMIT = 5;
 
 const searchCache = new Map<string, TimedCacheEntry<Track[]>>();
 const searchRequests = new Map<string, Promise<Track[]>>();
@@ -396,6 +398,11 @@ function shouldUseAnimeEnhancements(track: Track, animeSearchEnabled: boolean): 
   return animeSearchEnabled && looksAnimeLike(track);
 }
 
+function pushUniqueQuery(queries: string[], query: string): void {
+  const normalized = query.trim().replace(/\s+/g, ' ');
+  if (normalized && !queries.includes(normalized)) queries.push(normalized);
+}
+
 function buildCandidateQueries(track: Track, animeSearchEnabled: boolean): string[] {
   const title = normalizeSearchTerm(getPreferredTrackTitle(track));
   const artist = normalizeSearchTerm(track.artist);
@@ -412,6 +419,29 @@ function buildCandidateQueries(track: Track, animeSearchEnabled: boolean): strin
       for (let n = 1; n <= 5; n++) {
         queries.push(`${title} ${suffix} ${n}`);
         queries.push(`${title} ${suffix} ${n} full`);
+      }
+    }
+  }
+  return queries;
+}
+
+function buildAndroidCandidateQueries(track: Track, animeSearchEnabled: boolean): string[] {
+  const title = normalizeSearchTerm(getPreferredTrackTitle(track));
+  const artist = normalizeSearchTerm(track.artist);
+  const queries: string[] = [];
+  pushUniqueQuery(queries, `${artist} - ${title} official audio`);
+  pushUniqueQuery(queries, `${artist} ${title} official audio`);
+  pushUniqueQuery(queries, `${title} ${artist} official audio`);
+  pushUniqueQuery(queries, `${title} ${artist}`);
+  if (shouldUseAnimeEnhancements(track, animeSearchEnabled)) {
+    const album = normalizeSearchTerm(getPreferredAlbumName(track));
+    pushUniqueQuery(queries, `${title} full`);
+    if (album && album !== title) pushUniqueQuery(queries, `${title} ${album}`);
+    // Anime openings/endings numerados: probar 1-5 automáticamente
+    for (const suffix of ['Opening', 'Ending', 'OP', 'ED']) {
+      for (let n = 1; n <= 5; n++) {
+        pushUniqueQuery(queries, `${title} ${suffix} ${n}`);
+        pushUniqueQuery(queries, `${title} ${suffix} ${n} full`);
       }
     }
   }
@@ -537,8 +567,9 @@ function shouldExpandCandidateSearch(candidates: DownloadCandidate[]): boolean {
 async function fetchDownloadCandidates(
   track: Track,
   animeSearchEnabled: boolean,
+  expanded = false,
 ): Promise<DownloadCandidate[]> {
-  const cacheKey = `${track.deezerId ?? track.id}|${getPreferredTrackTitle(track)}|${track.artist}|${getPreferredAlbumName(track)}|anime:${animeSearchEnabled}`;
+  const cacheKey = `${track.deezerId ?? track.id}|${getPreferredTrackTitle(track)}|${track.artist}|${getPreferredAlbumName(track)}|anime:${animeSearchEnabled}|expanded:${expanded}`;
   const cached = getCachedValue(candidateCache, cacheKey);
   if (cached) return cached;
 
@@ -573,10 +604,13 @@ async function fetchDownloadCandidates(
   if (Capacitor.isNativePlatform()) {
     try {
       const { searchYouTubeNative, searchYouTubeNativeMulti } = await import('@/lib/ytdlpBridge');
-      const queries = buildCandidateQueries(track, animeSearchEnabled);
+      const queries = buildAndroidCandidateQueries(track, animeSearchEnabled);
       // Más queries para anime (Opening/Ending numerados)
       const maxQueries = shouldUseAnimeEnhancements(track, animeSearchEnabled) ? 8 : 4;
-      const primaryResults = await withTimeout(searchYouTubeNative(queries[0]), 20000).catch(() => []);
+      const primaryResults = await withTimeout(
+        searchYouTubeNative(queries[0], ANDROID_PRIMARY_CANDIDATE_LIMIT),
+        20000,
+      ).catch(() => []);
       const merged = new Map<string, DownloadCandidate>();
       const addResults = (
         results: Awaited<ReturnType<typeof searchYouTubeNative>>,
@@ -599,9 +633,12 @@ async function fetchDownloadCandidates(
       };
       addResults(primaryResults, 0);
       let finalCandidates = rankDownloadCandidates(track, [...merged.values()], animeSearchEnabled);
-      if (shouldExpandCandidateSearch(finalCandidates)) {
+      if (
+        expanded
+        || (shouldUseAnimeEnhancements(track, animeSearchEnabled) && shouldExpandCandidateSearch(finalCandidates))
+      ) {
         const extraResults = await withTimeout(
-          searchYouTubeNativeMulti(queries.slice(1, maxQueries)),
+          searchYouTubeNativeMulti(queries.slice(1, maxQueries), ANDROID_EXTRA_CANDIDATE_LIMIT),
           35000,
         ).catch(() => []);
         addResults(extraResults, 1);
@@ -646,7 +683,7 @@ export async function getDownloadCandidates(
   animeSearchEnabled = false,
 ): Promise<DownloadCandidate[]> {
   try {
-    const cacheKey = `${track.deezerId ?? track.id}|${getPreferredTrackTitle(track)}|${track.artist}|${getPreferredAlbumName(track)}|anime:${animeSearchEnabled}`;
+    const cacheKey = `${track.deezerId ?? track.id}|${getPreferredTrackTitle(track)}|${track.artist}|${getPreferredAlbumName(track)}|anime:${animeSearchEnabled}|expanded:false`;
     const cached = getCachedValue(candidateCache, cacheKey);
     if (cached) return cached;
 
@@ -660,6 +697,29 @@ export async function getDownloadCandidates(
     return await request;
   } catch (error) {
     console.error('[getDownloadCandidates] Error:', error);
+    throw error;
+  }
+}
+
+export async function getExpandedDownloadCandidates(
+  track: Track,
+  animeSearchEnabled = false,
+): Promise<DownloadCandidate[]> {
+  try {
+    const cacheKey = `${track.deezerId ?? track.id}|${getPreferredTrackTitle(track)}|${track.artist}|${getPreferredAlbumName(track)}|anime:${animeSearchEnabled}|expanded:true`;
+    const cached = getCachedValue(candidateCache, cacheKey);
+    if (cached) return cached;
+
+    const pending = candidateRequests.get(cacheKey);
+    if (pending) return pending;
+
+    const request = fetchDownloadCandidates(track, animeSearchEnabled, true).finally(() => {
+      candidateRequests.delete(cacheKey);
+    });
+    candidateRequests.set(cacheKey, request);
+    return await request;
+  } catch (error) {
+    console.error('[getExpandedDownloadCandidates] Error:', error);
     throw error;
   }
 }
@@ -1024,6 +1084,7 @@ async function _combineLyrics(
 export const __testing = {
   combineLyrics: _combineLyrics,
   buildCandidateQueries,
+  buildAndroidCandidateQueries,
   rankDownloadCandidates,
   shouldExpandCandidateSearch,
   getCacheSizes: () => ({

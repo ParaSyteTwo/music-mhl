@@ -18,7 +18,8 @@ interface YtDlpPluginInterface {
   initialize(): Promise<{ success: boolean }>;
   update(): Promise<{ success: boolean; status: string }>;
   getVersion(): Promise<{ success: boolean; version: string }>;
-  search(options: { query: string }): Promise<{ success: boolean; results: YtDlpSearchResult[] }>;
+  search(options: { query: string; limit?: number }): Promise<{ success: boolean; results: YtDlpSearchResult[] }>;
+  searchMany?: (options: { queries: string[]; limit?: number }) => Promise<{ success: boolean; results: YtDlpSearchResult[][] }>;
   getStreamUrl(options: { videoId: string }): Promise<{ success: boolean; url: string }>;
   downloadAsMp3?: (options: { videoId: string }) => Promise<{ success: boolean; data: string; size: number }>;
   downloadAudio?: (options: { videoId?: string; sourceUrl?: string }) => Promise<{ success: boolean; data: string; size: number; fileName?: string }>;
@@ -54,7 +55,7 @@ export async function initYtDlp(): Promise<boolean> {
   return initializing;
 }
 
-export async function searchYouTubeNative(query: string): Promise<YtDlpSearchResult[]> {
+export async function searchYouTubeNative(query: string, limit = 10): Promise<YtDlpSearchResult[]> {
   console.log('[ytdlpBridge.searchYouTubeNative] Searching:', query, 'initialized:', initialized);
   if (!initialized) {
     console.log('[ytdlpBridge.searchYouTubeNative] Not initialized, initializing...');
@@ -62,7 +63,7 @@ export async function searchYouTubeNative(query: string): Promise<YtDlpSearchRes
   }
   console.log('[ytdlpBridge.searchYouTubeNative] Calling YtDlp.search()...');
   try {
-    const result = await YtDlp.search({ query });
+    const result = await YtDlp.search({ query, limit });
     console.log('[ytdlpBridge.searchYouTubeNative] Search result:', result);
     return result.results || [];
   } catch (err) {
@@ -130,10 +131,13 @@ export async function saveTaggedAudioToMusic(fileName: string, base64Data: strin
   return result.uri;
 }
 
-export async function searchYouTubeNativeMulti(queries: string[]): Promise<YtDlpSearchResult[]> {
+export async function searchYouTubeNativeMulti(queries: string[], limit = 5): Promise<YtDlpSearchResult[]> {
   if (!initialized) await initYtDlp();
-  // Lanza todas las búsquedas en paralelo y combina, deduplicando por videoId
-  const results = await runSearchesWithConcurrency(queries, getNativeSearchConcurrency(queries.length));
+
+  const results = YtDlp.searchMany
+    ? (await YtDlp.searchMany({ queries, limit })).results.map((items) => ({ success: true, results: items }))
+    : await runSearchesWithConcurrency(queries, getNativeSearchConcurrency(queries.length), limit);
+
   const seen = new Set<string>();
   const combined: YtDlpSearchResult[] = [];
   for (const result of results) {
@@ -166,6 +170,7 @@ function getNativeSearchConcurrency(queryCount: number): number {
 async function runSearchesWithConcurrency(
   queries: string[],
   concurrency: number,
+  limit: number,
 ): Promise<Array<{ success: boolean; results: YtDlpSearchResult[] } | null>> {
   const results: Array<{ success: boolean; results: YtDlpSearchResult[] } | null> =
     Array.from({ length: queries.length }, () => null);
@@ -175,7 +180,7 @@ async function runSearchesWithConcurrency(
     while (nextIndex < queries.length) {
       const index = nextIndex++;
       try {
-        results[index] = await YtDlp.search({ query: queries[index] });
+        results[index] = await YtDlp.search({ query: queries[index], limit });
       } catch (error) {
         console.error('[YtDlp] Parallel search failed:', error);
       }

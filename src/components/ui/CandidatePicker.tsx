@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { X, Clock, CheckCircle2, ShieldCheck, AlertTriangle, Sparkles } from 'lucide-react';
+import { X, Clock, CheckCircle2, ShieldCheck, AlertTriangle, Sparkles, RefreshCw } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { Capacitor } from '@capacitor/core';
 import { toast } from 'sonner';
-import { getDownloadCandidates, type DownloadCandidate } from '@/lib/api/musicApi';
+import { getDownloadCandidates, getExpandedDownloadCandidates, type DownloadCandidate } from '@/lib/api/musicApi';
 import { getCandidateMatchPresentation, type CandidateMatchTone } from '@/lib/candidateMatch';
 import type { Track } from '@/types/music';
 import { useI18n } from '@/lib/useI18n';
@@ -60,6 +60,7 @@ export function CandidatePicker({
   const { t } = useI18n();
   const [candidates, setCandidates] = useState<DownloadCandidate[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isNativeMobile = Capacitor.isNativePlatform();
   const reduceMotion = typeof navigator !== 'undefined' && (navigator.hardwareConcurrency || 4) <= 4;
@@ -73,6 +74,7 @@ export function CandidatePicker({
   useEffect(() => {
     let active = true;
     setLoading(true);
+    setLoadingMore(false);
     setError(null);
     setCandidates([]);
     const loadCandidates = async () => {
@@ -104,6 +106,37 @@ export function CandidatePicker({
     const sec = Math.floor(s % 60);
     return `${m}:${sec.toString().padStart(2, '0')}`;
   }
+
+  async function handleSearchMore() {
+    setLoadingMore(true);
+    setError(null);
+    try {
+      const cands = await getExpandedDownloadCandidates(track, animeSearchEnabled);
+      setCandidates(cands);
+      if (cands.length === 0) {
+        toast.warning(t('noDownloadCandidates'));
+        setError(t('noResults'));
+      }
+    } catch (e) {
+      const errorMsg = e instanceof Error ? e.message : t('noDownloadCandidates');
+      toast.error(errorMsg);
+      setError(errorMsg);
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  const searchMoreButton = isNativeMobile ? (
+    <button
+      type="button"
+      onClick={handleSearchMore}
+      disabled={loadingMore}
+      className="mt-3 w-full h-9 rounded-lg border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.04)] text-[11px] font-semibold text-[#D8D8D0] flex items-center justify-center gap-2 disabled:opacity-50"
+    >
+      <RefreshCw className={`w-3.5 h-3.5 ${loadingMore ? 'animate-spin' : ''}`} />
+      {loadingMore ? t('candidateSearchingMore') : t('candidateSearchMore')}
+    </button>
+  ) : null;
 
   const overlay = (
     <motion.div
@@ -161,9 +194,15 @@ export function CandidatePicker({
               ))}
             </div>
           ) : error ? (
-            <p className="text-center text-xs text-red-400 py-8">{error}</p>
+            <div className="py-8">
+              <p className="text-center text-xs text-red-400">{error}</p>
+              {searchMoreButton}
+            </div>
           ) : candidates.length === 0 ? (
-            <p className="text-center text-xs text-[#555] py-8">{t('noResults')}</p>
+            <div className="py-8">
+              <p className="text-center text-xs text-[#555]">{t('noResults')}</p>
+              {searchMoreButton}
+            </div>
           ) : (
             <div className="space-y-1.5 mt-1">
               {candidates.slice(0, 3).map((c, i) => {
@@ -219,6 +258,7 @@ export function CandidatePicker({
                   </motion.button>
                 );
               })}
+              {searchMoreButton}
             </div>
           )}
         </div>
