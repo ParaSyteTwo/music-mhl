@@ -81,14 +81,16 @@ describe('useMusicStore', () => {
     });
   });
 
-  describe('Android search settings', () => {
-    it('should default fast search mode to off and allow toggling it', () => {
+  describe('candidate resolution settings', () => {
+    it('defaults to adaptive automatic resolution and allows economy mode', () => {
       const store = useMusicStore.getState();
 
-      expect(store.androidFastSearchMode).toBe(false);
-      store.setAndroidFastSearchMode(true);
+      expect(store.autoCandidateResolution).toBe(true);
+      expect(store.resolutionProfile).toBe('adaptive');
+      expect(store.cellularResolutionPolicy).toBe('light');
+      store.setResolutionProfile('economy');
 
-      expect(useMusicStore.getState().androidFastSearchMode).toBe(true);
+      expect(useMusicStore.getState().resolutionProfile).toBe('economy');
     });
   });
 
@@ -322,7 +324,7 @@ describe('useMusicStore', () => {
       expect(useMusicStore.getState().downloadQueue).toContain(queued.id);
     });
 
-    it('queues downloads regardless of the reported network type', async () => {
+    it('queues a resolved video regardless of the reported network type', async () => {
       Object.defineProperty(navigator, 'connection', {
         configurable: true,
         value: { type: 'cellular', effectiveType: '4g' },
@@ -337,10 +339,11 @@ describe('useMusicStore', () => {
       };
       useMusicStore.setState({ activeDownloads: 2, downloadQueue: [], downloads: [] });
 
-      await useMusicStore.getState().startDownload(track);
+      useMusicStore.getState().startDownloadWithVideoId(track, 'verified-video');
 
       const queued = useMusicStore.getState().downloads[0];
       expect(queued.status).toBe('queued');
+      expect(queued.videoIdOverride).toBe('verified-video');
       expect(useMusicStore.getState().downloadQueue).toContain(queued.id);
     });
 

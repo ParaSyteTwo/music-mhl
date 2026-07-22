@@ -21,6 +21,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(YtDlpPlugin.class);
         registerPlugin(OpenFilePlugin.class);
         registerPlugin(AppUpdaterPlugin.class);
+        registerPlugin(DeviceContextPlugin.class);
         super.onCreate(savedInstanceState);
     }
 

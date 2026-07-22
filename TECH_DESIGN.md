@@ -1,8 +1,8 @@
 # Technical Design Document
 > Project: MHL Music
 > Stack: React/Vite + pywebview/Python + Capacitor/Android
-> Version: 2.3
-> Last updated: 2026-06-15
+> Version: 2.4
+> Last updated: 2026-07-21
 > Scope: Desktop + Android
 
 ## 1. Alcance Normativo
@@ -130,7 +130,7 @@ plataforma web ni habilita el backend FastAPI legado.
 evitan CORS:
 
 - peticiones a Deezer, AniList y AnimeThemes;
-- busqueda y evaluacion de candidatos YouTube;
+- busqueda y extraccion de metadatos crudos de YouTube Music/YouTube;
 - ejecucion local de yt-dlp y ffmpeg;
 - lectura y escritura controlada de archivos;
 - seleccion de carpeta y settings Desktop.
@@ -170,6 +170,7 @@ Plugins registrados:
 - `YtDlpPlugin`: busqueda, descarga y procesamiento de audio.
 - `OpenFilePlugin`: apertura externa de archivos descargados.
 - `AppUpdaterPlugin`: identidad, descarga, validacion e instalacion asistida.
+- `DeviceContextPlugin`: red medida, bateria, memoria, CPU y locale nativo.
 
 No se modifica el codigo Android sin una necesidad concreta y pruebas
 proporcionales al cambio. Toda release conserva package, firma y versionado
@@ -180,18 +181,36 @@ compatibles con `ANDROID_UPDATE_CONTRACT.md`.
 ```text
 consulta del usuario
   -> catalogo Deezer
-  -> Track canonico: titulo, artista, album, portada, ISRC si existe
-  -> generar consultas YouTube
-  -> obtener y puntuar candidatos
-  -> seleccion automatica segura o eleccion del usuario
+  -> Track canonico: titulo, artista, album, portada, ISRC y edicion
+  -> YouTube Music search #songs
+  -> candidateResolver compartido: evidencia + edicion + verificacion
+  -> enriquecer los dos mejores en modo profundo
+  -> YouTube general solo como fallback profundo
+  -> verified: boton de un toque; probable/review: selector
   -> descargar audio
   -> escribir metadatos canonicos
   -> verificar archivo
   -> incorporar al historial de descargas
 ```
 
-YouTube es fuente de audio. Sus titulos, canales y miniaturas son senales para
-evaluar candidatos, no autoridad automatica sobre los metadatos de la pista.
+YouTube es fuente de audio. Python y Java solo extraen candidatos crudos y
+descargan un `videoId`; nunca puntuan ni vuelven a buscar. `candidateResolver`
+es la unica autoridad de ranking y produce `verified`, `probable`, `review` o
+`rejected` con evidencia de ISRC, titulo, artista, album, duracion, oficialidad,
+tipo de resultado, edicion y contradicciones.
+
+`CandidateScheduler` prioriza visibles, primeras cinco y resto en idle. Su
+concurrencia es 2 en Desktop y 1 en Android. En red medida el perfil ligero
+limita la consulta a tres candidatos, cinco pistas por consulta y omite
+enriquecimiento, ISRC y fallback general. La cache nativa persiste 200 pistas:
+72 horas para resultados positivos y 10 minutos para vacios, con deduplicacion
+de solicitudes concurrentes.
+
+La descarga usa mejor audio disponible y conversion MP3 calidad 0. Tras ella
+se comprueban existencia, tamaño minimo, decodificacion y duracion; despues de
+ID3 se confirma de nuevo el tamaño escrito. Los errores de red, rate limit,
+candidato, edicion, extraccion, conversion, metadatos y escritura cruzan la
+frontera con un tipo identificable.
 
 ## 8. Flujo Anime
 

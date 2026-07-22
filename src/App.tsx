@@ -6,6 +6,8 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { useMusicStore } from "@/store/musicStore";
 import { useI18n } from "@/lib/useI18n";
 import { useAppUpdateStore } from "@/store/appUpdateStore";
+import { getDeviceContext } from "@/lib/deviceContext";
+import { setNativeLocale } from "@/lib/language";
 
 const SearchPage = lazy(() => import("./pages/SearchPage"));
 const DownloadsPage = lazy(() => import("./pages/DownloadsPage"));
@@ -22,12 +24,17 @@ function RouteFallback() {
 
 const App = () => {
   useEffect(() => {
+    const refreshNativeLocale = () => {
+      void getDeviceContext().then((context) => setNativeLocale(context.locale));
+    };
     const markFrontendReady = () => {
       const api = (window as Window & {
         pywebview?: { api?: { frontend_ready?: () => Promise<{ success: boolean }> } };
       }).pywebview?.api;
       void api?.frontend_ready?.();
+      refreshNativeLocale();
     };
+    refreshNativeLocale();
     markFrontendReady();
     window.addEventListener('pywebviewready', markFrontendReady);
     return () => window.removeEventListener('pywebviewready', markFrontendReady);

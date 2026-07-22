@@ -1,3 +1,5 @@
+export type TrackEdition = 'explicit' | 'clean' | 'unknown';
+
 export interface Track {
   id: string;
   title: string;
@@ -11,6 +13,7 @@ export interface Track {
   deezerId?: number;
   youtubeId?: string;
   isrc?: string;
+  edition?: TrackEdition;
 }
 
 export interface Download {

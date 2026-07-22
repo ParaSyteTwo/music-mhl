@@ -1,99 +1,63 @@
 import base64
+import json
+from unittest.mock import MagicMock, patch
 
 from bridge import Bridge, _encode_audio_bytes
 
 
-def _candidate(video_id: str, score: int) -> dict:
-    return {
-        "videoId": video_id,
-        "title": f"Artist - Song {video_id}",
-        "channel": "Artist - Topic",
-        "duration": 180,
-        "test_score": score,
+def _response(*entries: dict) -> MagicMock:
+    return MagicMock(
+        returncode=0,
+        stderr='',
+        stdout='\n'.join(json.dumps(entry) for entry in entries),
+    )
+
+
+def test_youtube_music_is_primary_and_returns_raw_candidates():
+    bridge = Bridge()
+    response = _response({
+        'id': 'song-one', 'title': 'Song', 'channel': 'Artist - Topic',
+        'duration': 180, 'artist': 'Artist', 'album': 'Album', 'isrc': 'USAAA2400001',
+        'acodec': 'opus', 'abr': 140,
+    })
+
+    with patch('bridge.subprocess.run', return_value=response) as run:
+        result = bridge.get_candidates({'title': 'Song', 'artist': 'Artist', 'source': 'youtube_music', 'depth': 'deep'})
+
+    args = run.call_args_list[0].args[0]
+    assert args[1].startswith('https://music.youtube.com/search?')
+    assert args[1].endswith('#songs')
+    assert result['success'] is True
+    assert result['candidates'][0] == {
+        'videoId': 'song-one', 'title': 'Song', 'channel': 'Artist - Topic',
+        'duration': 180, 'source': 'youtube_music', 'resultType': 'song',
+        'artist': 'Artist', 'album': 'Album', 'isrc': 'USAAA2400001',
+        'edition': 'unknown', 'sourceCodec': 'opus', 'sourceAbr': 140,
     }
 
 
-def test_primary_candidates_skip_extra_queries_and_limit_to_three():
+def test_general_youtube_is_only_used_when_requested_by_frontend():
     bridge = Bridge()
-    calls: list[str] = []
-
-    def search(query: str, _limit: int) -> list[dict]:
-        calls.append(query)
-        return [
-            _candidate("one", 180),
-            _candidate("two", 170),
-            _candidate("three", 160),
-            _candidate("four", 150),
-        ]
-
-    bridge._yt_search_fast = search
-    bridge._score_smart = lambda candidate, *_args: candidate["test_score"]
-    bridge._label_fast = lambda _candidate: "song"
-
-    result = bridge.get_candidates({
-        "title": "Song",
-        "artist": "Artist",
-        "album": "Album",
-        "duration": 180,
-    })
-
-    assert len(calls) == 1
-    assert [item["videoId"] for item in result["candidates"]] == ["one", "two", "three"]
+    with patch('bridge.subprocess.run', return_value=_response()) as run:
+        bridge.get_candidates({'title': 'Song', 'artist': 'Artist', 'source': 'youtube', 'depth': 'deep'})
+    assert run.call_args.args[0][1].startswith('ytsearch8:')
 
 
-def test_weak_primary_candidates_expand_search():
+def test_light_search_is_flat_and_bounded_to_three():
     bridge = Bridge()
-    calls: list[str] = []
-
-    def search(query: str, _limit: int) -> list[dict]:
-        calls.append(query)
-        if len(calls) == 1:
-            return [_candidate("weak", 80)]
-        return [_candidate(f"extra-{len(calls)}", 140)]
-
-    bridge._yt_search_fast = search
-    bridge._score_smart = lambda candidate, *_args: candidate["test_score"]
-    bridge._label_fast = lambda _candidate: "song"
-
-    result = bridge.get_candidates({
-        "title": "Song",
-        "artist": "Artist",
-        "album": "Album",
-        "duration": 180,
-    })
-
-    assert len(calls) > 1
-    assert len(result["candidates"]) <= 3
-
-
-def test_anime_queries_require_explicit_opt_in():
-    bridge = Bridge()
-    calls: list[str] = []
-
-    def search(query: str, _limit: int) -> list[dict]:
-        calls.append(query)
-        return [_candidate("weak", 80)]
-
-    bridge._yt_search_fast = search
-    bridge._score_smart = lambda candidate, *_args: candidate["test_score"]
-    bridge._label_fast = lambda _candidate: "song"
-
-    base_track = {
-        "title": "Naruto Opening",
-        "artist": "Artist",
-        "album": "Naruto OST",
-        "duration": 180,
-    }
-    bridge.get_candidates(base_track)
-    assert not any("Opening 1" in query for query in calls)
-
-    calls.clear()
-    bridge.get_candidates({**base_track, "animeSearchEnabled": True})
-    assert any("Opening 1" in query for query in calls)
+    with patch('bridge.subprocess.run', return_value=_response()) as run:
+        bridge.get_candidates({'title': 'Song', 'artist': 'Artist', 'source': 'youtube_music', 'depth': 'light'})
+    args = run.call_args.args[0]
+    assert '--flat-playlist' in args
+    assert args[args.index('--playlist-end') + 1] == '3'
 
 
 def test_desktop_audio_contract_uses_real_base64():
     encoded = _encode_audio_bytes(bytes([0, 1, 254, 255]))
-
-    assert encoded == "AAH+/w=="
+    assert encoded == 'AAH+/w=='
     assert base64.b64decode(encoded) == bytes([0, 1, 254, 255])
+
+
+def test_audio_download_requires_a_resolved_candidate():
+    result = Bridge().get_raw_audio(None, 'Song', 'Artist', ['Song Artist'])
+    assert result == {'success': False, 'error': 'candidate_invalid: resolved videoId required'}

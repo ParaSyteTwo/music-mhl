@@ -1,7 +1,7 @@
 # PRD - Product Requirements Document
 > Project: MHL Music
-> Version: 2.2
-> Last updated: 2026-06-15
+> Version: 2.3
+> Last updated: 2026-07-21
 > Scope: Desktop (Windows, pywebview) + Android (Capacitor)
 
 ## 1. Overview
@@ -29,7 +29,7 @@ de los requisitos, QA o releases de Desktop y Android.
 |---|---|---|---|
 | Busqueda musical | Desktop + Android | P0 | Buscar canciones, artistas y albumes usando Deezer como catalogo |
 | Reproductor | Desktop + Android | P0 | Play, pause, seek y volumen |
-| Descarga de audio | Desktop + Android | P0 | Seleccionar una fuente de audio de YouTube y guardar el archivo local |
+| Descarga de audio | Desktop + Android | P0 | Resolver primero en YouTube Music Songs, revisar ambigüedades y guardar MP3 |
 | Metadatos | Desktop + Android | P0 | Conservar titulo, artista, album y portada de la identidad musical seleccionada |
 | Busqueda anime opt-in | Desktop + Android | P1 | Buscar anime y listar sus openings/endings solo cuando el usuario activa el modo |
 | Ajustes | Desktop + Android | P1 | Carpeta cuando aplique, idioma, letras, reproductor y modo anime |
@@ -86,6 +86,19 @@ el ajuste ya esta habilitado. Una busqueda ambigua nunca altera el flujo
 musical normal de un usuario que no haya optado por la feature.
 
 ## 6. Acceptance Criteria
+
+### Resolucion y rendimiento
+
+- [ ] Deezer conserva titulo, artista, album, ISRC y edicion como identidad canonica.
+- [ ] YouTube Music `#songs` es la fuente primaria y YouTube general solo se consulta en verificacion profunda cuando no existe una coincidencia valida.
+- [ ] Solo `verified` habilita el boton de descarga de un toque; `probable` y `review` abren el selector y `rejected` nunca se elige automaticamente.
+- [ ] Toda descarga musical recibe un `videoId` resuelto y ninguna plataforma repite una busqueda oculta.
+- [ ] La preferencia de edicion admite catalogo, explicita, limpia o preguntar; catalogo es el valor predeterminado.
+- [ ] Android ejecuta una resolucion simultanea y Desktop dos. Datos moviles en modo ligero no supera cinco canciones por consulta.
+- [ ] La cola se cancela al cambiar consulta y se pausa sin red, con la app oculta, ahorro de bateria o menos del 20 por ciento sin cargar.
+- [ ] La cache persistente guarda positivos 72 horas, vacios 10 minutos y como maximo 200 pistas.
+- [ ] La traduccion de letras usa un idioma independiente y el locale nativo de Windows o Android.
+- [ ] El archivo final es MP3, se puede decodificar y su duracion esta dentro de `max(5 segundos, 5%)`.
 
 ### Desktop
 

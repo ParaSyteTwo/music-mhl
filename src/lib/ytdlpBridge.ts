@@ -6,6 +6,14 @@ export interface YtDlpSearchResult {
   title: string;
   duration: number;
   channel: string;
+  source: 'youtube_music' | 'youtube';
+  resultType?: string;
+  artist?: string;
+  album?: string;
+  isrc?: string;
+  edition?: 'explicit' | 'clean' | 'unknown';
+  sourceCodec?: string;
+  sourceAbr?: number;
 }
 
 export interface YtDlpProgressEvent {
@@ -18,11 +26,10 @@ interface YtDlpPluginInterface {
   initialize(): Promise<{ success: boolean }>;
   update(): Promise<{ success: boolean; status: string }>;
   getVersion(): Promise<{ success: boolean; version: string }>;
-  search(options: { query: string; limit?: number }): Promise<{ success: boolean; results: YtDlpSearchResult[] }>;
-  searchMany?: (options: { queries: string[]; limit?: number }) => Promise<{ success: boolean; results: YtDlpSearchResult[][] }>;
+  search(options: { query: string; limit?: number; source?: 'youtube_music' | 'youtube'; enrich?: boolean }): Promise<{ success: boolean; results: YtDlpSearchResult[] }>;
   getStreamUrl(options: { videoId: string }): Promise<{ success: boolean; url: string }>;
   downloadAsMp3?: (options: { videoId: string }) => Promise<{ success: boolean; data: string; size: number }>;
-  downloadAudio?: (options: { videoId?: string; sourceUrl?: string }) => Promise<{ success: boolean; data: string; size: number; fileName?: string }>;
+  downloadAudio?: (options: { videoId?: string; sourceUrl?: string; expectedDuration?: number }) => Promise<{ success: boolean; data: string; size: number; fileName?: string }>;
   saveAudioToMusicMediaStore?: (options: { videoId: string; fileName: string }) => Promise<{ success: boolean; uri: string }>;
   saveTaggedAudioToMusic?: (options: { fileName: string; data: string }) => Promise<{ success: boolean; uri: string }>;
   addListener(eventName: 'downloadProgress', listenerFunc: (event: YtDlpProgressEvent) => void): Promise<PluginListenerHandle>;
@@ -55,7 +62,11 @@ export async function initYtDlp(): Promise<boolean> {
   return initializing;
 }
 
-export async function searchYouTubeNative(query: string, limit = 10): Promise<YtDlpSearchResult[]> {
+export async function searchYouTubeNative(
+  query: string,
+  limit = 10,
+  options: { source?: 'youtube_music' | 'youtube'; enrich?: boolean } = {},
+): Promise<YtDlpSearchResult[]> {
   if (import.meta.env.DEV) console.log('[ytdlpBridge.searchYouTubeNative] Searching:', query, 'initialized:', initialized);
   if (!initialized) {
     if (import.meta.env.DEV) console.log('[ytdlpBridge.searchYouTubeNative] Not initialized, initializing...');
@@ -63,7 +74,7 @@ export async function searchYouTubeNative(query: string, limit = 10): Promise<Yt
   }
   if (import.meta.env.DEV) console.log('[ytdlpBridge.searchYouTubeNative] Calling YtDlp.search()...');
   try {
-    const result = await YtDlp.search({ query, limit });
+    const result = await YtDlp.search({ query, limit, ...options });
     if (import.meta.env.DEV) console.log('[ytdlpBridge.searchYouTubeNative] Search result:', result);
     return result.results || [];
   } catch (err) {
@@ -74,7 +85,7 @@ export async function searchYouTubeNative(query: string, limit = 10): Promise<Yt
 
 export async function downloadMp3Native(
   videoId: string | null,
-  opts?: { sourceUrl?: string },
+  opts?: { sourceUrl?: string; expectedDuration?: number },
 ): Promise<ArrayBuffer> {
   if (!initialized) await initYtDlp();
 
@@ -82,6 +93,7 @@ export async function downloadMp3Native(
     ? await YtDlp.downloadAudio({
         ...(videoId ? { videoId } : {}),
         ...(opts?.sourceUrl ? { sourceUrl: opts.sourceUrl } : {}),
+        ...(opts?.expectedDuration ? { expectedDuration: opts.expectedDuration } : {}),
       })
     : (await YtDlp.downloadAsMp3!({ videoId: videoId ?? '' }));
 
@@ -131,12 +143,14 @@ export async function saveTaggedAudioToMusic(fileName: string, base64Data: strin
   return result.uri;
 }
 
-export async function searchYouTubeNativeMulti(queries: string[], limit = 5): Promise<YtDlpSearchResult[]> {
+export async function searchYouTubeNativeMulti(
+  queries: string[],
+  limit = 5,
+  options: { source?: 'youtube_music' | 'youtube'; enrich?: boolean } = {},
+): Promise<YtDlpSearchResult[]> {
   if (!initialized) await initYtDlp();
 
-  const results = YtDlp.searchMany
-    ? (await YtDlp.searchMany({ queries, limit })).results.map((items) => ({ success: true, results: items }))
-    : await runSearchesWithConcurrency(queries, getNativeSearchConcurrency(queries.length), limit);
+  const results = await runSearchesWithConcurrency(queries, getNativeSearchConcurrency(queries.length), limit, options);
 
   const seen = new Set<string>();
   const combined: YtDlpSearchResult[] = [];
@@ -154,23 +168,14 @@ export async function searchYouTubeNativeMulti(queries: string[], limit = 5): Pr
 }
 
 function getNativeSearchConcurrency(queryCount: number): number {
-  if (queryCount <= 1) return queryCount;
-  const cores = typeof navigator === 'undefined' ? 4 : navigator.hardwareConcurrency || 4;
-  const memory = typeof navigator === 'undefined'
-    ? undefined
-    : (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
-  const limit = cores <= 4 || (memory !== undefined && memory <= 4)
-    ? 2
-    : cores <= 8
-      ? 3
-      : 4;
-  return Math.min(queryCount, limit);
+  return queryCount > 0 ? 1 : 0;
 }
 
 async function runSearchesWithConcurrency(
   queries: string[],
   concurrency: number,
   limit: number,
+  options: { source?: 'youtube_music' | 'youtube'; enrich?: boolean } = {},
 ): Promise<Array<{ success: boolean; results: YtDlpSearchResult[] } | null>> {
   const results: Array<{ success: boolean; results: YtDlpSearchResult[] } | null> =
     Array.from({ length: queries.length }, () => null);
@@ -180,7 +185,7 @@ async function runSearchesWithConcurrency(
     while (nextIndex < queries.length) {
       const index = nextIndex++;
       try {
-        results[index] = await YtDlp.search({ query: queries[index], limit });
+        results[index] = await YtDlp.search({ query: queries[index], limit, ...options });
       } catch (error) {
         console.error('[YtDlp] Parallel search failed:', error);
       }

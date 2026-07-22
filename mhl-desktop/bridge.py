@@ -16,7 +16,7 @@ CREATE_NO_WINDOW = 0x08000000 if sys.platform == 'win32' else 0
 import tempfile
 import threading
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import quote_plus, urlparse
 
 import requests
 
@@ -57,7 +57,7 @@ _ANILIST_ENDPOINT = 'https://graphql.anilist.co'
 _ANIMETHEMES_ENDPOINT = 'https://api.animethemes.moe'
 _ANIME_HEADERS = {
     'Content-Type': 'application/json',
-    'User-Agent': 'MHLMusic/1.4.7',
+    'User-Agent': 'MHLMusic/1.4.8-beta.1',
 }
 _ANIME_TIMEOUT = 10
 
@@ -418,142 +418,98 @@ class Bridge:
 
     # ── YouTube search ────────────────────────────────────────────────────────
 
-    def _is_anime_like(self, title: str, artist: str, album: str) -> bool:
-        """Detecta si una track parece anime."""
-        source = f"{title} {artist} {album}".lower()
-        return bool(re.search(r'(anime|opening|ending|\bop\b|\bed\b|theme|ost|project|isekai)', source))
-
-    def _build_anime_queries(self, title: str, artist: str) -> list[str]:
-        """Genera queries numeradas para Opening/Ending de anime."""
-        queries = []
-        for suffix in ['Opening', 'Ending', 'OP', 'ED']:
-            for n in range(1, 6):
-                queries.append(f'{title} {suffix} {n}')
-                queries.append(f'{title} {suffix} {n} full')
-        return queries
-
     def get_candidates(self, track_info: dict) -> dict:
-        """
-        Busca candidatos en YouTube y verifica por ISRC.
-        """
-        title = track_info.get('title', '')
-        artist = track_info.get('artist', '')
-        album = track_info.get('album', '')
-        duration = track_info.get('duration', 0)
-        deezer_isrc = track_info.get('isrc') or ''
-        anime_search_enabled = track_info.get('animeSearchEnabled') is True
-        use_anime_queries = anime_search_enabled and self._is_anime_like(title, artist, album)
+        """Extrae candidatos crudos. El ranking pertenece al resolver TypeScript."""
+        title = str(track_info.get('title') or '').strip()
+        artist = str(track_info.get('artist') or '').strip()
+        source = track_info.get('source') or 'youtube_music'
+        deep = track_info.get('depth') == 'deep'
+        query = f'{artist} - {title}'.strip(' -')
+        limit = 8 if deep else 3
+        if not query:
+            return {'success': False, 'error': 'Missing title and artist'}
 
-        # Limpiar para el query — sin feat
-        clean_title = self._clean_query(title)
-        clean_artist = self._clean_query(artist)
-
-        queries = [
-            f'{clean_title} {clean_artist} official audio',
-            f'{clean_title} {clean_artist}',
-        ]
-
-        # Si parece anime, agregar queries numeradas para Opening/Ending
-        if use_anime_queries:
-            queries.extend(self._build_anime_queries(clean_title, clean_artist))
-
-        # Más queries en paralelo para anime
-        max_workers = 4 if use_anime_queries else 2
-        limit_per_query = 4 if use_anime_queries else 6
-
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-        merged: dict[str, dict] = {}
-        for result in self._yt_search_fast(queries[0], limit_per_query):
-            vid = result['videoId']
-            merged[vid] = {
-                **result,
-                'score': self._score_smart(result, title, artist, album, duration),
-                'label': self._label_fast(result),
-                'isrc_match': False,
-            }
-
-        primary_ranked = sorted(
-            merged.values(), key=lambda candidate: candidate['score'], reverse=True
+        target = (
+            f'https://music.youtube.com/search?q={quote_plus(query)}#songs'
+            if source == 'youtube_music'
+            else f'ytsearch{limit}:{query}'
         )
-        needs_more = len(primary_ranked) < 2 or primary_ranked[0]['score'] < 120
-
-        if needs_more:
-            with ThreadPoolExecutor(max_workers=max_workers) as ex:
-                futures = {
-                    ex.submit(self._yt_search_fast, query, limit_per_query): query
-                    for query in queries[1:]
-                }
-                for fut in as_completed(futures):
-                    try:
-                        results = fut.result()
-                    except Exception:
-                        continue
-                    for result in results:
-                        vid = result['videoId']
-                        score = self._score_smart(result, title, artist, album, duration)
-                        existing = merged.get(vid)
-                        if existing and existing['score'] >= score:
-                            continue
-                        merged[vid] = {
-                            **result,
-                            'score': score,
-                            'label': self._label_fast(result),
-                            'isrc_match': False,
-                        }
-
-        # Scoring para todos
-        for vid, result in merged.items():
-            result['score'] = self._score_smart(result, title, artist, album, duration)
-            result['isrc_match'] = False
-
-        # ISRC check solo para top 1 — evitar slowdown de 4 yt-dlp calls
-        if deezer_isrc and merged:
-            top_vid = max(merged, key=lambda v: merged[v]['score'])
-            yt_isrc = self._get_yt_isrc(top_vid)
-            if yt_isrc.upper() == deezer_isrc.upper():
-                merged[top_vid]['score'] += 2000
-                merged[top_vid]['isrc_match'] = True
-
-        # Calcular confianza final basada en score
-        for vid, result in merged.items():
-            score = result['score']
-            if result.get('isrc_match'):
-                result['confidence'] = 'alta'
-            elif score >= 120:
-                result['confidence'] = 'alta'
-            elif score >= 90:
-                result['confidence'] = 'media'
-            else:
-                result['confidence'] = 'baja'
-
-        candidates = sorted(merged.values(), key=lambda c: c['score'], reverse=True)[:3]
-        return {'success': True, 'candidates': candidates}
-
-    def _get_yt_isrc(self, video_id: str) -> str:
-        """Obtiene el ISRC de un video de YouTube via yt-dlp."""
         args = [
             _bin('yt-dlp.exe'),
-            f'https://www.youtube.com/watch?v={video_id}',
-            '--dump-json', '--no-playlist', '--skip-download',
-            '--quiet', '--no-warnings',
+            target, '--dump-json', '--skip-download', '--playlist-end', str(limit),
+            '--socket-timeout', '12', '--retries', '2', '--quiet', '--no-warnings',
         ]
+        args.append('--flat-playlist')
         try:
             r = subprocess.run(
                 args, capture_output=True, text=True, creationflags=CREATE_NO_WINDOW,
-                timeout=10, encoding='utf-8', errors='replace',
+                timeout=35 if deep else 20, encoding='utf-8', errors='replace',
             )
+            if r.returncode != 0:
+                return {'success': False, 'error': (r.stderr or 'yt-dlp search failed').strip()}
+            candidates = []
             for line in r.stdout.strip().splitlines():
                 line = line.strip()
                 if not line:
                     continue
                 try:
                     d = json.loads(line)
-                    return d.get('isrc') or ''
+                    video_id = d.get('id') or d.get('url') or ''
+                    if not video_id:
+                        continue
+                    candidates.append({
+                        'videoId': video_id,
+                        'title': d.get('title') or '',
+                        'channel': d.get('channel') or d.get('uploader') or '',
+                        'duration': d.get('duration') or 0,
+                        'source': source,
+                        'resultType': 'song' if source == 'youtube_music' else 'video',
+                        'artist': d.get('artist') or d.get('creator') or '',
+                        'album': d.get('album') or '',
+                        'isrc': d.get('isrc') or '',
+                        'edition': 'unknown',
+                        'sourceCodec': d.get('acodec') or '',
+                        'sourceAbr': d.get('abr') or 0,
+                    })
                 except Exception:
-                    pass
+                    continue
+            candidates = candidates[:limit]
+            if deep:
+                for candidate in candidates[:2]:
+                    self._enrich_candidate(candidate)
+            return {'success': True, 'candidates': candidates}
+        except subprocess.TimeoutExpired:
+            return {'success': False, 'error': 'Candidate search timeout'}
+        except Exception as exc:
+            return {'success': False, 'error': str(exc)}
+
+    def _enrich_candidate(self, candidate: dict) -> None:
+        video_id = candidate.get('videoId') or ''
+        if not video_id:
+            return
+        args = [
+            _bin('yt-dlp.exe'), f'https://www.youtube.com/watch?v={video_id}',
+            '--dump-single-json', '--skip-download', '--no-playlist',
+            '--socket-timeout', '12', '--retries', '1', '--quiet', '--no-warnings',
+        ]
+        try:
+            result = subprocess.run(
+                args, capture_output=True, text=True, creationflags=CREATE_NO_WINDOW,
+                timeout=15, encoding='utf-8', errors='replace',
+            )
+            if result.returncode != 0 or not result.stdout.strip():
+                return
+            detail = json.loads(result.stdout.strip().splitlines()[-1])
+            candidate.update({
+                'duration': detail.get('duration') or candidate.get('duration') or 0,
+                'artist': detail.get('artist') or candidate.get('artist') or '',
+                'album': detail.get('album') or candidate.get('album') or '',
+                'isrc': detail.get('isrc') or '',
+                'sourceCodec': detail.get('acodec') or '',
+                'sourceAbr': detail.get('abr') or 0,
+            })
         except Exception:
-            pass
-        return ''
+            return
 
     def _get_yt_thumbnail_url(self, video_id: str) -> str | None:
         """Extrae la URL de la miniatura de YouTube para un video dado."""
@@ -615,216 +571,6 @@ class Bridge:
             print(f'[DEBUG] YT thumbnail download error: {e}')
         return None, None
 
-    def _yt_search_fast(self, query: str, limit: int = 4) -> list[dict]:
-        """Scraping directo de YouTube — ~1-2s vs ~15s de yt-dlp."""
-        import re
-        try:
-            url = f'https://www.youtube.com/results?search_query={requests.utils.quote(query)}'
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept-Language': 'en-US,en;q=0.9',
-            }
-            r = requests.get(url, headers=headers, timeout=6)
-            html = r.text
-
-            # YouTube embeds ytInitialData como JSON en la página
-            match = re.search(r'ytInitialData\s*=\s*(\{.*?\});\s*</script>', html, re.DOTALL)
-            if not match:
-                return []
-
-            data = json.loads(match.group(1))
-            results = []
-            sections = (data.get('contents', {})
-                        .get('twoColumnSearchResultsRenderer', {})
-                        .get('primaryContents', {})
-                        .get('sectionListRenderer', {})
-                        .get('contents', []))
-            for section in sections:
-                for item in section.get('itemSectionRenderer', {}).get('contents', []):
-                    vid = item.get('videoRenderer', {})
-                    if not vid:
-                        continue
-                    video_id = vid.get('videoId', '')
-                    if not video_id:
-                        continue
-                    # Título
-                    title_runs = vid.get('title', {}).get('runs', [])
-                    title_text = ''.join(r.get('text', '') for r in title_runs) if title_runs else ''
-                    # Canal
-                    channel_runs = vid.get('ownerText', {}).get('runs', [])
-                    channel_text = channel_runs[0].get('text', '') if channel_runs else ''
-                    # Duración
-                    duration_text = vid.get('lengthText', {}).get('simpleText', '') or ''
-                    duration_sec = self._parse_duration(duration_text)
-                    results.append({
-                        'videoId': video_id,
-                        'title': title_text,
-                        'channel': channel_text,
-                        'duration': duration_sec,
-                    })
-                    if len(results) >= limit:
-                        return results
-            return results
-        except Exception:
-            return []
-
-    def _parse_duration(self, s: str) -> int:
-        """Parse '1:23:45' o '3:45' a segundos."""
-        if not s:
-            return 0
-        parts = s.strip().split(':')
-        try:
-            if len(parts) == 3:
-                return int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
-            elif len(parts) == 2:
-                return int(parts[0]) * 60 + int(parts[1])
-            return int(parts[0])
-        except Exception:
-            return 0
-
-    def _clean_query(self, s: str) -> str:
-        """Strip featuring, ft, remix, live, etc. de títulos y artistas para queries limpias."""
-        import re
-        # Quitar (feat. XXX), [feat XXX], - feat XXX, , feat XXX
-        s = re.sub(r'[(\[]?(feat\.?|ft\.?|featuring)\s+[^)\]]+[)\]]?', '', s, flags=re.IGNORECASE)
-        # Quitar (with XXX), [with XXX]
-        s = re.sub(r'[(\[]?(with)\s+[^)\]]+[)\]]?', '', s, flags=re.IGNORECASE)
-        # Quitar remix, radio edit, version, etc.
-        s = re.sub(r'\b(remix|reprise|version|edit|live|acoustic|medley|mix)\b.*', '', s, flags=re.IGNORECASE)
-        # Quitar paréntesis/corchetes redundantes
-        s = re.sub(r'[()\[\]]+', ' ', s)
-        # Quitar múltiples espacios
-        s = re.sub(r'\s+', ' ', s).strip()
-        return s
-
-    def _score_smart(
-        self, c: dict, title: str, artist: str, album: str, duration: int
-    ) -> int:
-        """
-        Scoring inteligente con match 1:1 feat Deezer↔YouTube.
-        - Si Deezer tiene ft → solo aceptar YouTube con ft
-        - Si Deezer NO tiene ft → solo aceptar YouTube sin ft (de otros artistas)
-        """
-        import re
-        t = c.get('title', '').lower()
-        ch = c.get('channel', '').lower()
-        cd = c.get('duration') or 0
-
-        # Título base limpio
-        wt_base = self._clean_query(title).lower()
-        wa_base = self._clean_query(artist).lower()
-        walbum_base = self._clean_query(album).lower()
-
-        # Detectar si es music video (para penalizar)
-        yt_title_lower = c.get('title', '').lower()
-        is_music_video = any(kw in yt_title_lower for kw in (
-            'official music video', 'official video', 'music video', 'mv', 'm/v',
-        ))
-
-        score = 100
-
-        # ── Sin discriminación por feat — mostrar todo, dejar elegir al usuario ──
-        # El usuario conoce su canción y sabe qué versión quiere
-        # Solo rankear por calidad técnica y match de título/duración
-
-        # ── Título base match ───────────────────────────────────────────
-        if wt_base and wt_base in t:
-            score += 40
-        elif wt_base and t and wt_base in t:
-            score += 25
-        else:
-            wt_words = set(wt_base.split())
-            t_words = set(t.split())
-            common = wt_words & t_words
-            if common and wt_words:
-                score += 15 * len(common) / len(wt_words)
-
-        # ── Artista principal (sin feat) ────────────────────────────────
-        if wa_base:
-            if wa_base in t or wa_base in ch:
-                score += 22
-            if wa_base in ch:
-                score += 15
-        if walbum_base and walbum_base in t:
-            score += 12
-
-        # ── "official audio" / "official video" ─────────────────────────
-        if 'official audio' in t:
-            score += 25
-        if 'audio only' in t:
-            score += 20
-        if 'topic' in ch:
-            score += 14
-        if 'official' in ch:
-            score += 10
-
-        # ── Penalizar music videos (tienen intro/outro) ───────────────
-        if is_music_video:
-            score -= 35
-
-        # ── Duración — match preciso = canción sin intro/outro ─────────
-        if duration > 0 and cd > 0:
-            diff_pct = abs(cd - duration) / duration
-            if diff_pct <= 0.02:  # ~1-2s de diferencia en 3min = canción limpia
-                score += 50  # Muy alto: es la versión limpia
-            elif diff_pct <= 0.05:
-                score += 30
-            elif diff_pct <= 0.10:
-                score += 15
-            elif diff_pct <= 0.20:
-                score -= 10
-            elif diff_pct <= 0.40:
-                score -= 30
-            else:
-                score -= 55
-
-        # ── Boostear si duración match + título match ─────────────────
-        if duration > 0 and cd > 0 and abs(cd - duration) / duration < 0.05 and wt_base and wt_base in t:
-            score += 20
-
-        # ── Penalizadores ───────────────────────────────────────────────
-        bad_patterns = ['karaoke', 'nightcore', 'sped up', 'slowed', 'reaction', 'amv',
-                        '8d', 'reverb', 'bass boost']
-        if any(b in t for b in bad_patterns):
-            score -= 35
-        if any(b in t for b in ('instrumental', 'extended', 'extended mix')):
-            score -= 25
-        if any(b in t for b in ('remix', 'bootleg', 'mashup')) and 'official remix' not in t:
-            score -= 24
-        if 'cover' in t and wa_base and wa_base not in ch:
-            score -= 30
-        if any(b in t for b in ('live', 'concert', 'en vivo')) and 'official audio' not in t:
-            score -= 25
-        if any(b in t for b in ('lyrics', 'lyric video', 'sub esp', 'sub english')):
-            score -= 18
-
-        return score
-
-    def _label_fast(self, c: dict) -> str:
-        t = c.get('title', '').lower()
-        ch = c.get('channel', '').lower()
-        h = f"{t} {ch}"
-        if any(b in h for b in ('opening', 'ending', ' op ', ' ed ', 'opening theme', 'ending theme')):
-            return 'anime op/ed'
-        if any(kw in t for kw in ('official music video', 'music video', 'm/v', 'mv')):
-            return 'video'
-        if 'remix' in t:
-            return 'remix'
-        if 'cover' in t:
-            return 'cover'
-        if 'live' in t and 'official' not in t:
-            return 'live'
-        if any(b in t for b in ('karaoke', 'nightcore', 'sped up', 'slowed', 'instrumental')):
-            return 'bad'
-        return 'song'
-
-    def _confidence(self, score: int) -> str:
-        if score >= 120:
-            return 'alta'
-        if score >= 90:
-            return 'media'
-        return 'baja'
-
     def letras_fetch(self, url: str) -> dict:
         parsed = urlparse(url or '')
         if parsed.scheme != 'https' or parsed.netloc not in {'www.letras.com', 'letras.com'}:
@@ -861,24 +607,10 @@ class Bridge:
         year = params.get('year')
         track_number = params.get('trackNumber')
         lyrics = params.get('lyrics')
-        queries = params.get('queries') or [f'{title} {artist}', f'{title} {artist} official audio']
-
         print(f'[DEBUG] download_and_save: title={title}, artist={artist}, cover_url={cover_url[:50] if cover_url else "EMPTY"}...')
 
         if not video_id:
-            for q in queries:
-                results = self._yt_search_fast(q, limit=5)
-                if results:
-                    scored = sorted(
-                        results,
-                        key=lambda r: self._score_smart(r, title, artist, album, 0),
-                        reverse=True,
-                    )
-                    video_id = scored[0]['videoId']
-                    break
-
-        if not video_id:
-            return {'success': False, 'error': 'No se encontró el video en YouTube'}
+            return {'success': False, 'error': 'candidate_invalid: resolved videoId required'}
 
         ext = 'mp3'
         output_dir = settings.get('download_folder', str(Path.home() / 'Music' / 'MHL Music'))
@@ -932,6 +664,7 @@ class Bridge:
         artist: str,
         queries: list,
         source_url: str | None = None,
+        expected_duration: int | float = 0,
     ) -> dict:
         """
         Descarga audio y retorna bytes en base64 + metadata al frontend.
@@ -943,19 +676,7 @@ class Bridge:
                 return {'success': False, 'error': 'Unsupported source URL'}
 
         if not video_id and not source_url:
-            for q in queries:
-                results = self._yt_search_fast(q, limit=5)
-                if results:
-                    scored = sorted(
-                        results,
-                        key=lambda r: self._score_smart(r, title, artist, '', 0),
-                        reverse=True,
-                    )
-                    video_id = scored[0]['videoId']
-                    break
-
-        if not video_id and not source_url:
-            return {'success': False, 'error': 'No se encontró el video en YouTube'}
+            return {'success': False, 'error': 'candidate_invalid: resolved videoId required'}
 
         ext = 'mp3'
         tmpdir = tempfile.mkdtemp(prefix='mhl_')
@@ -971,6 +692,7 @@ class Bridge:
                 '-o', tmppath,
                 '--no-playlist', '--force-overwrites',
                 '--ffmpeg-location', _bin('ffmpeg.exe'),
+                '--socket-timeout', '15', '--retries', '2', '--fragment-retries', '2',
                 '--quiet',
             ]
             proc = subprocess.run(args, capture_output=True, creationflags=CREATE_NO_WINDOW, timeout=300, encoding='utf-8', errors='replace')
@@ -981,18 +703,33 @@ class Bridge:
                 if files:
                     result_path = str(files[0])
 
-            if (proc.returncode != 0 or not os.path.exists(result_path)) and source_url:
-                return self.get_raw_audio(
-                    None,
-                    title,
-                    artist,
-                    queries,
-                    None,
-                )
-
             if proc.returncode != 0 or not os.path.exists(result_path):
                 err_detail = (proc.stderr or '').strip()
-                return {'success': False, 'error': f'yt-dlp error {proc.returncode}: {err_detail}'}
+                error_type = 'rate_limit' if re.search(r'403|forbidden|rate.?limit', err_detail, re.I) else 'extraction'
+                return {'success': False, 'error': f'{error_type}: yt-dlp error {proc.returncode}: {err_detail}'}
+
+            if os.path.getsize(result_path) < 16 * 1024:
+                return {'success': False, 'error': 'conversion: output file is too small'}
+
+            probe = subprocess.run(
+                [_bin('ffmpeg.exe'), '-v', 'info', '-i', result_path, '-f', 'null', '-'],
+                capture_output=True, creationflags=CREATE_NO_WINDOW, timeout=45,
+                encoding='utf-8', errors='replace',
+            )
+            if probe.returncode != 0:
+                return {'success': False, 'error': 'conversion: MP3 is not decodable'}
+            duration_match = re.search(r'Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)', probe.stderr or '')
+            actual_duration = 0.0
+            if duration_match:
+                actual_duration = (
+                    int(duration_match.group(1)) * 3600
+                    + int(duration_match.group(2)) * 60
+                    + float(duration_match.group(3))
+                )
+            if expected_duration and actual_duration:
+                tolerance = max(5.0, float(expected_duration) * 0.05)
+                if abs(actual_duration - float(expected_duration)) > tolerance:
+                    return {'success': False, 'error': 'candidate_invalid: downloaded duration mismatch'}
 
             audio_bytes = Path(result_path).read_bytes()
             b64 = _encode_audio_bytes(audio_bytes)
@@ -1002,6 +739,8 @@ class Bridge:
                 'videoId': video_id,
                 'sourceUrl': source_url,
                 'ext': ext,
+                'duration': actual_duration,
+                'size': len(audio_bytes),
             }
 
         except Exception as e:
@@ -1036,6 +775,61 @@ class Bridge:
                 'download_folder',
                 str(Path.home() / 'Music' / 'MHL Music'),
             ),
+        }
+
+    def get_device_context(self) -> dict:
+        locale_name = ''
+        battery_percent = 100
+        charging = True
+        available_memory_mb = 0
+        total_memory_mb = 0
+        if sys.platform == 'win32':
+            try:
+                import ctypes
+
+                locale_buffer = ctypes.create_unicode_buffer(85)
+                ctypes.windll.kernel32.GetUserDefaultLocaleName(locale_buffer, len(locale_buffer))
+                locale_name = locale_buffer.value
+
+                class MemoryStatus(ctypes.Structure):
+                    _fields_ = [
+                        ('dwLength', ctypes.c_ulong), ('dwMemoryLoad', ctypes.c_ulong),
+                        ('ullTotalPhys', ctypes.c_ulonglong), ('ullAvailPhys', ctypes.c_ulonglong),
+                        ('ullTotalPageFile', ctypes.c_ulonglong), ('ullAvailPageFile', ctypes.c_ulonglong),
+                        ('ullTotalVirtual', ctypes.c_ulonglong), ('ullAvailVirtual', ctypes.c_ulonglong),
+                        ('ullAvailExtendedVirtual', ctypes.c_ulonglong),
+                    ]
+
+                memory = MemoryStatus()
+                memory.dwLength = ctypes.sizeof(MemoryStatus)
+                if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(memory)):
+                    available_memory_mb = round(memory.ullAvailPhys / 1048576)
+                    total_memory_mb = round(memory.ullTotalPhys / 1048576)
+
+                class PowerStatus(ctypes.Structure):
+                    _fields_ = [
+                        ('ACLineStatus', ctypes.c_ubyte), ('BatteryFlag', ctypes.c_ubyte),
+                        ('BatteryLifePercent', ctypes.c_ubyte), ('SystemStatusFlag', ctypes.c_ubyte),
+                        ('BatteryLifeTime', ctypes.c_ulong), ('BatteryFullLifeTime', ctypes.c_ulong),
+                    ]
+
+                power = PowerStatus()
+                if ctypes.windll.kernel32.GetSystemPowerStatus(ctypes.byref(power)):
+                    charging = power.ACLineStatus == 1
+                    battery_percent = power.BatteryLifePercent if power.BatteryLifePercent <= 100 else -1
+            except Exception:
+                pass
+        return {
+            'online': True,
+            'metered': False,
+            'networkType': 'other',
+            'batteryPercent': battery_percent,
+            'charging': charging,
+            'batterySaver': False,
+            'availableMemoryMb': available_memory_mb,
+            'totalMemoryMb': total_memory_mb,
+            'processors': os.cpu_count() or 4,
+            'locale': locale_name or 'en-US',
         }
 
     def save_setting(self, key: str, value) -> dict:

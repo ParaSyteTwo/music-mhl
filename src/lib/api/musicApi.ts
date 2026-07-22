@@ -3,6 +3,15 @@ import { Capacitor } from '@capacitor/core';
 import type { Anime, AnimeTheme } from '@/types/anime';
 import { looksAnimeLike } from '@/lib/util/animeDetector';
 import { decodeBase64ArrayBuffer } from '@/lib/binaryEncoding';
+import {
+  CANDIDATE_RESOLVER_VERSION,
+  resolveDownloadCandidates,
+  type DownloadCandidate,
+  type EditionPreference,
+  type RawDownloadCandidate,
+} from '@/lib/download/candidateResolver';
+
+export type { DownloadCandidate } from '@/lib/download/candidateResolver';
 
 export { looksAnimeLike };
 
@@ -45,6 +54,7 @@ interface ProxiedTrack {
   duration?: number
   cover?: string
   preview?: string
+  edition?: Track['edition']
 }
 
 interface RawDeezerTrack {
@@ -62,6 +72,7 @@ interface RawDeezerTrack {
   duration?: number
   preview?: string
   isrc?: string
+  explicit_lyrics?: boolean
   release_date?: string
   track_position?: number
 }
@@ -139,6 +150,7 @@ function mapProxiedTrack(t: ProxiedTrack): Track {
     cover: t.cover || '',
     preview: t.preview || '',
     deezerId: t.deezerId == null ? undefined : Number(t.deezerId),
+    edition: t.edition ?? 'unknown',
   };
 }
 
@@ -192,6 +204,7 @@ function mapRawDeezerTrack(t: RawDeezerTrack): Track {
     cover: album.cover_big || album.cover_medium || album.cover_small || '',
     preview: t.preview || '',
     isrc: t.isrc || '',
+    edition: t.explicit_lyrics === true ? 'explicit' : t.explicit_lyrics === false ? 'clean' : 'unknown',
   };
 }
 
@@ -317,23 +330,31 @@ export async function getDeezerTrackMeta(trackId: string | number): Promise<{ ge
   }
 }
 
-export interface DownloadCandidate {
-  videoId: string;
-  title: string;
-  channel: string;
-  duration: number;
-  score: number;
-  label?: string;
-  confidence?: 'alta' | 'media' | 'baja';
-}
-
 export interface DownloadOptions {
   animeSearchEnabled?: boolean;
-  androidFastSearchMode?: boolean;
+  editionPreference?: EditionPreference;
+}
+
+export type DownloadErrorCode =
+  | 'network'
+  | 'rate_limit'
+  | 'candidate_invalid'
+  | 'edition_incompatible'
+  | 'extraction'
+  | 'conversion'
+  | 'metadata'
+  | 'write';
+
+export class DownloadFailure extends Error {
+  constructor(public readonly code: DownloadErrorCode, message: string) {
+    super(message);
+    this.name = 'DownloadFailure';
+  }
 }
 
 export interface CandidateSearchOptions {
-  fastMode?: boolean;
+  depth?: 'light' | 'deep';
+  editionPreference?: EditionPreference;
 }
 
 interface TimedCacheEntry<T> {
@@ -342,15 +363,15 @@ interface TimedCacheEntry<T> {
 }
 
 const SEARCH_CACHE_TTL_MS = 2 * 60 * 1000;
-const CANDIDATE_CACHE_TTL_MS = 10 * 60 * 1000;
-const EMPTY_CANDIDATE_CACHE_TTL_MS = 15 * 1000;
-const PERSISTENT_CANDIDATE_CACHE_TTL_MS = 3 * 24 * 60 * 60 * 1000;
+const CANDIDATE_CACHE_TTL_MS = 72 * 60 * 60 * 1000;
+const EMPTY_CANDIDATE_CACHE_TTL_MS = 10 * 60 * 1000;
+const PERSISTENT_CANDIDATE_CACHE_TTL_MS = 72 * 60 * 60 * 1000;
 const SEARCH_CACHE_MAX_ENTRIES = 100;
-const CANDIDATE_CACHE_MAX_ENTRIES = 40;
-const PERSISTENT_CANDIDATE_CACHE_MAX_ENTRIES = 80;
-const PERSISTENT_CANDIDATE_CACHE_KEY = 'mhl-android-candidate-cache-v1';
-const ANDROID_NORMAL_CANDIDATE_LIMIT = 12;
-const ANDROID_FAST_CANDIDATE_LIMIT = 8;
+const CANDIDATE_CACHE_MAX_ENTRIES = 200;
+const PERSISTENT_CANDIDATE_CACHE_MAX_ENTRIES = 200;
+const PERSISTENT_CANDIDATE_CACHE_KEY = `mhl-native-candidate-cache-v${CANDIDATE_RESOLVER_VERSION}`;
+const ANDROID_NORMAL_CANDIDATE_LIMIT = 8;
+const ANDROID_FAST_CANDIDATE_LIMIT = 3;
 const ANDROID_EXTRA_CANDIDATE_LIMIT = 5;
 
 const searchCache = new Map<string, TimedCacheEntry<Track[]>>();
@@ -386,7 +407,7 @@ function setCachedValue<T>(
 }
 
 function canUsePersistentCandidateCache(): boolean {
-  return typeof localStorage !== 'undefined' && Capacitor.isNativePlatform();
+  return typeof localStorage !== 'undefined' && isNativeApp();
 }
 
 function readPersistentCandidateCache(): Record<string, TimedCacheEntry<DownloadCandidate[]>> {
@@ -420,7 +441,6 @@ function getPersistentCandidateCacheValue(key: string): DownloadCandidate[] | un
 }
 
 function setPersistentCandidateCacheValue(key: string, value: DownloadCandidate[]): void {
-  if (value.length === 0) return;
   const entries = readPersistentCandidateCache();
   const sorted = Object.entries(entries)
     .filter(([, entry]) => entry.expiresAt > Date.now())
@@ -429,12 +449,17 @@ function setPersistentCandidateCacheValue(key: string, value: DownloadCandidate[
     const [oldestKey] = sorted.shift() ?? [];
     if (oldestKey) delete entries[oldestKey];
   }
-  entries[key] = { value, expiresAt: Date.now() + PERSISTENT_CANDIDATE_CACHE_TTL_MS };
+  entries[key] = {
+    value,
+    expiresAt: Date.now() + (value.length > 0 ? PERSISTENT_CANDIDATE_CACHE_TTL_MS : EMPTY_CANDIDATE_CACHE_TTL_MS),
+  };
   writePersistentCandidateCache(entries);
 }
 
 function getAndroidPrimaryCandidateLimit(options: CandidateSearchOptions = {}): number {
-  return options.fastMode ? ANDROID_FAST_CANDIDATE_LIMIT : ANDROID_NORMAL_CANDIDATE_LIMIT;
+  return options.depth === 'light'
+    ? ANDROID_FAST_CANDIDATE_LIMIT
+    : ANDROID_NORMAL_CANDIDATE_LIMIT;
 }
 
 function buildCandidateCacheKey(
@@ -443,7 +468,7 @@ function buildCandidateCacheKey(
   expanded: boolean,
   options: CandidateSearchOptions = {},
 ): string {
-  return `${track.deezerId ?? track.id}|${getPreferredTrackTitle(track)}|${track.artist}|${getPreferredAlbumName(track)}|anime:${animeSearchEnabled}|expanded:${expanded}|fast:${options.fastMode === true}`;
+  return `r${CANDIDATE_RESOLVER_VERSION}|${track.isrc || track.deezerId || track.id}|${getPreferredTrackTitle(track)}|${track.artist}|${getPreferredAlbumName(track)}|edition:${track.edition ?? 'unknown'}|preference:${options.editionPreference ?? 'catalog'}|anime:${animeSearchEnabled}|deep:${expanded || options.depth === 'deep'}`;
 }
 
 function normalizeSearchTerm(value: string): string {
@@ -534,101 +559,13 @@ async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   }
 }
 
-function classifyCandidate(candidate: Pick<DownloadCandidate, 'title' | 'channel'>): string {
-  const haystack = `${candidate.title} ${candidate.channel}`.toLowerCase();
-  if (/(opening|ending|\bop\b|\bed\b)/.test(haystack)) return 'anime op/ed';
-  if (/(cover|fan cover|spanish cover)/.test(haystack)) return 'cover';
-  if (/(live|concert|en vivo)/.test(haystack)) return 'live';
-  return 'original probable';
-}
-
-function scoreNativeCandidate(
-  track: Track,
-  candidate: Pick<DownloadCandidate, 'title' | 'channel' | 'duration'>,
-  queryIndex: number,
-  animeSearchEnabled: boolean,
-): number {
-  const title = candidate.title.toLowerCase();
-  const normalizedTitle = normalizeSearchTerm(candidate.title);
-  const channel = candidate.channel.toLowerCase();
-  const wantedTitle = normalizeSearchTerm(getPreferredTrackTitle(track));
-  const wantedArtist = normalizeSearchTerm(track.artist);
-  const wantedAlbum = normalizeSearchTerm(getPreferredAlbumName(track));
-  let score = 100 - queryIndex * 8;
-
-  // Detectar si es music video
-  const isMusicVideo = /(official music video|music video|\bmv\b|\bm\/v\b)/.test(title);
-
-  if (wantedTitle && normalizedTitle === wantedTitle) score += 40;
-  else if (wantedTitle && title.includes(wantedTitle)) score += 30;
-  if (wantedArtist && title.includes(wantedArtist)) score += 18;
-  if (wantedArtist && channel.includes(wantedArtist)) score += 14;
-  if (wantedAlbum && title.includes(wantedAlbum)) score += 12;
-
-  // Duración más estricta: penalizar si difiere mucho
-  if (track.duration > 0 && candidate.duration > 0) {
-    const diffPct = Math.abs(candidate.duration - track.duration) / track.duration;
-    if (diffPct <= 0.02) score += 50;  // ≤2% = canción limpia
-    else if (diffPct <= 0.05) score += 30;
-    else if (diffPct <= 0.10) score += 15;
-    else if (diffPct <= 0.20) score -= 10;
-    else if (diffPct <= 0.40) score -= 30;
-    else score -= 55;
-  }
-
-  // Penalizar music videos (tienen intro/outro)
-  if (isMusicVideo) score -= 35;
-
-  if (title.includes('official audio')) score += 25;
-  if (title.includes('audio only')) score += 20;
-  if (channel.includes('topic')) score += 14;
-  if (channel.includes('official')) score += 10;
-  if (
-    animeSearchEnabled &&
-    /(opening|ending|\bop\b|\bed\b|full version)/.test(title) &&
-    looksAnimeLike(track)
-  ) score += 15;
-  if (/(lyrics|lyric video|sub esp|sub english|subbed)/.test(title)) score -= 18;
-  if (/(karaoke|reaction|nightcore|sped up|slowed|8d|amv|edit)/.test(title)) score -= 35;
-  if (/(instrumental|extended|extended mix)/.test(title)) score -= 25;
-  if (/(remix|bootleg|mashup)/.test(title) && !title.includes('official remix')) score -= 24;
-  if (/(dub cover|english dub cover|fan dub)/.test(title)) score -= 35;
-  if (title.includes('cover') && !channel.includes(wantedArtist)) score -= 30;
-  if (/(live|concert|en vivo)/.test(title) && !title.includes('official audio')) score -= 25;
-
-  return score;
-}
-
-function confidenceFromScore(score: number): 'alta' | 'media' | 'baja' {
-  if (score >= 120) return 'alta';
-  if (score >= 90) return 'media';
-  return 'baja';
-}
-
 function rankDownloadCandidates(
   track: Track,
   candidates: DownloadCandidate[],
   animeSearchEnabled = false,
 ): DownloadCandidate[] {
-  const merged = new Map<string, DownloadCandidate>();
-  for (const candidate of candidates) {
-    if (!candidate.videoId) continue;
-    const localScore = scoreNativeCandidate(track, candidate, 0, animeSearchEnabled);
-    const score = candidate.score >= 1000 ? candidate.score : localScore;
-    const normalized: DownloadCandidate = {
-      ...candidate,
-      score,
-      label: candidate.label || classifyCandidate(candidate),
-      confidence: confidenceFromScore(score),
-    };
-    const existing = merged.get(candidate.videoId);
-    if (!existing || normalized.score > existing.score) {
-      merged.set(candidate.videoId, normalized);
-    }
-  }
-  return [...merged.values()]
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 3);
+  void animeSearchEnabled;
+  return resolveDownloadCandidates(track, candidates, { editionPreference: 'catalog' });
 }
 
 function shouldExpandCandidateSearch(candidates: DownloadCandidate[]): boolean {
@@ -664,14 +601,29 @@ async function fetchDownloadCandidates(
         isrc: track.isrc || '',
         queries,
         animeSearchEnabled,
+        source: 'youtube_music',
+        depth: expanded || options.depth === 'deep' ? 'deep' : 'light',
       });
       if (!result.success) throw new Error(result.error || 'Error obteniendo candidatos');
-      const finalCandidates = rankDownloadCandidates(
+      let rawCandidates = result.candidates as RawDownloadCandidate[];
+      let finalCandidates = resolveDownloadCandidates(
         track,
-        result.candidates as DownloadCandidate[],
-        animeSearchEnabled,
+        rawCandidates,
+        { editionPreference: options.editionPreference ?? 'catalog' },
       );
+      if ((expanded || options.depth === 'deep') && !finalCandidates.some((candidate) => candidate.verification === 'verified')) {
+        const fallback = await api.get_candidates({
+          title: getPreferredTrackTitle(track), artist: track.artist, album: getPreferredAlbumName(track),
+          duration: track.duration ?? 0, isrc: track.isrc || '', queries,
+          animeSearchEnabled, source: 'youtube', depth: 'deep',
+        });
+        if (fallback.success) rawCandidates = [...rawCandidates, ...(fallback.candidates as RawDownloadCandidate[])];
+        finalCandidates = resolveDownloadCandidates(track, rawCandidates, {
+          editionPreference: options.editionPreference ?? 'catalog',
+        });
+      }
       setCachedValue(candidateCache, cacheKey, finalCandidates, finalCandidates.length > 0 ? CANDIDATE_CACHE_TTL_MS : EMPTY_CANDIDATE_CACHE_TTL_MS, CANDIDATE_CACHE_MAX_ENTRIES);
+      setPersistentCandidateCacheValue(cacheKey, finalCandidates);
       return finalCandidates;
     } catch (err) {
       console.error('[getDownloadCandidates] PyWebView error:', err);
@@ -681,46 +633,30 @@ async function fetchDownloadCandidates(
 
   if (Capacitor.isNativePlatform()) {
     try {
-      const { searchYouTubeNative, searchYouTubeNativeMulti } = await import('@/lib/ytdlpBridge');
+      const { searchYouTubeNative } = await import('@/lib/ytdlpBridge');
       const queries = buildAndroidCandidateQueries(track, animeSearchEnabled);
-      // Más queries para anime (Opening/Ending numerados)
-      const maxQueries = shouldUseAnimeEnhancements(track, animeSearchEnabled) ? 8 : 4;
       const primaryResults = await withTimeout(
-        searchYouTubeNative(queries[0], getAndroidPrimaryCandidateLimit(options)),
+        searchYouTubeNative(queries[0], getAndroidPrimaryCandidateLimit(options), {
+          source: 'youtube_music',
+          enrich: expanded || options.depth === 'deep',
+        }),
         20000,
       ).catch(() => []);
-      const merged = new Map<string, DownloadCandidate>();
-      const addResults = (
-        results: Awaited<ReturnType<typeof searchYouTubeNative>>,
-        queryIndex: number,
-      ) => {
-        for (const result of results) {
-          const score = scoreNativeCandidate(track, result, queryIndex, animeSearchEnabled);
-          const candidate: DownloadCandidate = {
-            videoId: result.videoId,
-            title: result.title,
-            channel: result.channel,
-            duration: result.duration,
-            score,
-            label: classifyCandidate(result),
-            confidence: confidenceFromScore(score),
-          };
-          const existing = merged.get(result.videoId);
-          if (!existing || candidate.score > existing.score) merged.set(result.videoId, candidate);
-        }
-      };
-      addResults(primaryResults, 0);
-      let finalCandidates = rankDownloadCandidates(track, [...merged.values()], animeSearchEnabled);
-      if (
-        expanded
-        || (shouldUseAnimeEnhancements(track, animeSearchEnabled) && shouldExpandCandidateSearch(finalCandidates))
-      ) {
-        const extraResults = await withTimeout(
-          searchYouTubeNativeMulti(queries.slice(1, maxQueries), ANDROID_EXTRA_CANDIDATE_LIMIT),
-          35000,
+      let rawCandidates: RawDownloadCandidate[] = primaryResults;
+      let finalCandidates = resolveDownloadCandidates(track, rawCandidates, {
+        editionPreference: options.editionPreference ?? 'catalog',
+      });
+      if ((expanded || options.depth === 'deep') && !finalCandidates.some((candidate) => candidate.verification === 'verified')) {
+        const fallbackResults = await withTimeout(
+          searchYouTubeNative(queries[1] ?? queries[0], ANDROID_EXTRA_CANDIDATE_LIMIT, {
+            source: 'youtube', enrich: true,
+          }),
+          25000,
         ).catch(() => []);
-        addResults(extraResults, 1);
-        finalCandidates = rankDownloadCandidates(track, [...merged.values()], animeSearchEnabled);
+        rawCandidates = [...rawCandidates, ...fallbackResults];
+        finalCandidates = resolveDownloadCandidates(track, rawCandidates, {
+          editionPreference: options.editionPreference ?? 'catalog',
+        });
       }
       setCachedValue(candidateCache, cacheKey, finalCandidates, finalCandidates.length > 0 ? CANDIDATE_CACHE_TTL_MS : EMPTY_CANDIDATE_CACHE_TTL_MS, CANDIDATE_CACHE_MAX_ENTRIES);
       setPersistentCandidateCacheValue(cacheKey, finalCandidates);
@@ -731,30 +667,8 @@ async function fetchDownloadCandidates(
     }
   }
 
-  // Web: llamar Railway /candidates directamente
-  const res = await fetch(`${getRailwayUrl()}/candidates`, {
-    method: 'POST',
-    headers: railwayHeaders(),
-    body: JSON.stringify({
-      title: getPreferredTrackTitle(track),
-      artist: track.artist,
-      album: getPreferredAlbumName(track),
-      duration: track.duration ?? 0,
-    }),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => null) as { error?: string; detail?: string } | null;
-    throw new Error(err?.error || err?.detail || 'Error obteniendo candidatos');
-  }
-  const data = await res.json();
-  if (!data.success) throw new Error(data.error || data.detail || 'Sin candidatos');
-  const finalCandidates = rankDownloadCandidates(
-    track,
-    data.candidates as DownloadCandidate[],
-    animeSearchEnabled,
-  );
-  setCachedValue(candidateCache, cacheKey, finalCandidates, finalCandidates.length > 0 ? CANDIDATE_CACHE_TTL_MS : EMPTY_CANDIDATE_CACHE_TTL_MS, CANDIDATE_CACHE_MAX_ENTRIES);
-  return finalCandidates;
+  // Web/PWA no forma parte del producto activo.
+  return [];
 }
 
 export async function getDownloadCandidates(
@@ -837,6 +751,22 @@ export async function prefetchDownloadCandidates(
   }
 }
 
+export function invalidateDownloadCandidateCache(track: Track): void {
+  const identity = String(track.isrc || track.deezerId || track.id);
+  for (const key of candidateCache.keys()) {
+    if (key.includes(`|${identity}|`)) candidateCache.delete(key);
+  }
+  const entries = readPersistentCandidateCache();
+  let changed = false;
+  for (const key of Object.keys(entries)) {
+    if (key.includes(`|${identity}|`)) {
+      delete entries[key];
+      changed = true;
+    }
+  }
+  if (changed) writePersistentCandidateCache(entries);
+}
+
 interface WebDownloadTicketResponse {
   success: boolean;
   downloadUrl?: string;  // Viejo: descarga desde backend
@@ -860,17 +790,17 @@ export async function downloadTrackAudio(
   if (isRunningInPyWebView()) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const api = (window as any).pywebview.api;
-    const title = getPreferredTrackTitle(track);
-    const artist = track.artist;
-    const animeSearchEnabled = options.animeSearchEnabled ?? false;
-    const queries = buildCandidateQueries(track, animeSearchEnabled);
+    if (!videoIdOverride && !sourceUrlOverride) {
+      throw new DownloadFailure('candidate_invalid', 'La descarga requiere un candidato resuelto');
+    }
     onProgress?.(10);
     const result = await api.get_raw_audio(
       videoIdOverride ?? null,
-      title,
-      artist,
-      queries,
+      getPreferredTrackTitle(track),
+      track.artist,
+      [],
       sourceUrlOverride ?? null,
+      track.duration ?? 0,
     );
     if (!result.success) throw new Error(result.error || 'Error descargando audio');
     onProgress?.(85);
@@ -886,47 +816,24 @@ export async function downloadTrackAudio(
       try {
         return await downloadMp3Native(null, {
           sourceUrl: sourceUrlOverride,
+          expectedDuration: track.duration,
         });
       } catch {
         // La fuente curada puede estar temporalmente caída; usar YouTube como respaldo.
       }
     }
 
-    if (videoIdOverride) {
-      onProgress?.(10);
-      return downloadMp3Native(videoIdOverride);
+    if (!videoIdOverride) {
+      throw new DownloadFailure('candidate_invalid', 'La descarga requiere un candidato resuelto');
     }
-
     onProgress?.(10);
-
-    // Reutiliza el ranking escalonado y la caché del picker.
-    const scored = await getDownloadCandidates(track, options.animeSearchEnabled ?? false, {
-      fastMode: options.androidFastSearchMode ?? false,
-    });
-    if (!scored.length) throw new Error('No se encontró en YouTube');
-
-    onProgress?.(25);
-    let lastError = '';
-    let autoUpdated = false;
-
-    for (const candidate of scored) {
-      try {
-        const buffer = await downloadMp3Native(candidate.videoId);
-        return buffer;
-      } catch (e) {
-        lastError = e instanceof Error ? e.message : 'Failed';
-        const isOutdated = /403|forbidden|outdated|older than/i.test(lastError);
-        if (isOutdated && !autoUpdated) {
-          autoUpdated = true;
-          try {
-            const { updateYtDlp } = await import('@/lib/ytdlpBridge');
-            await updateYtDlp();
-          } catch { /* update failure is non-fatal */ }
-        }
-        continue;
-      }
+    try {
+      return await downloadMp3Native(videoIdOverride, { expectedDuration: track.duration });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se pudo descargar';
+      if (/403|forbidden|rate.?limit/i.test(message)) throw new DownloadFailure('rate_limit', message);
+      throw new DownloadFailure('extraction', message);
     }
-    throw new Error(lastError || 'No se pudo descargar');
   }
 
   // Web: obtener ticket de Railway y luego descargar

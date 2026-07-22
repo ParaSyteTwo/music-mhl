@@ -3,7 +3,7 @@ import { Settings, Folder, RefreshCw, CheckCircle2, FolderOpen, X, Music2 } from
 import { motion } from 'framer-motion';
 import { useMusicStore } from '@/store/musicStore';
 import { useI18n } from '@/lib/useI18n';
-import type { UiLanguageMode } from '@/lib/language';
+import type { LyricsTargetLanguage, UiLanguageMode } from '@/lib/language';
 import { Capacitor } from '@capacitor/core';
 import { isPyWebView } from '@/lib/platform';
 import type { AudioPlayer } from '@/lib/openFileBridge';
@@ -26,7 +26,11 @@ export default function SettingsPage() {
     saveLrcFile, setSaveLrcFile,
     uiLanguageMode, setUiLanguageMode,
     animeSearchEnabled, setAnimeSearchEnabled,
-    androidFastSearchMode, setAndroidFastSearchMode,
+    lyricsTargetLanguage, setLyricsTargetLanguage,
+    autoCandidateResolution, setAutoCandidateResolution,
+    resolutionProfile, setResolutionProfile,
+    cellularResolutionPolicy, setCellularResolutionPolicy,
+    editionPreference, setEditionPreference,
   } = useMusicStore();
 
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'done' | 'skipped' | 'error'>('idle');
@@ -192,10 +196,55 @@ export default function SettingsPage() {
         </div>
       </section>
 
+      <section className="mb-8">
+        <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">{t('candidateResolutionSettings')}</h2>
+        <div className="p-4 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] space-y-4">
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input type="checkbox" checked={autoCandidateResolution} onChange={(e) => setAutoCandidateResolution(e.target.checked)} className="mt-0.5" />
+            <div><p className="text-sm text-[#F5F5F0]">{t('autoCandidateResolution')}</p><p className="text-xs text-[#666660]">{t('autoCandidateResolutionHelp')}</p></div>
+          </label>
+          <div className="grid grid-cols-2 gap-2">
+            {(['adaptive', 'economy'] as const).map((profile) => (
+              <button key={profile} type="button" onClick={() => setResolutionProfile(profile)} className={`px-3 py-2 rounded-lg text-xs font-semibold ${resolutionProfile === profile ? 'bg-[#C8F04B] text-[#18181A]' : 'bg-[rgba(255,255,255,0.04)] text-[#B0B0B0]'}`}>
+                {t(profile === 'adaptive' ? 'resolutionAdaptive' : 'resolutionEconomy')}
+              </button>
+            ))}
+          </div>
+          <div>
+            <p className="text-xs text-[#777] mb-2">{t('cellularResolutionPolicy')}</p>
+            <div className="grid grid-cols-3 gap-2">
+              {(['off', 'light', 'full'] as const).map((policy) => (
+                <button key={policy} type="button" onClick={() => setCellularResolutionPolicy(policy)} className={`px-2 py-2 rounded-lg text-xs ${cellularResolutionPolicy === policy ? 'bg-[#C8F04B] text-[#18181A]' : 'bg-[rgba(255,255,255,0.04)] text-[#B0B0B0]'}`}>
+                  {t(`resolutionCellular${policy[0].toUpperCase()}${policy.slice(1)}`)}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="text-xs text-[#777] mb-2">{t('editionPreference')}</p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {(['catalog', 'explicit', 'clean', 'ask'] as const).map((preference) => (
+                <button key={preference} type="button" onClick={() => setEditionPreference(preference)} className={`px-2 py-2 rounded-lg text-xs ${editionPreference === preference ? 'bg-[#C8F04B] text-[#18181A]' : 'bg-[rgba(255,255,255,0.04)] text-[#B0B0B0]'}`}>
+                  {t(`editionPreference${preference[0].toUpperCase()}${preference.slice(1)}`)}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Letras */}
       <section className="mb-8">
         <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">{t('lyrics')}</h2>
         <div className="p-4 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] space-y-3">
+          <div>
+            <p className="text-xs text-[#777] mb-2">{t('lyricsTargetLanguage')}</p>
+            <div className="grid grid-cols-3 gap-2">
+              {([['system', t('languageSystem')], ['es', t('languageSpanish')], ['en', t('languageEnglish')]] as Array<[LyricsTargetLanguage, string]>).map(([mode, label]) => (
+                <button key={mode} type="button" onClick={() => setLyricsTargetLanguage(mode)} className={`px-3 py-2 rounded-lg text-xs font-semibold ${lyricsTargetLanguage === mode ? 'bg-[#C8F04B] text-[#18181A]' : 'bg-[rgba(255,255,255,0.04)] text-[#B0B0B0]'}`}>{label}</button>
+              ))}
+            </div>
+          </div>
           <label className="flex items-start gap-3 cursor-pointer">
             <input
               type="checkbox"
@@ -528,18 +577,6 @@ export default function SettingsPage() {
             )}
           </h2>
           <div className="p-4 rounded-lg bg-[#18181A] border border-[#232325] flex flex-col gap-2">
-            <label className="flex items-start gap-3 cursor-pointer pb-3 mb-2 border-b border-[#232325]">
-              <input
-                type="checkbox"
-                checked={androidFastSearchMode}
-                onChange={(e) => setAndroidFastSearchMode(e.target.checked)}
-                className="mt-0.5 accent-[#C8F04B]"
-              />
-              <div>
-                <p className="text-sm font-semibold text-[#F5F5F0]">{t('androidFastSearchMode')}</p>
-                <p className="text-xs text-[#8A8A8A] mt-0.5">{t('androidFastSearchModeHelp')}</p>
-              </div>
-            </label>
             <div className="flex items-center gap-3">
               <div className={`rounded-full p-2 ${ytDlpUpdateAvailable ? 'bg-[#C8F04B]/10' : 'bg-[#232325]'}`}>
                 <RefreshCw className={`w-6 h-6 ${ytDlpUpdateAvailable ? 'text-[#C8F04B]' : 'text-[#8A8A8A]'}`} />

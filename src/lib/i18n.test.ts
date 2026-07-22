@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { resolveEffectiveLanguage, resolveSystemLanguage, translate } from './i18n';
+import { getBrowserLanguages, setNativeLocale } from './language';
 
 describe('i18n language resolution', () => {
   it('resolves Spanish system languages to es', () => {
@@ -20,6 +21,13 @@ describe('i18n language resolution', () => {
   it('manual override wins over system language', () => {
     expect(resolveEffectiveLanguage('es', ['en-US'])).toBe('es');
     expect(resolveEffectiveLanguage('en', ['es-ES'])).toBe('en');
+  });
+
+  it('prefers the native bridge locale over WebView navigator language', () => {
+    setNativeLocale('es-ES');
+    expect(getBrowserLanguages()).toEqual(['es-ES']);
+    expect(resolveEffectiveLanguage('system')).toBe('es');
+    setNativeLocale(null);
   });
 
   it('falls back to the key for unknown translations', () => {
