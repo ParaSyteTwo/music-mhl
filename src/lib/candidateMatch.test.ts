@@ -47,22 +47,35 @@ describe('candidate match presentation', () => {
     }));
 
     expect(result.tone).toBe('exact');
-    expect(result.percent).toBeGreaterThanOrEqual(94);
+    expect(result.percent).toBe(100);
     expect(result.badgeKeys).toEqual([
       'candidateOfficialAudio',
       'candidateExactDuration',
     ]);
   });
 
-  it('allows a non-official exact-duration candidate to be a high match', () => {
+  it('keeps a non-official exact-duration candidate below 100 percent', () => {
     const result = getCandidateMatchPresentation(track, candidate({
       title: 'Artist - Song',
       channel: 'Uploader',
       score: 210,
+      confidence: 'media',
+      verification: 'probable',
+      evidence: {
+        isrcMatch: false,
+        titleMatch: true,
+        artistMatch: true,
+        albumMatch: true,
+        durationDifference: 0,
+        official: false,
+        youtubeMusicSong: true,
+        editionMatch: null,
+        contradictions: [],
+      },
     }));
 
-    expect(result.tone).toBe('high');
-    expect(result.percent).toBe(95);
+    expect(result.tone).toBe('review');
+    expect(result.percent).toBeLessThan(100);
     expect(result.badgeKeys).toContain('candidateExactDuration');
   });
 
@@ -108,5 +121,34 @@ describe('candidate match presentation', () => {
     expect(result.statusKey).toBe('candidateReview');
     expect(result.detailKey).toBe('candidateDetailMusicVideo');
     expect(result.badgeKeys).toContain('candidateMusicVideo');
+  });
+
+  it('does not show 100 percent for a YouTube Music candidate that still needs review', () => {
+    const result = getCandidateMatchPresentation(track, candidate({
+      verification: 'probable',
+      confidence: 'media',
+    }));
+
+    expect(result.tone).toBe('review');
+    expect(result.percent).toBeLessThan(100);
+  });
+
+  it('explains when artist evidence is the missing verification signal', () => {
+    const result = getCandidateMatchPresentation(track, candidate({
+      verification: 'rejected',
+      evidence: {
+        isrcMatch: false,
+        titleMatch: true,
+        artistMatch: false,
+        albumMatch: false,
+        durationDifference: 0,
+        official: false,
+        youtubeMusicSong: true,
+        editionMatch: null,
+        contradictions: [],
+      },
+    }));
+
+    expect(result.detailKey).toBe('candidateDetailArtistMismatch');
   });
 });

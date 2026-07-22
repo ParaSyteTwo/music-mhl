@@ -998,10 +998,6 @@ function parseTimedLyricLines(syncedLrc: string): TimedLyricLine[] {
     .filter((line): line is TimedLyricLine => Boolean(line?.timestamp && line.text))
 }
 
-function estimateTimestamp(index: number): string {
-  return `${String(Math.floor(index / 20)).padStart(2, '0')}:${String((index % 20) * 3).padStart(2, '0')}.00`
-}
-
 function alignLetrasTimestamps(
   originalLines: string[],
   syncedLrc: string,
@@ -1010,26 +1006,18 @@ function alignLetrasTimestamps(
   const timedLines = parseTimedLyricLines(syncedLrc)
   if (!timedLines.length) return null
 
-  const used = new Set<number>()
-  const aligned = originalLines.map((line, index) => {
-    const indexedLine = timedLines[index]
-    if (indexedLine && !used.has(index) && areEquivalent(indexedLine.text, line)) {
-      used.add(index)
-      return indexedLine.timestamp
-    }
-
-    const matchIndex = timedLines.findIndex((timedLine, candidateIndex) => (
-      !used.has(candidateIndex) && areEquivalent(timedLine.text, line)
-    ))
-    if (matchIndex < 0) return undefined
-    used.add(matchIndex)
-    return timedLines[matchIndex].timestamp
-  })
-
-  const matchCount = aligned.filter(Boolean).length
-  return matchCount >= Math.max(1, Math.ceil(originalLines.length * 0.5))
-    ? aligned
-    : null
+  let nextTimedIndex = 0
+  const aligned: Array<string | undefined> = []
+  for (const line of originalLines) {
+    const relativeIndex = timedLines
+      .slice(nextTimedIndex)
+      .findIndex((timedLine) => areEquivalent(timedLine.text, line))
+    if (relativeIndex < 0) return null
+    const matchIndex = nextTimedIndex + relativeIndex
+    aligned.push(timedLines[matchIndex].timestamp)
+    nextTimedIndex = matchIndex + 1
+  }
+  return aligned
 }
 
 async function _combineLyrics(
@@ -1045,6 +1033,7 @@ async function _combineLyrics(
     detectScript,
     detectLyricSourceLanguage,
     areLyricLinesEquivalent,
+    processLyrics,
     romanizeLines,
     shouldTranslateLyrics,
     translateLines,
@@ -1054,24 +1043,36 @@ async function _combineLyrics(
   const timestamps = lrclib?.syncedLrc
     ? alignLetrasTimestamps(letras.original, lrclib.syncedLrc, areLyricLinesEquivalent)
     : null
+  if (lrclib?.syncedLrc && !timestamps) {
+    return processLyrics(lrclib.syncedLrc, lrclib.plainLrc, p)
+  }
   const shouldTranslate = shouldTranslateLyrics(sourceLang, p.deviceLang, p.lyricTranslation)
+  const hasAlignedTranslation = (
+    letras.translated.length === letras.original.length
+    && letras.translated.some((line) => line.trim())
+  )
   const translated = shouldTranslate
-    ? p.deviceLang === 'es' && letras.translated.length > 0
+    ? p.deviceLang === 'es' && hasAlignedTranslation
       ? letras.translated
       : await translateLines(letras.original, p.deviceLang)
     : null
-  const romaji = p.lyricLatinOnly && sourceScript !== 'latin' && letras.romaji.length === 0
-    ? await romanizeLines(letras.original, sourceScript)
-    : letras.romaji
-
-  const maxLines = Math.max(
-    letras.original.length,
-    romaji.length || 0,
-    translated?.length || 0,
+  const needsRomanization = (
+    (p.lyricRomanization || p.lyricLatinOnly)
+    && sourceScript !== 'latin'
   )
+  const hasAlignedRomanization = (
+    letras.romaji.length === letras.original.length
+    && letras.romaji.some((line) => line.trim())
+  )
+  const romaji = needsRomanization
+    ? hasAlignedRomanization
+      ? letras.romaji
+      : await romanizeLines(letras.original, sourceScript)
+    : []
+  const plainResult: string[] = []
 
-  for (let i = 0; i < maxLines; i++) {
-    const ts = timestamps?.[i] ?? estimateTimestamp(i)
+  for (let i = 0; i < letras.original.length; i++) {
+    const ts = timestamps?.[i]
 
     const selectedLines: string[] = []
     const pushDistinct = (line: string | undefined) => {
@@ -1082,7 +1083,8 @@ async function _combineLyrics(
         return
       }
       selectedLines.push(line)
-      result.push(`[${ts}]${line}`)
+      plainResult.push(line)
+      if (ts) result.push(`[${ts}]${line}`)
     }
 
     if (p.lyricLatinOnly) {
@@ -1094,7 +1096,10 @@ async function _combineLyrics(
     if (shouldTranslate) pushDistinct(translated?.[i])
   }
 
-  return { synced: result.join('\n'), plain: result.join('\n') }
+  return {
+    synced: timestamps ? result.join('\n') || null : null,
+    plain: plainResult.join('\n') || null,
+  }
 }
 
 export const __testing = {

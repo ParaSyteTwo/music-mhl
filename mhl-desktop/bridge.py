@@ -48,6 +48,20 @@ def _encode_audio_bytes(value: bytes) -> str:
     return base64.b64encode(value).decode('ascii')
 
 
+def _metadata_text(data: dict, *keys: str) -> str:
+    for key in keys:
+        value = data.get(key)
+        values = value if isinstance(value, list) else [value]
+        for entry in values:
+            if isinstance(entry, str) and entry.strip():
+                return entry.strip()
+            if isinstance(entry, dict):
+                text = entry.get('name') or entry.get('title')
+                if isinstance(text, str) and text.strip():
+                    return text.strip()
+    return ''
+
+
 # ── Anime client (AniList + animethemes.moe) ─────────────────────────────────
 # Replica la misma forma de respuesta que el backend (services/ytdlp-service/modules/anime_client.py)
 # para que el frontend pueda cambiar de plataforma sin diferencias. Implementación
@@ -57,7 +71,7 @@ _ANILIST_ENDPOINT = 'https://graphql.anilist.co'
 _ANIMETHEMES_ENDPOINT = 'https://api.animethemes.moe'
 _ANIME_HEADERS = {
     'Content-Type': 'application/json',
-    'User-Agent': 'MHLMusic/1.4.8-beta.1',
+    'User-Agent': 'MHLMusic/1.4.8-beta.2',
 }
 _ANIME_TIMEOUT = 10
 
@@ -457,14 +471,19 @@ class Bridge:
                     video_id = d.get('id') or d.get('url') or ''
                     if not video_id:
                         continue
+                    candidate_artist = _metadata_text(
+                        d, 'artist', 'artists', 'creator', 'creators',
+                        'album_artist', 'album_artists',
+                    )
+                    candidate_channel = _metadata_text(d, 'channel', 'uploader') or candidate_artist
                     candidates.append({
                         'videoId': video_id,
                         'title': d.get('title') or '',
-                        'channel': d.get('channel') or d.get('uploader') or '',
+                        'channel': candidate_channel,
                         'duration': d.get('duration') or 0,
                         'source': source,
                         'resultType': 'song' if source == 'youtube_music' else 'video',
-                        'artist': d.get('artist') or d.get('creator') or '',
+                        'artist': candidate_artist,
                         'album': d.get('album') or '',
                         'isrc': d.get('isrc') or '',
                         'edition': 'unknown',
@@ -500,9 +519,15 @@ class Bridge:
             if result.returncode != 0 or not result.stdout.strip():
                 return
             detail = json.loads(result.stdout.strip().splitlines()[-1])
+            detail_artist = _metadata_text(
+                detail, 'artist', 'artists', 'creator', 'creators',
+                'album_artist', 'album_artists',
+            )
+            detail_channel = _metadata_text(detail, 'channel', 'uploader') or detail_artist
             candidate.update({
                 'duration': detail.get('duration') or candidate.get('duration') or 0,
-                'artist': detail.get('artist') or candidate.get('artist') or '',
+                'channel': detail_channel or candidate.get('channel') or '',
+                'artist': detail_artist or candidate.get('artist') or '',
                 'album': detail.get('album') or candidate.get('album') or '',
                 'isrc': detail.get('isrc') or '',
                 'sourceCodec': detail.get('acodec') or '',

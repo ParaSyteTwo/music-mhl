@@ -19,6 +19,7 @@ import com.yausername.youtubedl_android.YoutubeDLRequest;
 import com.yausername.youtubedl_android.YoutubeDLResponse;
 import com.yausername.ffmpeg.FFmpeg;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import android.content.ContentResolver;
@@ -255,14 +256,20 @@ public class YtDlpPlugin extends Plugin {
                 if (line.isEmpty() || !line.startsWith("{")) continue;
                 try {
                     JSONObject json = new JSONObject(line);
+                    String artist = metadataText(
+                        json, "artist", "artists", "creator", "creators",
+                        "album_artist", "album_artists"
+                    );
+                    String channel = metadataText(json, "channel", "uploader");
+                    if (channel.isEmpty()) channel = artist;
                     JSObject item = new JSObject();
                     item.put("videoId", json.optString("id", json.optString("url", "")));
                     item.put("title", json.optString("title", ""));
                     item.put("duration", json.optDouble("duration", 0));
-                    item.put("channel", json.optString("channel", json.optString("uploader", "")));
+                    item.put("channel", channel);
                     item.put("source", youtubeMusic ? "youtube_music" : "youtube");
                     item.put("resultType", youtubeMusic ? "song" : "video");
-                    item.put("artist", json.optString("artist", json.optString("creator", "")));
+                    item.put("artist", artist);
                     item.put("album", json.optString("album", ""));
                     item.put("isrc", json.optString("isrc", ""));
                     item.put("edition", "unknown");
@@ -287,6 +294,31 @@ public class YtDlpPlugin extends Plugin {
         return results;
     }
 
+    private String metadataText(JSONObject json, String... keys) {
+        for (String key : keys) {
+            Object value = json.opt(key);
+            if (value instanceof String) {
+                String text = ((String) value).trim();
+                if (!text.isEmpty()) return text;
+            }
+            if (value instanceof JSONArray) {
+                JSONArray values = (JSONArray) value;
+                for (int i = 0; i < values.length(); i++) {
+                    Object entry = values.opt(i);
+                    if (entry instanceof String && !((String) entry).trim().isEmpty()) {
+                        return ((String) entry).trim();
+                    }
+                    if (entry instanceof JSONObject) {
+                        String text = ((JSONObject) entry).optString("name", "").trim();
+                        if (text.isEmpty()) text = ((JSONObject) entry).optString("title", "").trim();
+                        if (!text.isEmpty()) return text;
+                    }
+                }
+            }
+        }
+        return "";
+    }
+
     private void enrichCandidate(JSObject item) {
         try {
             String videoId = item.getString("videoId");
@@ -299,8 +331,15 @@ public class YtDlpPlugin extends Plugin {
             detailRequest.addOption("--retries", "1");
             YoutubeDLResponse detailResponse = YoutubeDL.getInstance().execute(detailRequest);
             JSONObject detail = new JSONObject(detailResponse.getOut().trim());
+            String detailArtist = metadataText(
+                detail, "artist", "artists", "creator", "creators",
+                "album_artist", "album_artists"
+            );
+            String detailChannel = metadataText(detail, "channel", "uploader");
+            if (detailChannel.isEmpty()) detailChannel = detailArtist;
             item.put("duration", detail.optDouble("duration", item.optDouble("duration", 0)));
-            item.put("artist", detail.optString("artist", item.optString("artist", "")));
+            if (!detailChannel.isEmpty()) item.put("channel", detailChannel);
+            if (!detailArtist.isEmpty()) item.put("artist", detailArtist);
             item.put("album", detail.optString("album", item.optString("album", "")));
             item.put("isrc", detail.optString("isrc", ""));
             item.put("sourceCodec", detail.optString("acodec", ""));
