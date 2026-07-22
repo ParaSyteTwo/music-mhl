@@ -43,6 +43,24 @@ def test_general_youtube_is_only_used_when_requested_by_frontend():
     assert run.call_args.args[0][1].startswith('ytsearch8:')
 
 
+def test_youtube_music_artist_arrays_are_preserved_for_verification():
+    bridge = Bridge()
+    response = _response({
+        'id': 'soul-of-cinder', 'title': 'Soul of Cinder',
+        'artists': [{'name': 'Yuka Kitamura'}], 'duration': 352,
+    })
+
+    with patch('bridge.subprocess.run', return_value=response):
+        result = bridge.get_candidates({
+            'title': 'Soul of Cinder', 'artist': 'Yuka Kitamura',
+            'source': 'youtube_music', 'depth': 'light',
+        })
+
+    candidate = result['candidates'][0]
+    assert candidate['artist'] == 'Yuka Kitamura'
+    assert candidate['channel'] == 'Yuka Kitamura'
+
+
 def test_light_search_is_flat_and_bounded_to_three():
     bridge = Bridge()
     with patch('bridge.subprocess.run', return_value=_response()) as run:

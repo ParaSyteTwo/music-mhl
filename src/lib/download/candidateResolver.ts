@@ -1,6 +1,6 @@
 import type { Track, TrackEdition } from '@/types/music';
 
-export const CANDIDATE_RESOLVER_VERSION = 2;
+export const CANDIDATE_RESOLVER_VERSION = 3;
 
 export type CandidateSource = 'youtube_music' | 'youtube';
 export type CandidateVerification = 'verified' | 'probable' | 'review' | 'rejected';
@@ -141,8 +141,12 @@ export function resolveDownloadCandidates(
     const albumMatch = Boolean(wantedAlbum) && (
       candidateAlbum === wantedAlbum || containsWords(`${title} ${candidateAlbum}`, wantedAlbum)
     );
-    const official = /\b(topic|vevo|official|provided to youtube)\b/i.test(`${raw.channel} ${raw.title}`);
     const youtubeMusicSong = source === 'youtube_music' && (!raw.resultType || /song|track/i.test(raw.resultType));
+    const catalogArtistMatch = Boolean(candidateArtist) && containsWords(candidateArtist, wantedArtist);
+    const official = (
+      /\b(topic|vevo|official|provided to youtube)\b/i.test(`${raw.channel} ${raw.title}`)
+      || (youtubeMusicSong && catalogArtistMatch)
+    );
     const normalizeIsrc = (value: string) => value.replace(/[^A-Z0-9]/gi, '').toUpperCase();
     const isrcMatch = Boolean(
       track.isrc && raw.isrc && normalizeIsrc(track.isrc) === normalizeIsrc(raw.isrc),

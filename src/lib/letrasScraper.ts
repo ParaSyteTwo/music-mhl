@@ -132,8 +132,10 @@ function parseLetrasSongPage(html: string): { original: string[]; romaji: string
     const original = cleanText(clone.textContent)
     const romaji = cleanText(romanization?.textContent)
 
-    if (original) originalLines.push(original)
-    if (romaji) romajiLines.push(romaji)
+    if (original) {
+      originalLines.push(original)
+      romajiLines.push(romaji)
+    }
   }
 
   return originalLines.length > 0
@@ -151,9 +153,8 @@ function parseLetrasTranslationPage(html: string): string[] | null {
         clone.querySelectorAll('.romanization').forEach((child) => child.remove())
         return cleanText(clone.textContent)
       })
-      .filter(Boolean)
 
-    if (translated.length > 0) return translated
+    if (translated.some(Boolean)) return translated
   }
 
   const lines: string[] = []

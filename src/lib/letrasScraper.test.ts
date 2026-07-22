@@ -49,6 +49,20 @@ describe('letras.com scraper', () => {
     })
   })
 
+  it('preserves an empty romanization slot instead of shifting later lines', () => {
+    const partialRomanizationHtml = `
+      <div class="lyric-content">
+        <span class="verse"><span>一行目</span></span>
+        <span class="verse"><span>二行目</span><span class="romanization">nigyoume</span></span>
+      </div>
+    `
+
+    expect(__testing.parseLetrasSongPage(partialRomanizationHtml)).toEqual({
+      original: ['一行目', '二行目'],
+      romaji: ['', 'nigyoume'],
+    })
+  })
+
   it('parses the right translated column without mixing romanization lines', () => {
     expect(__testing.parseLetrasTranslationPage(translatedHtml)).toEqual([
       'Sonrisa invencible',

@@ -56,8 +56,9 @@ describe('musicApi lyrics combination', () => {
       },
     );
 
-    expect(result?.synced).not.toContain('durante toda');
-    expect(result?.synced).not.toContain('Continúo');
+    expect(result?.synced).toBeNull();
+    expect(result?.plain).not.toContain('durante toda');
+    expect(result?.plain).not.toContain('Continúo');
   });
 
   it('deduplicates an equal translated layer without removing repeated song lines', async () => {
@@ -77,8 +78,9 @@ describe('musicApi lyrics combination', () => {
       },
     );
 
-    expect(result?.synced?.match(/I love you/g)).toHaveLength(2);
-    expect(result?.synced).toContain('Te amo');
+    expect(result?.synced).toBeNull();
+    expect(result?.plain?.match(/I love you/g)).toHaveLength(2);
+    expect(result?.plain).toContain('Te amo');
   });
 
   it('aligns letras.com lines to matching LRCLIB timestamps instead of raw index order', async () => {
@@ -129,10 +131,57 @@ describe('musicApi lyrics combination', () => {
       },
     );
 
-    expect(result?.synced).toContain('muteki no egao');
-    expect(result?.synced).toContain('shiritai himitsu');
-    expect(result?.synced).not.toContain('無敵の笑顔');
-    expect(result?.synced).not.toContain('知りたい秘密');
+    expect(result?.synced).toBeNull();
+    expect(result?.plain).toContain('muteki no egao');
+    expect(result?.plain).toContain('shiritai himitsu');
+    expect(result?.plain).not.toContain('無敵の笑顔');
+    expect(result?.plain).not.toContain('知りたい秘密');
+  });
+
+  it('falls back to the canonical LRCLIB timeline when letras.com cannot align completely', async () => {
+    const result = await __testing.combineLyrics(
+      {
+        original: ['一致する行', '別バージョンの行'],
+        romaji: ['', ''],
+        translated: [],
+        sourceUrl: 'https://www.letras.com/example/song/',
+      },
+      {
+        syncedLrc: '[00:11.00]一致する行\n[00:19.00]正しい二行目',
+        plainLrc: '一致する行\n正しい二行目',
+      },
+      {
+        lyricOriginal: true,
+        lyricRomanization: false,
+        lyricTranslation: false,
+        deviceLang: 'es',
+      },
+    );
+
+    expect(result?.synced).toBe('[00:11.00]一致する行\n[00:19.00]正しい二行目');
+    expect(result?.synced).not.toContain('[00:03.00]');
+    expect(result?.synced).not.toContain('別バージョンの行');
+  });
+
+  it('never invents timestamps when only unsynchronized letras.com lyrics exist', async () => {
+    const result = await __testing.combineLyrics(
+      {
+        original: ['無敵の笑顔'],
+        romaji: ['muteki no egao'],
+        translated: ['Sonrisa invencible'],
+        sourceUrl: 'https://www.letras.com/yoasobi/idol/',
+      },
+      null,
+      {
+        lyricOriginal: false,
+        lyricRomanization: true,
+        lyricTranslation: true,
+        deviceLang: 'es',
+      },
+    );
+
+    expect(result?.synced).toBeNull();
+    expect(result?.plain).toBe('muteki no egao\nSonrisa invencible');
   });
 });
 

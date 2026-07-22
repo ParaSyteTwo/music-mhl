@@ -32,6 +32,29 @@ describe('candidateResolver', () => {
     expect(result.evidence.youtubeMusicSong).toBe(true);
   });
 
+  it('verifies structured YouTube Music catalog artist metadata without a Topic label', () => {
+    const [result] = resolveDownloadCandidates(track, [candidate({
+      channel: '',
+      artist: 'The Artist',
+    })]);
+
+    expect(result.evidence.titleMatch).toBe(true);
+    expect(result.evidence.artistMatch).toBe(true);
+    expect(result.evidence.official).toBe(true);
+    expect(result.verification).toBe('verified');
+  });
+
+  it('does not treat an unstructured uploader name as verified catalog metadata', () => {
+    const [result] = resolveDownloadCandidates(track, [candidate({
+      channel: 'The Artist',
+      artist: '',
+    })]);
+
+    expect(result.evidence.artistMatch).toBe(true);
+    expect(result.evidence.official).toBe(false);
+    expect(result.verification).toBe('probable');
+  });
+
   it.each([
     ['cover', 'Example Song cover'],
     ['live', 'Example Song live'],

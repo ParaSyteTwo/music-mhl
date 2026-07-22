@@ -25,6 +25,13 @@ function durationDifference(track: Track, candidate: DownloadCandidate): number 
 }
 
 function matchPercent(candidate: DownloadCandidate, tone: CandidateMatchTone): number {
+  if (
+    candidate.verification === 'verified'
+    && (tone === 'exact' || tone === 'high')
+    && candidate.evidence.titleMatch
+    && candidate.evidence.artistMatch
+    && candidate.evidence.contradictions.length === 0
+  ) return 100;
   if (candidate.score >= 1000) return tone === 'alternate' ? 78 : 99;
 
   const base = Math.round(58 + Math.max(0, candidate.score - 70) * 0.34);
@@ -107,6 +114,8 @@ export function getCandidateMatchPresentation(
   else if (altered) detailKey = 'candidateDetailAlternate';
   else if (musicVideo) detailKey = 'candidateDetailMusicVideo';
   else if (lyrics) detailKey = 'candidateDetailLyrics';
+  else if (!candidate.evidence.titleMatch) detailKey = 'candidateDetailTitleMismatch';
+  else if (!candidate.evidence.artistMatch) detailKey = 'candidateDetailArtistMismatch';
 
   return {
     tone,
