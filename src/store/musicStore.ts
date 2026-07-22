@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { Track, Download } from '@/types/music';
 import { audioEngine } from '@/lib/audioEngine';
-import { searchDeezer, downloadTrackAudio, getDeezerTrackMeta, getLyrics } from '@/lib/api/musicApi';
+import { searchDeezer, downloadTrackAudio, getDeezerTrackMeta, getLyrics, getDownloadCandidates, invalidateDownloadCandidateCache } from '@/lib/api/musicApi';
 import { writeID3Tags } from '@/lib/id3Writer';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
@@ -11,11 +11,19 @@ import { translate } from '@/lib/i18n';
 import {
   type Lang,
   type UiLanguageMode,
+  type LyricsTargetLanguage,
   isUiLanguageMode,
+  isLyricsTargetLanguage,
   resolveEffectiveLanguage,
+  resolveSystemLanguage,
 } from '@/lib/language';
 import { detectPlatform } from '@/lib/platform';
 import { decodeBase64ArrayBuffer } from '@/lib/binaryEncoding';
+import { getDeviceContext } from '@/lib/deviceContext';
+import { canDownloadWithOneTap, type EditionPreference } from '@/lib/download/candidateResolver';
+
+export type ResolutionProfile = 'adaptive' | 'economy';
+export type CellularResolutionPolicy = 'off' | 'light' | 'full';
 
 function storeText(mode: UiLanguageMode, key: string, vars?: Record<string, string | number>): string {
   return translate(resolveEffectiveLanguage(mode), key, vars);
@@ -33,6 +41,7 @@ export { getProgressLabel };
 
 let searchRequestId = 0;
 let isProcessingDownloadQueue = false;
+let rateLimitCooldownUntil = 0;
 
 export function getDownloadQueueDelayMs(
   currentPlatform: ReturnType<typeof detectPlatform> = detectPlatform(),
@@ -137,17 +146,25 @@ interface MusicStore {
   lyricTranslation: boolean;
   lyricLatinOnly: boolean;
   saveLrcFile: boolean;
+  lyricsTargetLanguage: LyricsTargetLanguage;
   setLyricOriginal: (v: boolean) => void;
   setLyricRomanization: (v: boolean) => void;
   setLyricTranslation: (v: boolean) => void;
   setLyricLatinOnly: (v: boolean) => void;
   setSaveLrcFile: (v: boolean) => void;
+  setLyricsTargetLanguage: (v: LyricsTargetLanguage) => void;
 
   // ─── Anime search (opt-in, off by default) ───
   animeSearchEnabled: boolean;
   setAnimeSearchEnabled: (v: boolean) => void;
-  androidFastSearchMode: boolean;
-  setAndroidFastSearchMode: (v: boolean) => void;
+  autoCandidateResolution: boolean;
+  resolutionProfile: ResolutionProfile;
+  cellularResolutionPolicy: CellularResolutionPolicy;
+  editionPreference: EditionPreference;
+  setAutoCandidateResolution: (v: boolean) => void;
+  setResolutionProfile: (v: ResolutionProfile) => void;
+  setCellularResolutionPolicy: (v: CellularResolutionPolicy) => void;
+  setEditionPreference: (v: EditionPreference) => void;
 
   // ─── yt-dlp status ───
   ytDlpVersion: string | null;
@@ -385,6 +402,16 @@ export const useMusicStore = create<MusicStore>()(
           videoIdOverride?: string,
           sourceUrlOverride?: string,
         ) => {
+          let resolvedVideoId = videoIdOverride;
+          if (Date.now() < rateLimitCooldownUntil) {
+            const seconds = Math.ceil((rateLimitCooldownUntil - Date.now()) / 1000);
+            set((s) => ({
+              downloads: s.downloads.map((download) => download.id === id
+                ? { ...download, status: 'error', error: `rate_limit: espera ${seconds}s antes de reintentar` }
+                : download),
+            }));
+            return;
+          }
           set((s) => ({ activeDownloads: s.activeDownloads + 1 }));
 
           const updateDl = (patch: Partial<Download>) =>
@@ -396,6 +423,11 @@ export const useMusicStore = create<MusicStore>()(
 
           const maxAttempts = 3;
           const resolvedFileName = buildDownloadFileName(track, 'mp3');
+          const nativeContext = await getDeviceContext().catch(() => null);
+          const lyricsTarget = get().lyricsTargetLanguage;
+          const lyricsLanguage = lyricsTarget === 'system'
+            ? resolveSystemLanguage(nativeContext?.locale ? [nativeContext.locale] : undefined)
+            : lyricsTarget;
           const supplementalDataPromise = Promise.all([
             track.deezerId
               ? getDeezerTrackMeta(track.deezerId).catch(() => ({ genre: null, year: null, trackNumber: null }))
@@ -409,7 +441,7 @@ export const useMusicStore = create<MusicStore>()(
                 lyricRomanization: get().lyricRomanization,
                 lyricTranslation: get().lyricTranslation,
                 lyricLatinOnly: get().lyricLatinOnly,
-                deviceLang: resolveEffectiveLanguage(get().uiLanguageMode),
+                deviceLang: lyricsLanguage,
               },
             ).catch(() => ({ synced: null, plain: null })),
           ]);
@@ -439,11 +471,12 @@ export const useMusicStore = create<MusicStore>()(
               const outputDir = settings.download_folder || 'C:/Users/Paul/Music/MHL Music';
               const [rawResult, [trackMeta, lyricsResult]] = await Promise.all([
                 api.get_raw_audio(
-                  videoIdOverride ?? null,
+                  resolvedVideoId ?? null,
                   track.canonicalTitle?.trim() || track.title,
                   track.artist,
                   queries,
                   sourceUrlOverride ?? null,
+                  track.duration ?? 0,
                 ),
                 supplementalDataPromise,
               ]);
@@ -471,12 +504,16 @@ export const useMusicStore = create<MusicStore>()(
               const fileName = buildDownloadFileName(track, 'mp3');
               const filePath = outputDir + '/' + fileName;
               const taggedArr = await taggedBlob.arrayBuffer();
+              if (taggedArr.byteLength < 16 * 1024) throw new Error('metadata: el MP3 etiquetado es demasiado pequeño');
               const writeResult = await api.write_file_bytes(
                 filePath,
                 Array.from(new Uint8Array(taggedArr)),
               );
               if (!writeResult?.success) {
                 throw new Error(writeResult?.error || 'No se pudo guardar el archivo descargado');
+              }
+              if ((writeResult.size ?? 0) !== taggedArr.byteLength) {
+                throw new Error('write: el tamaño guardado no coincide con el MP3 etiquetado');
               }
 
               // Guardar .lrc junto al MP3 para que reproductores lo lean con sincronización
@@ -520,10 +557,7 @@ export const useMusicStore = create<MusicStore>()(
               const [audioBuffer, [trackMeta, lyricsResult]] = await Promise.all([
                 downloadTrackAudio(track, (progress) => {
                   updateDl({ progress });
-                }, {
-                  animeSearchEnabled: get().animeSearchEnabled,
-                  androidFastSearchMode: get().androidFastSearchMode,
-                }, videoIdOverride, sourceUrlOverride),
+                }, resolvedVideoId, sourceUrlOverride),
                 supplementalDataPromise,
               ]);
               updateDl({ progress: 80 });
@@ -544,6 +578,7 @@ export const useMusicStore = create<MusicStore>()(
                 updateDl({ progress: 95 });
 
                 const arr = await taggedBlob.arrayBuffer();
+                if (arr.byteLength < 16 * 1024) throw new Error('metadata: el MP3 etiquetado es demasiado pequeño');
                 const base64 = btoa(new Uint8Array(arr).reduce((data, byte) => data + String.fromCharCode(byte), ''));
                 // Guardar en Music/MHL Music (visible en reproductores) via MediaStore
                 const { saveTaggedAudioToMusic } = await import('@/lib/ytdlpBridge');
@@ -613,6 +648,26 @@ export const useMusicStore = create<MusicStore>()(
             } catch (error) {
               const msg = error instanceof Error ? error.message : 'Download failed';
 
+              if (/rate_limit|403|forbidden/i.test(msg)) {
+                rateLimitCooldownUntil = Date.now() + 5 * 60 * 1000;
+                updateDl({ status: 'error', error: msg });
+                return;
+              }
+
+              if (!sourceUrlOverride && resolvedVideoId && /unavailable|not available|candidate_invalid/i.test(msg)) {
+                invalidateDownloadCandidateCache(track);
+                const alternatives = await getDownloadCandidates(track, get().animeSearchEnabled, {
+                  depth: 'deep', editionPreference: get().editionPreference,
+                }).catch(() => []);
+                const alternative = alternatives.find((candidate) =>
+                  candidate.videoId !== resolvedVideoId && canDownloadWithOneTap(candidate));
+                if (!alternative) {
+                  updateDl({ status: 'error', error: msg });
+                  return;
+                }
+                resolvedVideoId = alternative.videoId;
+              }
+
               if (msg === '__MAINTENANCE__' && detectPlatform() === 'web') {
                 get().setMaintenanceMode(true);
                 updateDl({
@@ -668,16 +723,10 @@ export const useMusicStore = create<MusicStore>()(
           const existing = get().downloads.find((d) => d.track.id === track.id);
           if (existing && (existing.status === 'downloading' || existing.status === 'queued')) return;
 
-          const id = `d${Date.now()}`;
-          set((s) => ({
-            downloads: [...s.downloads, { id, track, progress: 0, status: 'queued' as const }],
-          }));
-
-          if (get().activeDownloads < 2) {
-            await get()._executeDownload(track, id);
-          } else {
-            set((s) => ({ downloadQueue: [...s.downloadQueue, id] }));
-          }
+          const previous = get().downloads.find((download) =>
+            download.track.id === track.id && Boolean(download.videoIdOverride));
+          if (previous?.videoIdOverride) get().startDownloadWithVideoId(track, previous.videoIdOverride);
+          else toast.warning(storeText(get().uiLanguageMode, 'chooseExactSong'));
         },
 
         startDownloadWithSourceUrl: (track, sourceUrl) => {
@@ -748,17 +797,25 @@ export const useMusicStore = create<MusicStore>()(
         lyricTranslation: true,
         lyricLatinOnly: false,
         saveLrcFile: true,
+        lyricsTargetLanguage: 'system',
         setLyricOriginal: (v) => set({ lyricOriginal: v }),
         setLyricRomanization: (v) => set({ lyricRomanization: v }),
         setLyricTranslation: (v) => set({ lyricTranslation: v }),
         setLyricLatinOnly: (v) => set({ lyricLatinOnly: v }),
         setSaveLrcFile: (v) => set({ saveLrcFile: v }),
+        setLyricsTargetLanguage: (v) => set({ lyricsTargetLanguage: v }),
 
         // ─── Anime search (opt-in, off by default) ───
         animeSearchEnabled: false,
         setAnimeSearchEnabled: (v) => set({ animeSearchEnabled: v }),
-        androidFastSearchMode: false,
-        setAndroidFastSearchMode: (v) => set({ androidFastSearchMode: v }),
+        autoCandidateResolution: true,
+        resolutionProfile: 'adaptive',
+        cellularResolutionPolicy: 'light',
+        editionPreference: 'catalog',
+        setAutoCandidateResolution: (v) => set({ autoCandidateResolution: v }),
+        setResolutionProfile: (v) => set({ resolutionProfile: v }),
+        setCellularResolutionPolicy: (v) => set({ cellularResolutionPolicy: v }),
+        setEditionPreference: (v) => set({ editionPreference: v }),
 
         // ─── Reproductor externo preferido (Android) ───
         preferredPlayerPackage: null as string | null,
@@ -801,8 +858,12 @@ export const useMusicStore = create<MusicStore>()(
         lyricTranslation: state.lyricTranslation,
         lyricLatinOnly: state.lyricLatinOnly,
         saveLrcFile: state.saveLrcFile,
+        lyricsTargetLanguage: state.lyricsTargetLanguage,
         animeSearchEnabled: state.animeSearchEnabled,
-        androidFastSearchMode: state.androidFastSearchMode,
+        autoCandidateResolution: state.autoCandidateResolution,
+        resolutionProfile: state.resolutionProfile,
+        cellularResolutionPolicy: state.cellularResolutionPolicy,
+        editionPreference: state.editionPreference,
         mostDownloadedArtists: state.mostDownloadedArtists,
         preferredPlayerPackage: state.preferredPlayerPackage,
         // localFileRefs excluded — File objects cannot be serialized
@@ -823,8 +884,20 @@ export const useMusicStore = create<MusicStore>()(
         lyricTranslation: persisted?.lyricTranslation ?? true,
         lyricLatinOnly: persisted?.lyricLatinOnly ?? false,
         saveLrcFile: persisted?.saveLrcFile ?? true,
+        lyricsTargetLanguage: isLyricsTargetLanguage(persisted?.lyricsTargetLanguage)
+          ? persisted.lyricsTargetLanguage
+          : 'system',
         animeSearchEnabled: persisted?.animeSearchEnabled ?? false,
-        androidFastSearchMode: persisted?.androidFastSearchMode ?? false,
+        autoCandidateResolution: persisted?.autoCandidateResolution ?? true,
+        resolutionProfile: persisted?.resolutionProfile === 'economy' || persisted?.resolutionProfile === 'adaptive'
+          ? persisted.resolutionProfile
+          : persisted?.androidFastSearchMode === true ? 'economy' : 'adaptive',
+        cellularResolutionPolicy: ['off', 'light', 'full'].includes(persisted?.cellularResolutionPolicy)
+          ? persisted.cellularResolutionPolicy
+          : 'light',
+        editionPreference: ['catalog', 'explicit', 'clean', 'ask'].includes(persisted?.editionPreference)
+          ? persisted.editionPreference
+          : 'catalog',
         mostDownloadedArtists: persisted?.mostDownloadedArtists ?? [],
         preferredPlayerPackage: persisted?.preferredPlayerPackage ?? null,
       }),

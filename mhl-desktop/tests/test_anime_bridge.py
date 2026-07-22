@@ -587,7 +587,7 @@ def test_anime_requests_carry_user_agent_and_json_content_type_headers():
         bridge.anime_search("naruto", 5)
 
     assert captured_headers.get("Content-Type") == "application/json"
-    assert captured_headers.get("User-Agent") == "MHLMusic/1.4.7"
+    assert captured_headers.get("User-Agent") == "MHLMusic/1.4.8-beta.1"
 
 
 def test_letras_fetch_returns_html_from_letras_domain():
@@ -765,9 +765,11 @@ def test_get_raw_audio_always_uses_highest_quality_mp3():
     bridge = Bridge()
 
     def fake_run(args, **_kwargs):
-        output_path = Path(args[args.index("-o") + 1])
-        output_path.write_bytes(b"mp3-data")
-        return MagicMock(returncode=0, stderr="")
+        if "-o" in args:
+            output_path = Path(args[args.index("-o") + 1])
+            output_path.write_bytes(b"m" * (17 * 1024))
+            return MagicMock(returncode=0, stderr="")
+        return MagicMock(returncode=0, stderr="Duration: 00:03:00.00")
 
     with patch("bridge.subprocess.run", side_effect=fake_run) as run:
         result = bridge.get_raw_audio(
@@ -777,7 +779,7 @@ def test_get_raw_audio_always_uses_highest_quality_mp3():
             ["Song Artist"],
         )
 
-    args = run.call_args.args[0]
+    args = run.call_args_list[0].args[0]
     assert result["success"] is True
     assert args[args.index("--audio-format") + 1] == "mp3"
     assert args[args.index("--audio-quality") + 1] == "0"

@@ -192,7 +192,7 @@ describe('musicApi request reuse', () => {
       getDownloadCandidates(track),
     ]);
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).not.toHaveBeenCalled();
     expect(pickerResult).toEqual(prefetched);
   });
 });
@@ -223,31 +223,21 @@ describe('musicApi candidate ranking', () => {
     expect(__testing.buildAndroidCandidateQueries(animeTrack, true)).toContain('naruto opening Opening 1');
   });
 
-  it('uses a smaller Android candidate limit only in fast mode', () => {
-    expect(__testing.getAndroidPrimaryCandidateLimit({ fastMode: false })).toBe(12);
-    expect(__testing.getAndroidPrimaryCandidateLimit({ fastMode: true })).toBe(8);
+  it('uses at most three candidates in light mode', () => {
+    expect(__testing.getAndroidPrimaryCandidateLimit({ depth: 'deep' })).toBe(8);
+    expect(__testing.getAndroidPrimaryCandidateLimit({ depth: 'light' })).toBe(3);
   });
 
-  it('keeps fast-mode candidate caches separate from normal candidate caches', async () => {
-    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => (
-      new Response(JSON.stringify({ success: true, candidates: [] }), { status: 200 })
-    ));
-
-    await getDownloadCandidates(track, false, { fastMode: false });
-    await getDownloadCandidates(track, false, { fastMode: true });
-
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+  it('keeps light and deep candidate caches separate', () => {
+    const light = __testing.buildCandidateCacheKey(track, false, false, { depth: 'light' });
+    const deep = __testing.buildCandidateCacheKey(track, false, false, { depth: 'deep' });
+    expect(light).not.toBe(deep);
   });
 
-  it('keeps anime candidate caches separate from normal search caches', async () => {
-    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => (
-      new Response(JSON.stringify({ success: true, candidates: [] }), { status: 200 })
-    ));
-
-    await getDownloadCandidates(animeTrack, false);
-    await getDownloadCandidates(animeTrack, true);
-
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+  it('keeps anime candidate caches separate from normal search caches', () => {
+    const normal = __testing.buildCandidateCacheKey(animeTrack, false, false);
+    const anime = __testing.buildCandidateCacheKey(animeTrack, true, false);
+    expect(normal).not.toBe(anime);
   });
 
   it('returns at most three unique candidates ordered by quality', () => {

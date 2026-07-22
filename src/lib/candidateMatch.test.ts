@@ -20,6 +20,21 @@ function candidate(overrides: Partial<DownloadCandidate>): DownloadCandidate {
     duration: 180,
     score: 150,
     confidence: 'alta',
+    source: 'youtube_music',
+    edition: 'unknown',
+    verification: 'verified',
+    evidence: {
+      isrcMatch: false,
+      titleMatch: true,
+      artistMatch: true,
+      albumMatch: true,
+      durationDifference: 0,
+      official: true,
+      youtubeMusicSong: true,
+      editionMatch: null,
+      contradictions: [],
+    },
+    rejectionReasons: [],
     ...overrides,
   };
 }

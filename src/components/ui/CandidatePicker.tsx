@@ -8,6 +8,8 @@ import { getDownloadCandidates, getExpandedDownloadCandidates, type DownloadCand
 import { getCandidateMatchPresentation, type CandidateMatchTone } from '@/lib/candidateMatch';
 import type { Track } from '@/types/music';
 import { useI18n } from '@/lib/useI18n';
+import type { EditionPreference } from '@/lib/download/candidateResolver';
+import type { ResolutionProfile } from '@/store/musicStore';
 
 const toneStyles: Record<CandidateMatchTone, {
   card: string;
@@ -49,13 +51,15 @@ const toneStyles: Record<CandidateMatchTone, {
 export function CandidatePicker({
   track,
   animeSearchEnabled,
-  androidFastSearchMode,
+  resolutionProfile,
+  editionPreference,
   onClose,
   onSelect,
 }: {
   track: Track;
   animeSearchEnabled: boolean;
-  androidFastSearchMode: boolean;
+  resolutionProfile: ResolutionProfile;
+  editionPreference: EditionPreference;
   onClose: () => void;
   onSelect: (videoId: string) => void;
 }) {
@@ -82,7 +86,7 @@ export function CandidatePicker({
     const loadCandidates = async () => {
       try {
         const cands = await getDownloadCandidates(track, animeSearchEnabled, {
-          fastMode: androidFastSearchMode,
+          depth: resolutionProfile === 'economy' ? 'light' : 'deep', editionPreference,
         });
         if (!active) return;
         setCandidates(cands);
@@ -103,7 +107,7 @@ export function CandidatePicker({
     return () => {
       active = false;
     };
-  }, [androidFastSearchMode, animeSearchEnabled, track, t]);
+  }, [animeSearchEnabled, editionPreference, resolutionProfile, track, t]);
 
   function fmt(s: number) {
     const m = Math.floor(s / 60);
@@ -116,7 +120,7 @@ export function CandidatePicker({
     setError(null);
     try {
       const cands = await getExpandedDownloadCandidates(track, animeSearchEnabled, {
-        fastMode: androidFastSearchMode,
+        depth: 'deep', editionPreference,
       });
       setCandidates(cands);
       if (cands.length === 0) {
@@ -132,7 +136,7 @@ export function CandidatePicker({
     }
   }
 
-  const searchMoreButton = isNativeMobile ? (
+  const searchMoreButton = (
     <button
       type="button"
       onClick={handleSearchMore}
@@ -142,7 +146,7 @@ export function CandidatePicker({
       <RefreshCw className={`w-3.5 h-3.5 ${loadingMore ? 'animate-spin' : ''}`} />
       {loadingMore ? t('candidateSearchingMore') : t('candidateSearchMore')}
     </button>
-  ) : null;
+  );
 
   const overlay = (
     <motion.div
@@ -245,6 +249,15 @@ export function CandidatePicker({
                             {fmt(c.duration)}
                           </span>
                         )}
+                        <span className="text-[9px] leading-4 px-1.5 rounded-md bg-[rgba(255,255,255,0.055)] text-[#888]">
+                          {c.source === 'youtube_music' ? 'YouTube Music' : 'YouTube'}
+                        </span>
+                        <span className="text-[9px] leading-4 px-1.5 rounded-md bg-[rgba(255,255,255,0.055)] text-[#888]">
+                          {t(`candidateEdition${c.edition[0].toUpperCase()}${c.edition.slice(1)}`)}
+                        </span>
+                        {c.evidence.isrcMatch && (
+                          <span className="text-[9px] leading-4 px-1.5 rounded-md bg-[rgba(200,240,75,0.12)] text-[#D8FF61]">ISRC</span>
+                        )}
                       </div>
                       <p className={`text-[9px] mt-1.5 flex items-center gap-1 ${styles.detail}`}>
                         <StatusIcon className="w-2.5 h-2.5" />
@@ -265,7 +278,7 @@ export function CandidatePicker({
             </div>
           )}
         </div>
-        {isNativeMobile && !loading && (
+        {!loading && (
           <div className="flex-shrink-0 px-3 py-3 border-t border-[rgba(255,255,255,0.06)] bg-[#111]">
             {searchMoreButton}
           </div>

@@ -76,6 +76,13 @@ export function getCandidateMatchPresentation(
     tone = 'review';
   }
 
+  if (candidate.verification === 'rejected') tone = 'alternate';
+  else if (
+    (candidate.verification === 'review' || candidate.verification === 'probable')
+    && tone !== 'alternate'
+  ) tone = 'review';
+  else if (candidate.verification === 'verified' && candidate.evidence.isrcMatch) tone = 'exact';
+
   const badgeKeys: string[] = [];
   if (cover) badgeKeys.push('candidateCover');
   else if (live) badgeKeys.push('candidateLive');

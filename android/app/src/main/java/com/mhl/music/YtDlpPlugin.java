@@ -24,38 +24,31 @@ import org.json.JSONObject;
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.provider.MediaStore;
+import android.media.MediaMetadataRetriever;
 import java.io.DataInputStream;
 import java.io.OutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import android.util.Base64;
-import java.util.LinkedHashMap;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.net.URI;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 
 @CapacitorPlugin(name = "YtDlp")
 public class YtDlpPlugin extends Plugin {
 
     private static final String TAG = "YtDlpPlugin";
-    private static final int MAX_SEARCH_CACHE_ENTRIES = 24;
     private static final Pattern SPEED_PATTERN =
         Pattern.compile("at\\s+([\\d.]+)\\s*(KiB|MiB|GiB|KB|MB|GB)/s");
     private boolean isInitialized = false;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
-    private final Map<String, JSArray> searchCache = new LinkedHashMap<String, JSArray>(MAX_SEARCH_CACHE_ENTRIES, 0.75f, true) {
-        @Override
-        protected boolean removeEldestEntry(Map.Entry<String, JSArray> eldest) {
-            return size() > MAX_SEARCH_CACHE_ENTRIES;
-        }
-    };
 
     // (Removed SAF/picker code - using MediaStore-only storage)
 
@@ -172,11 +165,14 @@ public class YtDlpPlugin extends Plugin {
         }
         Integer requestedLimit = call.getInt("limit");
         int limit = requestedLimit != null ? Math.max(1, Math.min(requestedLimit, 20)) : 10;
+        String source = call.getString("source", "youtube_music");
+        Boolean requestedEnrich = call.getBoolean("enrich", false);
+        boolean enrich = requestedEnrich != null && requestedEnrich;
 
         executor.execute(() -> {
             try {
                 ensureInitialized();
-                JSArray results = runSearch(query, limit);
+                JSArray results = runSearch(query, limit, source, enrich);
                 JSObject result = new JSObject();
                 result.put("success", true);
                 result.put("results", results);
@@ -211,18 +207,11 @@ public class YtDlpPlugin extends Plugin {
         }
 
         executor.execute(() -> {
-            ExecutorService searchExecutor = Executors.newFixedThreadPool(Math.min(queries.size(), 3));
             try {
                 ensureInitialized();
-
-                List<Future<JSArray>> futures = new ArrayList<>();
-                for (String query : queries) {
-                    futures.add(searchExecutor.submit(() -> runSearch(query, limit)));
-                }
-
                 JSArray batches = new JSArray();
-                for (Future<JSArray> future : futures) {
-                    batches.put(future.get());
+                for (String query : queries) {
+                    batches.put(runSearch(query, limit, "youtube", false));
                 }
 
                 JSObject result = new JSObject();
@@ -232,26 +221,22 @@ public class YtDlpPlugin extends Plugin {
             } catch (Exception e) {
                 Log.e(TAG, "searchMany failed: " + e.getMessage(), e);
                 bridge.getActivity().runOnUiThread(() -> call.reject("Search failed: " + e.getMessage()));
-            } finally {
-                searchExecutor.shutdownNow();
             }
         });
     }
 
-    private JSArray runSearch(String query, int limit) throws Exception {
-        String cacheKey = query + "|limit:" + limit;
-        synchronized (searchCache) {
-            JSArray cached = searchCache.get(cacheKey);
-            if (cached != null) {
-                Log.i(TAG, "Search cache hit for: " + cacheKey);
-                return cached;
-            }
-        }
-
-        YoutubeDLRequest request = new YoutubeDLRequest("ytsearch" + limit + ":" + query);
+    private JSArray runSearch(String query, int limit, String source, boolean enrich) throws Exception {
+        boolean youtubeMusic = "youtube_music".equals(source);
+        String target = youtubeMusic
+            ? "https://music.youtube.com/search?q=" + URLEncoder.encode(query, StandardCharsets.UTF_8.toString()) + "#songs"
+            : "ytsearch" + limit + ":" + query;
+        YoutubeDLRequest request = new YoutubeDLRequest(target);
         request.addOption("--dump-json");
         request.addOption("--flat-playlist");
+        request.addOption("--playlist-end", String.valueOf(limit));
         request.addOption("--no-download");
+        request.addOption("--socket-timeout", "12");
+        request.addOption("--retries", "2");
 
         Log.i(TAG, "Searching: " + query + " limit=" + limit);
         YoutubeDLResponse response = YoutubeDL.getInstance().execute(request);
@@ -275,6 +260,14 @@ public class YtDlpPlugin extends Plugin {
                     item.put("title", json.optString("title", ""));
                     item.put("duration", json.optDouble("duration", 0));
                     item.put("channel", json.optString("channel", json.optString("uploader", "")));
+                    item.put("source", youtubeMusic ? "youtube_music" : "youtube");
+                    item.put("resultType", youtubeMusic ? "song" : "video");
+                    item.put("artist", json.optString("artist", json.optString("creator", "")));
+                    item.put("album", json.optString("album", ""));
+                    item.put("isrc", json.optString("isrc", ""));
+                    item.put("edition", "unknown");
+                    item.put("sourceCodec", json.optString("acodec", ""));
+                    item.put("sourceAbr", json.optDouble("abr", 0));
                     if (!item.getString("videoId").isEmpty()) {
                         results.put(item);
                     }
@@ -285,10 +278,36 @@ public class YtDlpPlugin extends Plugin {
         }
 
         Log.i(TAG, "Search found " + results.length() + " results");
-        synchronized (searchCache) {
-            searchCache.put(cacheKey, results);
+        if (enrich) {
+            for (int i = 0; i < Math.min(2, results.length()); i++) {
+                Object rawItem = results.get(i);
+                if (rawItem instanceof JSObject) enrichCandidate((JSObject) rawItem);
+            }
         }
         return results;
+    }
+
+    private void enrichCandidate(JSObject item) {
+        try {
+            String videoId = item.getString("videoId");
+            if (videoId == null || videoId.isEmpty()) return;
+            YoutubeDLRequest detailRequest = new YoutubeDLRequest("https://www.youtube.com/watch?v=" + videoId);
+            detailRequest.addOption("--dump-single-json");
+            detailRequest.addOption("--skip-download");
+            detailRequest.addOption("--no-playlist");
+            detailRequest.addOption("--socket-timeout", "12");
+            detailRequest.addOption("--retries", "1");
+            YoutubeDLResponse detailResponse = YoutubeDL.getInstance().execute(detailRequest);
+            JSONObject detail = new JSONObject(detailResponse.getOut().trim());
+            item.put("duration", detail.optDouble("duration", item.optDouble("duration", 0)));
+            item.put("artist", detail.optString("artist", item.optString("artist", "")));
+            item.put("album", detail.optString("album", item.optString("album", "")));
+            item.put("isrc", detail.optString("isrc", ""));
+            item.put("sourceCodec", detail.optString("acodec", ""));
+            item.put("sourceAbr", detail.optDouble("abr", 0));
+        } catch (Exception detailError) {
+            Log.w(TAG, "Candidate enrichment failed: " + detailError.getMessage());
+        }
     }
 
     @PluginMethod
@@ -341,6 +360,8 @@ public class YtDlpPlugin extends Plugin {
     public void downloadAudio(PluginCall call) {
         String videoId = call.getString("videoId");
         String sourceUrl = call.getString("sourceUrl");
+        Double expectedDurationValue = call.getDouble("expectedDuration");
+        double expectedDuration = expectedDurationValue != null ? expectedDurationValue : 0;
         if ((videoId == null || videoId.isEmpty()) && (sourceUrl == null || sourceUrl.isEmpty())) {
             call.reject("Missing videoId or sourceUrl parameter");
             return;
@@ -382,12 +403,13 @@ public class YtDlpPlugin extends Plugin {
                 request.addOption("-o", outputPath);
                 request.addOption("--no-playlist");
                 request.addOption("--no-part");               // sin archivos .part (menos I/O)
-                request.addOption("--retries", "5");          // reintentos de red
-                request.addOption("--fragment-retries", "10"); // reintentos por fragmento
+                request.addOption("--socket-timeout", "15");
+                request.addOption("--retries", "2");
+                request.addOption("--fragment-retries", "2");
                 // Usar cliente Android para evitar SABR streaming forzado por YouTube (403)
                 request.addOption("--extractor-args", "youtube:player_client=android,web");
                 // 8 fragmentos paralelos: máximo seguro sin triggers de rate-limit de YouTube
-                request.addOption("--concurrent-fragments", "8");
+                request.addOption("--concurrent-fragments", "2");
 
                 Log.i(TAG, "Downloading audio for: " + videoId + " -> " + outputPath);
 
@@ -415,9 +437,32 @@ public class YtDlpPlugin extends Plugin {
                     Log.i(TAG, "Download stderr: " + errOutput.substring(0, Math.min(500, errOutput.length())));
                 }
 
-                if (!outputFile.exists() || outputFile.length() == 0) {
+                if (!outputFile.exists() || outputFile.length() < 16 * 1024) {
                     bridge.getActivity().runOnUiThread(() -> call.reject("No audio file produced after download"));
                     return;
+                }
+
+                MediaMetadataRetriever retriever = new MediaMetadataRetriever();
+                long durationMs;
+                try {
+                    retriever.setDataSource(outputFile.getAbsolutePath());
+                    String rawDuration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
+                    if (rawDuration == null) throw new IllegalStateException("Missing MP3 duration");
+                    durationMs = Long.parseLong(rawDuration);
+                } catch (Exception validationError) {
+                    outputFile.delete();
+                    bridge.getActivity().runOnUiThread(() -> call.reject("conversion: MP3 is not decodable"));
+                    return;
+                } finally {
+                    retriever.release();
+                }
+                if (expectedDuration > 0) {
+                    double tolerance = Math.max(5.0, expectedDuration * 0.05);
+                    if (Math.abs(durationMs / 1000.0 - expectedDuration) > tolerance) {
+                        outputFile.delete();
+                        bridge.getActivity().runOnUiThread(() -> call.reject("candidate_invalid: downloaded duration mismatch"));
+                        return;
+                    }
                 }
 
                 // Leer archivo completo y codificar en base64 para devolver al bridge JS

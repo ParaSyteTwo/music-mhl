@@ -2,12 +2,11 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Download, Play, Pause, Search, Loader2, Music, CheckCircle, X, ArrowLeft, Tv, Zap } from 'lucide-react';
 import { useMusicStore } from '@/store/musicStore';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getDownloadCandidates, prefetchDownloadCandidates, type DownloadCandidate } from '@/lib/api/musicApi';
+import { getDownloadCandidates, type DownloadCandidate } from '@/lib/api/musicApi';
 import type { Track } from '@/types/music';
 import { buildAffinityPool, artistColor } from '@/data/globalArtists';
 import { useI18n } from '@/lib/useI18n';
 import { CandidatePicker } from '@/components/ui/CandidatePicker';
-import { getCandidateMatchPresentation } from '@/lib/candidateMatch';
 import { AnimeCard } from '@/components/ui/AnimeCard';
 import { ThemeRow } from '@/components/ui/ThemeRow';
 import { AnimeModeBadge } from '@/components/ui/AnimeModeBadge';
@@ -16,6 +15,8 @@ import { looksAnimeLikeQuery } from '@/lib/util/animeDetector';
 import type { Anime, AnimeTheme } from '@/types/anime';
 import { toast } from 'sonner';
 import { Capacitor } from '@capacitor/core';
+import { canDownloadWithOneTap } from '@/lib/download/candidateResolver';
+import { CandidateScheduler } from '@/lib/download/candidateScheduler';
 
 function formatDuration(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -30,6 +31,7 @@ function candidateTrackKey(track: Track): string {
 type BestCandidateEntry = {
   videoId: string;
 };
+type ResolutionState = 'resolving' | 'verified' | 'review' | 'none';
 
 function useRecentSearches() {
   const [recent, setRecent] = useState<string[]>(() => {
@@ -64,15 +66,25 @@ export default function SearchPage() {
     downloads,
     mostDownloadedArtists,
     animeSearchEnabled,
-    androidFastSearchMode,
+    autoCandidateResolution,
+    resolutionProfile,
+    cellularResolutionPolicy,
+    editionPreference,
   } = useMusicStore();
 
   const [query, setQuery] = useState(searchQuery);
   const [pickerTrack, setPickerTrack] = useState<Track | null>(null);
   const [bestCandidates, setBestCandidates] = useState<Record<string, BestCandidateEntry>>({});
   const [bestResolvingId, setBestResolvingId] = useState<string | null>(null);
+  const [resolutionStates, setResolutionStates] = useState<Record<string, ResolutionState>>({});
   const { recent, remove: removeRecent, refresh: refreshRecent } = useRecentSearches();
-  const isAndroidNative = Capacitor.getPlatform() === 'android';
+  const isNativeProduct = Capacitor.isNativePlatform() || (typeof window !== 'undefined' && 'pywebview' in window);
+  const scheduler = useMemo(() => new CandidateScheduler({
+    profile: resolutionProfile,
+    cellularPolicy: cellularResolutionPolicy,
+    editionPreference,
+    animeSearchEnabled,
+  }), [animeSearchEnabled, cellularResolutionPolicy, editionPreference, resolutionProfile]);
 
   // ─── Anime mode state ───
   const [animeMode, setAnimeMode] = useState(false);
@@ -92,26 +104,30 @@ export default function SearchPage() {
   };
 
   const cacheBestCandidate = useCallback((track: Track, candidates: DownloadCandidate[] | null) => {
-    if (!isAndroidNative || !candidates?.[0]) return;
-    const match = getCandidateMatchPresentation(track, candidates[0]);
+    if (!isNativeProduct) return;
     const key = candidateTrackKey(track);
+    const verified = candidates?.find(canDownloadWithOneTap);
+    setResolutionStates((current) => ({
+      ...current,
+      [key]: verified ? 'verified' : candidates?.length ? 'review' : 'none',
+    }));
     setBestCandidates((current) => {
-      if (match.tone === 'exact' || match.tone === 'high') {
-        return { ...current, [key]: { videoId: candidates[0].videoId } };
+      if (verified) {
+        return { ...current, [key]: { videoId: verified.videoId } };
       }
       if (!(key in current)) return current;
       const next = { ...current };
       delete next[key];
       return next;
     });
-  }, [isAndroidNative]);
+  }, [isNativeProduct]);
 
   const handleDownloadPrefetch = useCallback((track: Track) => {
-    if (!isAndroidNative) return;
-    prefetchDownloadCandidates(track, animeSearchEnabled, {
-      fastMode: androidFastSearchMode,
-    }).then((candidates) => cacheBestCandidate(track, candidates));
-  }, [androidFastSearchMode, animeSearchEnabled, cacheBestCandidate, isAndroidNative]);
+    if (!isNativeProduct || !autoCandidateResolution) return;
+    const key = candidateTrackKey(track);
+    setResolutionStates((current) => ({ ...current, [key]: 'resolving' }));
+    scheduler.enqueue(track, 'visible', (candidates) => cacheBestCandidate(track, candidates));
+  }, [autoCandidateResolution, cacheBestCandidate, isNativeProduct, scheduler]);
 
   const handleBestDownloadClick = useCallback(async (e: React.MouseEvent, track: Track) => {
     e.stopPropagation();
@@ -126,13 +142,12 @@ export default function SearchPage() {
     setBestResolvingId(key);
     try {
       const candidates = await getDownloadCandidates(track, animeSearchEnabled, {
-        fastMode: androidFastSearchMode,
+        depth: 'deep', editionPreference,
       });
       cacheBestCandidate(track, candidates);
-      const top = candidates[0];
-      const match = top ? getCandidateMatchPresentation(track, top) : null;
-      if (top && (match?.tone === 'exact' || match?.tone === 'high')) {
-        startDownloadWithVideoId(track, top.videoId);
+      const verified = candidates.find(canDownloadWithOneTap);
+      if (verified) {
+        startDownloadWithVideoId(track, verified.videoId);
       } else {
         setPickerTrack(track);
       }
@@ -141,7 +156,7 @@ export default function SearchPage() {
     } finally {
       setBestResolvingId((current) => (current === key ? null : current));
     }
-  }, [androidFastSearchMode, animeSearchEnabled, bestCandidates, cacheBestCandidate, downloads, startDownloadWithVideoId]);
+  }, [animeSearchEnabled, bestCandidates, cacheBestCandidate, downloads, editionPreference, startDownloadWithVideoId]);
 
   // ─── Anime mode handlers ───
   const handleAnimeCardClick = useCallback(async (anime: Anime) => {
@@ -244,33 +259,32 @@ export default function SearchPage() {
     downloads.some((d) => d.track.id === trackId && d.status === 'completed');
 
   useEffect(() => {
-    if (!isAndroidNative || animeMode || searchResults.length === 0 || isSearching) return;
-    let cancelled = false;
-    const limit = androidFastSearchMode ? 2 : 1;
-    const timeout = window.setTimeout(() => {
-      void (async () => {
-        for (const track of searchResults.slice(0, limit)) {
-          if (cancelled) return;
-          const candidates = await prefetchDownloadCandidates(track, animeSearchEnabled, {
-            fastMode: androidFastSearchMode,
-          });
-          if (!cancelled) cacheBestCandidate(track, candidates);
-        }
-      })();
-    }, 450);
+    scheduler.startSession();
+    setBestCandidates({});
+    setResolutionStates({});
+    if (!autoCandidateResolution || !isNativeProduct || animeMode || searchResults.length === 0 || isSearching) return;
+    for (const track of searchResults.slice(0, 5)) {
+      const key = candidateTrackKey(track);
+      setResolutionStates((current) => ({ ...current, [key]: 'resolving' }));
+      scheduler.enqueue(track, 'initial', (candidates) => cacheBestCandidate(track, candidates));
+    }
+    const idleTimer = window.setTimeout(() => {
+      for (const track of searchResults.slice(5)) {
+        scheduler.enqueue(track, 'idle', (candidates) => cacheBestCandidate(track, candidates));
+      }
+    }, 1200);
     return () => {
-      cancelled = true;
-      window.clearTimeout(timeout);
+      window.clearTimeout(idleTimer);
+      scheduler.startSession();
     };
-  }, [
-    androidFastSearchMode,
-    animeMode,
-    animeSearchEnabled,
-    cacheBestCandidate,
-    isAndroidNative,
-    isSearching,
-    searchResults,
-  ]);
+  }, [animeMode, autoCandidateResolution, cacheBestCandidate, isNativeProduct, isSearching, scheduler, searchQuery, searchResults]);
+
+  useEffect(() => {
+    const updateVisibility = () => scheduler.setPaused(document.hidden);
+    document.addEventListener('visibilitychange', updateVisibility);
+    updateVisibility();
+    return () => document.removeEventListener('visibilitychange', updateVisibility);
+  }, [scheduler]);
 
   const observerCallback = useCallback(
     (entries: IntersectionObserverEntry[]) => {
@@ -602,6 +616,7 @@ export default function SearchPage() {
                 const downloaded = isDownloaded(track.id);
                 const bestCandidate = bestCandidates[candidateTrackKey(track)];
                 const bestResolving = bestResolvingId === candidateTrackKey(track);
+                const resolutionState = resolutionStates[candidateTrackKey(track)];
                 const isFeatured = i === 0 && searchResults.length >= 4;
 
                 return (
@@ -640,7 +655,7 @@ export default function SearchPage() {
                           )}
                         </div>
                         <div className="absolute top-2 right-2 flex items-center gap-1">
-                          {isAndroidNative && bestCandidate && !downloaded && (
+                          {isNativeProduct && bestCandidate && !downloaded && (
                             <button
                               onClick={(e) => { if (!downloading && !bestResolving) void handleBestDownloadClick(e, track); }}
                               disabled={downloading || bestResolving}
@@ -676,6 +691,11 @@ export default function SearchPage() {
                         {track.title}
                       </p>
                       <p className="text-xs text-[#666660] truncate">{track.artist}</p>
+                      {resolutionState && (
+                        <p className={`text-[10px] mt-1 ${resolutionState === 'verified' ? 'text-[#C8F04B]' : 'text-[#777]'}`}>
+                          {t(`candidateState${resolutionState[0].toUpperCase()}${resolutionState.slice(1)}`)}
+                        </p>
+                      )}
                       {isFeatured && <p className="text-xs text-[#555] mt-1 truncate">{track.album}</p>}
                     </div>
                   </motion.div>
@@ -696,6 +716,7 @@ export default function SearchPage() {
                 const downloaded = isDownloaded(track.id);
                 const bestCandidate = bestCandidates[candidateTrackKey(track)];
                 const bestResolving = bestResolvingId === candidateTrackKey(track);
+                const resolutionState = resolutionStates[candidateTrackKey(track)];
 
                 return (
                   <motion.div
@@ -742,11 +763,16 @@ export default function SearchPage() {
                         {track.title}
                       </p>
                       <p className="text-[11px] text-[#666660] truncate">{track.artist}</p>
+                      {resolutionState && (
+                        <p className={`text-[9px] ${resolutionState === 'verified' ? 'text-[#C8F04B]' : 'text-[#777]'}`}>
+                          {t(`candidateState${resolutionState[0].toUpperCase()}${resolutionState.slice(1)}`)}
+                        </p>
+                      )}
                     </div>
                     <span className="text-[10px] text-[#444] tabular-nums flex-shrink-0">
                       {formatDuration(track.duration)}
                     </span>
-                    {isAndroidNative && bestCandidate && !downloaded && (
+                    {isNativeProduct && bestCandidate && !downloaded && (
                       <button
                         onClick={(e) => { if (!downloading && !bestResolving) void handleBestDownloadClick(e, track); }}
                         disabled={downloading || bestResolving}
@@ -813,7 +839,8 @@ export default function SearchPage() {
       <CandidatePicker
         track={pickerTrack}
         animeSearchEnabled={animeSearchEnabled}
-        androidFastSearchMode={androidFastSearchMode}
+        resolutionProfile={resolutionProfile}
+        editionPreference={editionPreference}
         onClose={() => setPickerTrack(null)}
             onSelect={(videoId) => {
               startDownloadWithVideoId(pickerTrack, videoId);

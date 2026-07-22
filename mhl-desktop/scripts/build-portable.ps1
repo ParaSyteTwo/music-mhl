@@ -72,7 +72,7 @@ foreach ($required in @(
     }
 }
 
-$process = Start-Process -FilePath $exePath -PassThru
+$process = Start-Process -FilePath $exePath -PassThru -WindowStyle Minimized
 $started = $false
 try {
     $deadline = (Get-Date).AddSeconds(20)
