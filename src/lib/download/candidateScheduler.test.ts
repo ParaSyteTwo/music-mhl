@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Track } from '@/types/music';
 import { CandidateScheduler } from './candidateScheduler';
 import type { DeviceContext } from '@/lib/deviceContext';
+import type { CandidateSearchOptions } from '@/lib/api/musicApi';
 
 const track = (id: number): Track => ({
   id: String(id), title: `Song ${id}`, artist: 'Artist', album: 'Album', duration: 180, cover: '', edition: 'unknown',
@@ -32,7 +33,11 @@ describe('CandidateScheduler', () => {
   });
 
   it('limits automatic metered searches to five and uses light depth', async () => {
-    const resolver = vi.fn(async () => []);
+    const resolver = vi.fn(async (
+      _track: Track,
+      _animeSearchEnabled: boolean,
+      _options: CandidateSearchOptions,
+    ) => []);
     const scheduler = new CandidateScheduler(settings, async () => context({ metered: true, networkType: 'cellular' }), resolver, 1);
     scheduler.startSession();
     for (let i = 0; i < 8; i++) scheduler.enqueue(track(i), 'visible', () => {});

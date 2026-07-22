@@ -330,11 +330,6 @@ export async function getDeezerTrackMeta(trackId: string | number): Promise<{ ge
   }
 }
 
-export interface DownloadOptions {
-  animeSearchEnabled?: boolean;
-  editionPreference?: EditionPreference;
-}
-
 export type DownloadErrorCode =
   | 'network'
   | 'rate_limit'
@@ -561,14 +556,14 @@ async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 
 function rankDownloadCandidates(
   track: Track,
-  candidates: DownloadCandidate[],
+  candidates: Array<RawDownloadCandidate & Partial<DownloadCandidate>>,
   animeSearchEnabled = false,
 ): DownloadCandidate[] {
   void animeSearchEnabled;
   return resolveDownloadCandidates(track, candidates, { editionPreference: 'catalog' });
 }
 
-function shouldExpandCandidateSearch(candidates: DownloadCandidate[]): boolean {
+function shouldExpandCandidateSearch(candidates: Array<Partial<DownloadCandidate>>): boolean {
   return candidates.length < 2 || candidates[0]?.confidence !== 'alta';
 }
 
@@ -783,7 +778,6 @@ interface WebDownloadTicketResponse {
 export async function downloadTrackAudio(
   track: Track,
   onProgress?: (progress: number) => void,
-  options: DownloadOptions = {},
   videoIdOverride?: string,
   sourceUrlOverride?: string,
 ): Promise<ArrayBuffer> {

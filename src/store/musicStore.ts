@@ -557,9 +557,6 @@ export const useMusicStore = create<MusicStore>()(
               const [audioBuffer, [trackMeta, lyricsResult]] = await Promise.all([
                 downloadTrackAudio(track, (progress) => {
                   updateDl({ progress });
-                }, {
-                  animeSearchEnabled: get().animeSearchEnabled,
-                  editionPreference: get().editionPreference,
                 }, resolvedVideoId, sourceUrlOverride),
                 supplementalDataPromise,
               ]);

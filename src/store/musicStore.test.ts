@@ -55,7 +55,9 @@ describe('useMusicStore', () => {
       downloadFolderName: '',
       dominantColor: null,
       uiLanguageMode: 'system',
-      androidFastSearchMode: false,
+      autoCandidateResolution: true,
+      resolutionProfile: 'adaptive',
+      cellularResolutionPolicy: 'light',
     });
   });
 
