@@ -61,6 +61,22 @@ def test_youtube_music_artist_arrays_are_preserved_for_verification():
     assert candidate['channel'] == 'Yuka Kitamura'
 
 
+def test_youtube_music_keeps_all_collaborating_artists():
+    bridge = Bridge()
+    response = _response({
+        'id': 'take-me-to-the-beach', 'title': 'Take Me to the Beach',
+        'artists': [{'name': 'Imagine Dragons'}, {'name': 'Ado'}], 'duration': 167,
+    })
+
+    with patch('bridge.subprocess.run', return_value=response):
+        result = bridge.get_candidates({
+            'title': 'Take Me to the Beach', 'artist': 'Imagine Dragons',
+            'source': 'youtube_music', 'depth': 'light',
+        })
+
+    assert result['candidates'][0]['artist'] == 'Imagine Dragons, Ado'
+
+
 def test_light_search_is_flat_and_bounded_to_three():
     bridge = Bridge()
     with patch('bridge.subprocess.run', return_value=_response()) as run:

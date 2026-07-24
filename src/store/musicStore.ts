@@ -18,7 +18,7 @@ import {
   resolveSystemLanguage,
 } from '@/lib/language';
 import { detectPlatform } from '@/lib/platform';
-import { decodeBase64ArrayBuffer } from '@/lib/binaryEncoding';
+import { decodeBase64ArrayBuffer, encodeArrayBufferBase64 } from '@/lib/binaryEncoding';
 import { getDeviceContext } from '@/lib/deviceContext';
 import { canDownloadWithOneTap, type EditionPreference } from '@/lib/download/candidateResolver';
 
@@ -481,7 +481,9 @@ export const useMusicStore = create<MusicStore>()(
                 supplementalDataPromise,
               ]);
               if (!rawResult.success) throw new Error(rawResult.error || 'Error descargando audio');
-              const lyrics = lyricsResult.synced || lyricsResult.plain || null;
+              const lyrics = lyricsResult.synced && get().saveLrcFile
+                ? null
+                : lyricsResult.plain || null;
 
               updateDl({ progress: 50 });
               const audioBuffer = decodeBase64ArrayBuffer(rawResult.data_b64 as string);
@@ -562,7 +564,9 @@ export const useMusicStore = create<MusicStore>()(
               ]);
               updateDl({ progress: 80 });
               // Preferir synced (LRC con timestamps) — Retro Music lo sincroniza automáticamente
-              const lyrics = lyricsResult.synced || lyricsResult.plain || null;
+              const lyrics = lyricsResult.synced && get().saveLrcFile
+                ? null
+                : lyricsResult.plain || null;
 
               if (Capacitor.isNativePlatform()) {
                 const taggedBlob = await writeID3Tags(audioBuffer, {
@@ -579,14 +583,14 @@ export const useMusicStore = create<MusicStore>()(
 
                 const arr = await taggedBlob.arrayBuffer();
                 if (arr.byteLength < 16 * 1024) throw new Error('metadata: el MP3 etiquetado es demasiado pequeño');
-                const base64 = btoa(new Uint8Array(arr).reduce((data, byte) => data + String.fromCharCode(byte), ''));
+                const base64 = encodeArrayBufferBase64(arr);
                 // Guardar en Music/MHL Music (visible en reproductores) via MediaStore
                 const { saveTaggedAudioToMusic } = await import('@/lib/ytdlpBridge');
                 const mediaUri = await saveTaggedAudioToMusic(resolvedFileName, base64);
                 updateDl({ mediaUri });
 
                 // Guardar .lrc junto al MP3 para que Retro Music lo sincronice
-                if (lyricsResult.synced) {
+                if (lyricsResult.synced && get().saveLrcFile) {
                   const lrcName = resolvedFileName.replace(/\.[^.]+$/, '.lrc');
                   Filesystem.writeFile({
                     path: `Music/MHL Music/${lrcName}`,
@@ -650,6 +654,11 @@ export const useMusicStore = create<MusicStore>()(
 
               if (/rate_limit|403|forbidden/i.test(msg)) {
                 rateLimitCooldownUntil = Date.now() + 5 * 60 * 1000;
+                updateDl({ status: 'error', error: msg });
+                return;
+              }
+
+              if (/^(metadata|write):/i.test(msg)) {
                 updateDl({ status: 'error', error: msg });
                 return;
               }

@@ -44,7 +44,7 @@ describe('candidateResolver', () => {
     expect(result.verification).toBe('verified');
   });
 
-  it('does not treat an unstructured uploader name as verified catalog metadata', () => {
+  it('trusts the first YouTube Music song without pretending its uploader is official metadata', () => {
     const [result] = resolveDownloadCandidates(track, [candidate({
       channel: 'The Artist',
       artist: '',
@@ -52,7 +52,7 @@ describe('candidateResolver', () => {
 
     expect(result.evidence.artistMatch).toBe(true);
     expect(result.evidence.official).toBe(false);
-    expect(result.verification).toBe('probable');
+    expect(result.verification).toBe('verified');
   });
 
   it.each([
@@ -88,6 +88,69 @@ describe('candidateResolver', () => {
     const remixTrack = { ...track, title: 'Example Song Remix', canonicalTitle: 'Example Song Remix' };
     const [result] = resolveDownloadCandidates(remixTrack, [candidate({ title: 'Example Song Remix' })]);
     expect(result.rejectionReasons).not.toContain('remix');
+  });
+
+  it('trusts the first exact YouTube Music song when flat Android metadata is incomplete', () => {
+    const cleanTrack = { ...track, edition: 'clean' as const };
+    const results = resolveDownloadCandidates(cleanTrack, [
+      candidate({ artist: '', channel: '', duration: 0, edition: 'unknown' }),
+      candidate({ videoId: 'speed', title: 'Example Song (Sped Up)', artist: '', channel: '', duration: 0 }),
+    ]);
+    expect(results[0].verification).toBe('verified');
+    expect(canDownloadWithOneTap(results[0])).toBe(true);
+    expect(results[1].verification).toBe('rejected');
+  });
+
+  it('matches a requested Radio Edit and rejects an Extended Version', () => {
+    const radioTrack = {
+      ...track,
+      title: "Everybody (Backstreet's Back) (Radio Edit)",
+      canonicalTitle: "Everybody (Backstreet's Back) (Radio Edit)",
+      artist: 'Backstreet Boys',
+      edition: 'clean' as const,
+    };
+    const results = resolveDownloadCandidates(radioTrack, [
+      candidate({
+        videoId: 'extended',
+        title: "Everybody (Backstreet's Back) (Extended Version)",
+        artist: '',
+        channel: '',
+        duration: 0,
+        edition: 'unknown',
+      }),
+      candidate({
+        videoId: 'radio',
+        title: "Everybody (Backstreet's Back) (Radio Edit)",
+        artist: '',
+        channel: '',
+        duration: 0,
+        edition: 'unknown',
+      }),
+    ]);
+    expect(results[0].videoId).toBe('radio');
+    expect(results[0].verification).toBe('verified');
+    expect(results.find((result) => result.videoId === 'extended')?.rejectionReasons)
+      .toContain('extended');
+  });
+
+  it('requires review when only different featured versions are available', () => {
+    const plainTrack = { ...track, title: 'Take Me to the Beach', canonicalTitle: 'Take Me to the Beach', edition: 'unknown' as const };
+    const results = resolveDownloadCandidates(plainTrack, [
+      candidate({ videoId: 'ado', title: 'Take Me to the Beach (feat. Ado)', artist: '', channel: '', duration: 0 }),
+      candidate({ videoId: 'baker', title: 'Take Me to the Beach (feat. Baker Boy)', artist: '', channel: '', duration: 0 }),
+    ]);
+    expect(results.every((result) => !canDownloadWithOneTap(result))).toBe(true);
+    expect(results.every((result) => result.rejectionReasons.includes('featured_artist_unspecified'))).toBe(true);
+  });
+
+  it('detects collaborations exposed only through structured YouTube Music artists', () => {
+    const plainTrack = { ...track, title: 'Take Me to the Beach', canonicalTitle: 'Take Me to the Beach', artist: 'Imagine Dragons', edition: 'unknown' as const };
+    const results = resolveDownloadCandidates(plainTrack, [
+      candidate({ videoId: 'ado', title: 'Take Me to the Beach', artist: 'Imagine Dragons, Ado', channel: '', duration: 0 }),
+      candidate({ videoId: 'baker', title: 'Take Me to the Beach', artist: 'Imagine Dragons, Baker Boy', channel: '', duration: 0 }),
+    ]);
+    expect(results.every((result) => !canDownloadWithOneTap(result))).toBe(true);
+    expect(results.every((result) => result.rejectionReasons.includes('featured_artist_unspecified'))).toBe(true);
   });
 
   it('forces review when catalog edition is unknown and variants compete', () => {

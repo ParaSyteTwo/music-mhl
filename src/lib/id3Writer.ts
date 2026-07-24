@@ -16,8 +16,10 @@ interface ID3Tags {
  * Fetches an image and returns its ArrayBuffer + MIME type.
  */
 async function fetchCoverArt(url: string): Promise<{ buffer: ArrayBuffer; mime: string } | null> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: controller.signal });
     if (!res.ok) {
       console.warn('[id3Writer] Cover fetch failed:', res.status, url);
       return null;
@@ -28,6 +30,8 @@ async function fetchCoverArt(url: string): Promise<{ buffer: ArrayBuffer; mime: 
   } catch (e) {
     console.warn('[id3Writer] Cover fetch error:', e);
     return null;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 

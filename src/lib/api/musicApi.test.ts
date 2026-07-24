@@ -107,8 +107,7 @@ describe('musicApi lyrics combination', () => {
       },
     );
 
-    expect(result?.synced).toContain('[00:10.00]無敵の笑顔');
-    expect(result?.synced).toContain('[00:10.00]muteki no egao');
+    expect(result?.synced).toContain('[00:10.00]無敵の笑顔  •  muteki no egao');
     expect(result?.synced).toContain('[00:17.00]知りたい秘密');
     expect(result?.synced).not.toContain('[00:03.00]無敵の笑顔');
   });
@@ -270,6 +269,17 @@ describe('musicApi candidate ranking', () => {
     ]);
     expect(__testing.buildAndroidCandidateQueries(animeTrack, false)).not.toContain('naruto opening Opening 1');
     expect(__testing.buildAndroidCandidateQueries(animeTrack, true)).toContain('naruto opening Opening 1');
+  });
+
+  it('keeps featured artists and requested versions in YouTube Music queries', () => {
+    const versionedTrack = {
+      ...track,
+      title: 'Take Me to the Beach (feat. Ado) (Radio Edit)',
+      canonicalTitle: 'Take Me to the Beach (feat. Ado) (Radio Edit)',
+    };
+    expect(__testing.buildAndroidCandidateQueries(versionedTrack, false)[0]).toBe(
+      'artist - take me to the beach feat ado radio edit official audio',
+    );
   });
 
   it('uses at most three candidates in light mode', () => {

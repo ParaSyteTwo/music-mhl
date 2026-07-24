@@ -52,13 +52,16 @@ def _metadata_text(data: dict, *keys: str) -> str:
     for key in keys:
         value = data.get(key)
         values = value if isinstance(value, list) else [value]
+        texts = []
         for entry in values:
             if isinstance(entry, str) and entry.strip():
-                return entry.strip()
+                texts.append(entry.strip())
             if isinstance(entry, dict):
                 text = entry.get('name') or entry.get('title')
                 if isinstance(text, str) and text.strip():
-                    return text.strip()
+                    texts.append(text.strip())
+        if texts:
+            return ', '.join(dict.fromkeys(texts))
     return ''
 
 
@@ -71,7 +74,7 @@ _ANILIST_ENDPOINT = 'https://graphql.anilist.co'
 _ANIMETHEMES_ENDPOINT = 'https://api.animethemes.moe'
 _ANIME_HEADERS = {
     'Content-Type': 'application/json',
-    'User-Agent': 'MHLMusic/1.4.8-beta.2',
+    'User-Agent': 'MHLMusic/1.4.8-beta.3',
 }
 _ANIME_TIMEOUT = 10
 

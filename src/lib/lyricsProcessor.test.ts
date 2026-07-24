@@ -63,6 +63,24 @@ describe('lyrics language decisions', () => {
     expect(result[0]).not.toBe('사랑해');
   });
 
+  it('romanizes Japanese and Korean independently in mixed lyrics', async () => {
+    const result = await romanizeLines(['かな', '사랑해', 'Magic'], 'japanese');
+    expect(result[0]).not.toBe('かな');
+    expect(result[1]).not.toBe('사랑해');
+    expect(result[2]).toBe('Magic');
+  });
+
+  it('writes one physical LRC entry per timestamp when several layers are enabled', () => {
+    const result = buildLRC(
+      '[00:01.00]愛してる',
+      ['aishiteru'],
+      ['Te quiero'],
+      { original: true, romanization: true, translation: true },
+    );
+    expect(result.synced?.split('\n')).toHaveLength(1);
+    expect(result.synced).toBe('[00:01.00]愛してる  •  aishiteru  •  Te quiero');
+  });
+
   it('uses romanization as the primary line when latin-only lyrics are enabled', async () => {
     const result = await processLyrics('[00:01.00]사랑해', '', {
       lyricOriginal: true,

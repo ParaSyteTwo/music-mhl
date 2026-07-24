@@ -1,5 +1,23 @@
 # Changelog
 
+## v1.4.8-beta.3 - 2026-07-23
+
+- Simplificado el selector: la primera Song de YouTube Music se usa directamente
+  cuando no hay contradicciones y el picker aparece solo ante versiones,
+  colaboraciones o ediciones realmente ambiguas.
+- Eliminados los porcentajes sintéticos y sustituidos por estados públicos
+  `Principal`, `Elegir versión` y `Otra versión`.
+- Corregida la distinción entre Radio Edit, Extended, remix, acústica, remaster,
+  cambios de velocidad y colaboradores `feat./with`.
+- Android vuelve a enriquecer los candidatos profundos con artista, duración,
+  canal e ISRC, conservando además todos los artistas estructurados.
+- El LRC genera una sola entrada por timestamp, completa romaji japonés/coreano
+  por línea y evita duplicar la misma letra sincronizada entre ID3 y sidecar.
+- La escritura de metadatos limita la espera de portada, usa una conversión
+  Base64 eficiente y expone un timeout tipado al guardar en MediaStore.
+- `versionCode` incrementado a `29` y versión alineada en frontend, Android y
+  Desktop.
+
 ## v1.4.7-beta.5 - 2026-06-20
 
 - Optimizado el selector de candidatos en Android con una primera búsqueda

@@ -33,6 +33,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import android.util.Base64;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -288,7 +289,7 @@ public class YtDlpPlugin extends Plugin {
         if (enrich) {
             for (int i = 0; i < Math.min(2, results.length()); i++) {
                 Object rawItem = results.get(i);
-                if (rawItem instanceof JSObject) enrichCandidate((JSObject) rawItem);
+                if (rawItem instanceof JSONObject) enrichCandidate((JSONObject) rawItem);
             }
         }
         return results;
@@ -303,23 +304,25 @@ public class YtDlpPlugin extends Plugin {
             }
             if (value instanceof JSONArray) {
                 JSONArray values = (JSONArray) value;
+                ArrayList<String> texts = new ArrayList<>();
                 for (int i = 0; i < values.length(); i++) {
                     Object entry = values.opt(i);
                     if (entry instanceof String && !((String) entry).trim().isEmpty()) {
-                        return ((String) entry).trim();
+                        texts.add(((String) entry).trim());
                     }
                     if (entry instanceof JSONObject) {
                         String text = ((JSONObject) entry).optString("name", "").trim();
                         if (text.isEmpty()) text = ((JSONObject) entry).optString("title", "").trim();
-                        if (!text.isEmpty()) return text;
+                        if (!text.isEmpty()) texts.add(text);
                     }
                 }
+                if (!texts.isEmpty()) return String.join(", ", new LinkedHashSet<>(texts));
             }
         }
         return "";
     }
 
-    private void enrichCandidate(JSObject item) {
+    private void enrichCandidate(JSONObject item) {
         try {
             String videoId = item.getString("videoId");
             if (videoId == null || videoId.isEmpty()) return;

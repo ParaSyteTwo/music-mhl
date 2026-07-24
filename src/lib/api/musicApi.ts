@@ -469,10 +469,7 @@ function buildCandidateCacheKey(
 function normalizeSearchTerm(value: string): string {
   return value
     .toLowerCase()
-    .replace(/\([^)]*\)/g, ' ')
-    .replace(/\[[^\]]*\]/g, ' ')
-    .replace(/\b(feat|ft|featuring)\.?\s+[^-–—,]+/gi, ' ')
-    .replace(/\b(remaster(?:ed)?|radio edit|radio version|version|ost|soundtrack)\b/gi, ' ')
+    .replace(/\b(ost|original soundtrack|soundtrack)\b/gi, ' ')
     .replace(/[^\p{L}\p{N}\s]/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim();
@@ -1051,10 +1048,21 @@ async function _combineLyrics(
     letras.translated.length === letras.original.length
     && letras.translated.some((line) => line.trim())
   )
+  const needsGeneratedTranslation = (
+    shouldTranslate
+    && (
+      p.deviceLang !== 'es'
+      || !hasAlignedTranslation
+      || letras.translated.some((line) => !line.trim())
+    )
+  )
+  const generatedTranslation = needsGeneratedTranslation
+    ? await translateLines(letras.original, p.deviceLang)
+    : null
   const translated = shouldTranslate
     ? p.deviceLang === 'es' && hasAlignedTranslation
-      ? letras.translated
-      : await translateLines(letras.original, p.deviceLang)
+      ? letras.translated.map((line, index) => line.trim() || generatedTranslation?.[index] || '')
+      : generatedTranslation
     : null
   const needsRomanization = (
     (p.lyricRomanization || p.lyricLatinOnly)
@@ -1064,10 +1072,20 @@ async function _combineLyrics(
     letras.romaji.length === letras.original.length
     && letras.romaji.some((line) => line.trim())
   )
+  const needsGeneratedRomanization = (
+    needsRomanization
+    && (
+      !hasAlignedRomanization
+      || letras.romaji.some((line) => !line.trim())
+    )
+  )
+  const generatedRomanization = needsGeneratedRomanization
+    ? await romanizeLines(letras.original, sourceScript)
+    : []
   const romaji = needsRomanization
     ? hasAlignedRomanization
-      ? letras.romaji
-      : await romanizeLines(letras.original, sourceScript)
+      ? letras.romaji.map((line, index) => line.trim() || generatedRomanization[index] || '')
+      : generatedRomanization
     : []
   const plainResult: string[] = []
 
@@ -1084,7 +1102,6 @@ async function _combineLyrics(
       }
       selectedLines.push(line)
       plainResult.push(line)
-      if (ts) result.push(`[${ts}]${line}`)
     }
 
     if (p.lyricLatinOnly) {
@@ -1094,6 +1111,7 @@ async function _combineLyrics(
       if (p.lyricRomanization) pushDistinct(romaji[i])
     }
     if (shouldTranslate) pushDistinct(translated?.[i])
+    if (ts) result.push(`[${ts}]${selectedLines.join('  •  ')}`)
   }
 
   return {
