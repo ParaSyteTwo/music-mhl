@@ -1,6 +1,6 @@
 import type { Track, TrackEdition } from '@/types/music';
 
-export const CANDIDATE_RESOLVER_VERSION = 3;
+export const CANDIDATE_RESOLVER_VERSION = 4;
 
 export type CandidateSource = 'youtube_music' | 'youtube';
 export type CandidateVerification = 'verified' | 'probable' | 'review' | 'rejected';
@@ -54,8 +54,14 @@ const ALTERED_PATTERNS: Array<[string, RegExp]> = [
   ['nightcore', /\b(nightcore|sped up|slowed|8d|reverb)\b/i],
   ['instrumental', /\b(instrumental|karaoke|acapella|a cappella)\b/i],
   ['remix', /\b(remix|bootleg|mashup)\b/i],
+  ['radio_edit', /\b(radio edit|radio version|single edit)\b/i],
+  ['extended', /\b(extended|extended version|extended mix)\b/i],
+  ['acoustic', /\b(acoustic|unplugged)\b/i],
+  ['remaster', /\b(remaster(?:ed)?(?:\s+\d{4})?)\b/i],
   ['music_video', /\b(official music video|music video|m\/v|visualizer)\b/i],
 ];
+
+const FEATURED_ARTIST_RE = /\b(?:feat(?:uring)?|ft|with)\.?\s+([^()[\]–—-]+)/i;
 
 export function normalizeCandidateText(value: string): string {
   return value
@@ -69,6 +75,53 @@ export function normalizeCandidateText(value: string): string {
     .trim();
 }
 
+function featuredArtist(value: string): string {
+  return normalizeCandidateText(FEATURED_ARTIST_RE.exec(value)?.[1] ?? '');
+}
+
+function variantReasons(value: string): string[] {
+  return ALTERED_PATTERNS
+    .filter(([reason, pattern]) => reason !== 'music_video' && pattern.test(value))
+    .map(([reason]) => reason);
+}
+
+function additionalStructuredArtists(value: string, primaryArtist: string): string {
+  if (!value.includes(',') && !value.includes(';')) return '';
+  const primary = normalizeCandidateText(primaryArtist);
+  return value
+    .split(/[,;]/)
+    .map((artist) => normalizeCandidateText(artist))
+    .filter((artist) => artist && !containsWords(primary, artist) && !containsWords(artist, primary))
+    .join(' ');
+}
+
+function compareRequestedVariant(track: Track, raw: RawDownloadCandidate): string[] {
+  const requested = `${track.title} ${track.canonicalTitle ?? ''}`;
+  const candidate = raw.title;
+  const requestedVariants = new Set(variantReasons(requested));
+  const candidateVariants = new Set(variantReasons(candidate));
+  const contradictions: string[] = [];
+
+  for (const variant of candidateVariants) {
+    if (!requestedVariants.has(variant)) contradictions.push(variant);
+  }
+  for (const variant of requestedVariants) {
+    if (!candidateVariants.has(variant)) contradictions.push(`missing_${variant}`);
+  }
+
+  const requestedFeature = featuredArtist(requested);
+  const candidateFeature = (
+    featuredArtist(candidate)
+    || additionalStructuredArtists(raw.artist ?? '', track.artist)
+  );
+  if (requestedFeature && candidateFeature !== requestedFeature) {
+    contradictions.push(candidateFeature ? 'featured_artist_mismatch' : 'featured_artist_missing');
+  } else if (!requestedFeature && candidateFeature) {
+    contradictions.push('featured_artist_unspecified');
+  }
+  return contradictions;
+}
+
 function containsWords(haystack: string, needle: string): boolean {
   if (!needle) return false;
   const wanted = needle.split(' ').filter(Boolean);
@@ -78,7 +131,7 @@ function containsWords(haystack: string, needle: string): boolean {
 function inferEdition(candidate: RawDownloadCandidate): TrackEdition {
   if (candidate.edition && candidate.edition !== 'unknown') return candidate.edition;
   const text = `${candidate.title} ${candidate.album ?? ''}`.toLocaleLowerCase();
-  if (/\b(clean|censored|radio edit|radio version)\b/.test(text)) return 'clean';
+  if (/\b(clean|censored)\b/.test(text)) return 'clean';
   if (/\b(explicit|uncensored|dirty version)\b/.test(text)) return 'explicit';
   return 'unknown';
 }
@@ -117,7 +170,7 @@ export function resolveDownloadCandidates(
   const wantedAlbum = normalizeCandidateText(track.canonicalAlbum?.trim() || track.album);
   const unique = new Map<string, DownloadCandidate>();
 
-  for (const raw of rawCandidates) {
+  for (const [rawIndex, raw] of rawCandidates.entries()) {
     if (!raw.videoId) continue;
     const title = normalizeCandidateText(raw.title);
     const channel = normalizeCandidateText(raw.channel);
@@ -132,10 +185,12 @@ export function resolveDownloadCandidates(
     const requestedEditionText = `${track.title} ${track.canonicalTitle ?? ''} ${track.album}`;
     const contradictions = ALTERED_PATTERNS
       .filter(([reason, pattern]) => {
+        if (reason !== 'music_video') return false;
         if (!pattern.test(`${raw.title} ${raw.channel}`) || pattern.test(requestedEditionText)) return false;
         return reason !== 'music_video' || durationDifference === null || durationDifference > 0.02;
       })
       .map(([reason]) => reason);
+    contradictions.push(...compareRequestedVariant(track, raw));
     const titleMatch = title === wantedTitle || containsWords(title, wantedTitle);
     const artistMatch = containsWords(combined, wantedArtist);
     const albumMatch = Boolean(wantedAlbum) && (
@@ -143,6 +198,8 @@ export function resolveDownloadCandidates(
     );
     const youtubeMusicSong = source === 'youtube_music' && (!raw.resultType || /song|track/i.test(raw.resultType));
     const catalogArtistMatch = Boolean(candidateArtist) && containsWords(candidateArtist, wantedArtist);
+    const hasArtistEvidence = Boolean(candidateArtist || channel);
+    const artistContradiction = hasArtistEvidence && !artistMatch;
     const official = (
       /\b(topic|vevo|official|provided to youtube)\b/i.test(`${raw.channel} ${raw.title}`)
       || (youtubeMusicSong && catalogArtistMatch)
@@ -180,6 +237,7 @@ export function resolveDownloadCandidates(
     }
     if (editionMatch === true) score += 10;
     if (isrcMatch) score += 1000;
+    score += Math.max(0, 10 - rawIndex);
     score -= evidence.contradictions.length * 60;
 
     const unknownEditionBlocksVerification = (
@@ -189,7 +247,7 @@ export function resolveDownloadCandidates(
       && !isrcMatch
     );
     let verification: CandidateVerification;
-    if (evidence.contradictions.length > 0 || !titleMatch || !artistMatch) {
+    if (evidence.contradictions.length > 0 || !titleMatch || artistContradiction) {
       verification = 'rejected';
     } else if (
       isrcMatch
@@ -202,7 +260,10 @@ export function resolveDownloadCandidates(
       )
     ) {
       verification = 'verified';
-    } else if (durationDifference !== null && durationDifference <= 0.05) {
+    } else if (
+      youtubeMusicSong
+      || (durationDifference !== null && durationDifference <= 0.05)
+    ) {
       verification = 'probable';
     } else {
       verification = 'review';
@@ -235,6 +296,32 @@ export function resolveDownloadCandidates(
         candidate.rejectionReasons = [...candidate.rejectionReasons, 'catalog_edition_ambiguous'];
       }
     }
+  }
+
+  const primary = ranked[0];
+  const expectedEdition = targetEdition(track, preference);
+  const primaryEditionResolved = (
+    preference === 'ask'
+    || expectedEdition === 'unknown'
+    || expectedEdition === 'clean'
+    || primary?.evidence.editionMatch === true
+    || primary?.evidence.isrcMatch
+  );
+  if (
+    primary
+    && primary.verification === 'probable'
+    && primary.evidence.youtubeMusicSong
+    && primary.evidence.titleMatch
+    && primary.evidence.contradictions.length === 0
+    && primaryEditionResolved
+    && (
+      primary.evidence.durationDifference === null
+      || primary.evidence.durationDifference <= 0.05
+    )
+  ) {
+    primary.verification = 'verified';
+    primary.confidence = 'alta';
+    primary.label = 'Primera canción de YouTube Music';
   }
   return ranked.slice(0, 3);
 }

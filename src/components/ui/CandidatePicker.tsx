@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { X, Clock, CheckCircle2, ShieldCheck, AlertTriangle, Sparkles, RefreshCw } from 'lucide-react';
+import { X, Clock, CheckCircle2, AlertTriangle, Sparkles, RefreshCw } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { Capacitor } from '@capacitor/core';
 import { toast } from 'sonner';
@@ -14,35 +14,24 @@ import type { ResolutionProfile } from '@/store/musicStore';
 const toneStyles: Record<CandidateMatchTone, {
   card: string;
   rank: string;
-  percent: string;
   badge: string;
   detail: string;
 }> = {
-  exact: {
+  primary: {
     card: 'bg-[linear-gradient(110deg,rgba(200,240,75,0.12),rgba(200,240,75,0.035))] border-[rgba(200,240,75,0.38)] hover:border-[rgba(200,240,75,0.6)]',
     rank: 'bg-[#C8F04B] text-[#111]',
-    percent: 'bg-[rgba(200,240,75,0.16)] text-[#C8F04B]',
     badge: 'bg-[rgba(200,240,75,0.12)] text-[#D8FF61]',
     detail: 'text-[#B7D957]',
-  },
-  high: {
-    card: 'bg-[linear-gradient(110deg,rgba(56,189,248,0.11),rgba(56,189,248,0.025))] border-[rgba(56,189,248,0.28)] hover:border-[rgba(56,189,248,0.5)]',
-    rank: 'bg-[#38BDF8] text-[#07151C]',
-    percent: 'bg-[rgba(56,189,248,0.14)] text-[#7DD3FC]',
-    badge: 'bg-[rgba(56,189,248,0.11)] text-[#7DD3FC]',
-    detail: 'text-[#68BCE2]',
   },
   review: {
     card: 'bg-[linear-gradient(110deg,rgba(245,158,11,0.08),rgba(255,255,255,0.025))] border-[rgba(245,158,11,0.18)] hover:border-[rgba(245,158,11,0.36)]',
     rank: 'bg-[rgba(245,158,11,0.2)] text-[#FBBF24]',
-    percent: 'bg-[rgba(245,158,11,0.12)] text-[#FBBF24]',
     badge: 'bg-[rgba(245,158,11,0.1)] text-[#F3C65C]',
     detail: 'text-[#B89149]',
   },
   alternate: {
     card: 'bg-[linear-gradient(110deg,rgba(244,63,94,0.075),rgba(255,255,255,0.02))] border-[rgba(244,63,94,0.16)] hover:border-[rgba(244,63,94,0.32)]',
     rank: 'bg-[rgba(244,63,94,0.16)] text-[#FB7185]',
-    percent: 'bg-[rgba(244,63,94,0.12)] text-[#FB7185]',
     badge: 'bg-[rgba(244,63,94,0.1)] text-[#FDA4AF]',
     detail: 'text-[#C27480]',
   },
@@ -216,11 +205,7 @@ export function CandidatePicker({
               {candidates.slice(0, 3).map((c, i) => {
                 const match = getCandidateMatchPresentation(track, c);
                 const styles = toneStyles[match.tone];
-                const StatusIcon = match.tone === 'exact'
-                  ? CheckCircle2
-                  : match.tone === 'high'
-                    ? ShieldCheck
-                    : AlertTriangle;
+                const StatusIcon = match.tone === 'primary' ? CheckCircle2 : AlertTriangle;
 
                 return (
                   <motion.button
@@ -265,9 +250,6 @@ export function CandidatePicker({
                       </p>
                     </div>
                     <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-                      <span className={`text-[11px] font-bold tabular-nums px-2 py-1 rounded-lg ${styles.percent}`}>
-                        {match.percent}%
-                      </span>
                       <span className={`text-[8px] font-semibold uppercase tracking-[0.08em] ${styles.detail}`}>
                         {t(match.statusKey)}
                       </span>

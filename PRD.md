@@ -91,13 +91,15 @@ musical normal de un usuario que no haya optado por la feature.
 
 - [ ] Deezer conserva titulo, artista, album, ISRC y edicion como identidad canonica.
 - [ ] YouTube Music `#songs` es la fuente primaria y YouTube general solo se consulta en verificacion profunda cuando no existe una coincidencia valida.
-- [ ] Solo `verified` habilita el boton de descarga de un toque; `probable` y `review` abren el selector y `rejected` nunca se elige automaticamente.
+- [ ] La primera cancion de YouTube Music se descarga con un toque cuando el titulo base coincide y no hay contradicciones de version, colaboracion o edicion; el selector aparece solo ante ambiguedad real.
+- [ ] El selector no muestra porcentajes sinteticos: identifica la opcion principal, las versiones que requieren eleccion y las alternativas incompatibles.
 - [ ] Toda descarga musical recibe un `videoId` resuelto y ninguna plataforma repite una busqueda oculta.
 - [ ] La preferencia de edicion admite catalogo, explicita, limpia o preguntar; catalogo es el valor predeterminado.
 - [ ] Android ejecuta una resolucion simultanea y Desktop dos. Datos moviles en modo ligero no supera cinco canciones por consulta.
 - [ ] La cola se cancela al cambiar consulta y se pausa sin red, con la app oculta, ahorro de bateria o menos del 20 por ciento sin cargar.
 - [ ] La cache persistente guarda positivos 72 horas, vacios 10 minutos y como maximo 200 pistas.
 - [ ] La traduccion de letras usa un idioma independiente y el locale nativo de Windows o Android.
+- [ ] El LRC conserva un unico registro por timestamp y completa por linea los huecos de romaji japones o coreano sin duplicar la misma letra en ID3 y sidecar.
 - [ ] El archivo final es MP3, se puede decodificar y su duracion esta dentro de `max(5 segundos, 5%)`.
 
 ### Desktop

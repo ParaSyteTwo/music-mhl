@@ -138,7 +138,19 @@ export async function saveAudioToMediaStore(videoId: string, fileName: string): 
 export async function saveTaggedAudioToMusic(fileName: string, base64Data: string): Promise<string> {
   if (!Capacitor.isNativePlatform()) throw new Error('Not on native platform');
   if (!initialized) await initYtDlp();
-  const result = await YtDlp.saveTaggedAudioToMusic!({ fileName, data: base64Data });
+  const operation = YtDlp.saveTaggedAudioToMusic!({ fileName, data: base64Data });
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const result = await Promise.race([
+    operation,
+    new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(
+        () => reject(new Error('write: timeout guardando el MP3 etiquetado')),
+        60_000,
+      );
+    }),
+  ]).finally(() => {
+    if (timeoutId) clearTimeout(timeoutId);
+  });
   if (!result?.success) throw new Error('MediaStore save failed');
   return result.uri;
 }

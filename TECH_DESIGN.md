@@ -186,7 +186,8 @@ consulta del usuario
   -> candidateResolver compartido: evidencia + edicion + verificacion
   -> enriquecer los dos mejores en modo profundo
   -> YouTube general solo como fallback profundo
-  -> verified: boton de un toque; probable/review: selector
+  -> primera Song sin contradicciones: boton de un toque
+  -> variantes feat./with, Radio Edit, Extended, remix o edicion: selector
   -> descargar audio
   -> escribir metadatos canonicos
   -> verificar archivo
@@ -198,6 +199,14 @@ descargan un `videoId`; nunca puntuan ni vuelven a buscar. `candidateResolver`
 es la unica autoridad de ranking y produce `verified`, `probable`, `review` o
 `rejected` con evidencia de ISRC, titulo, artista, album, duracion, oficialidad,
 tipo de resultado, edicion y contradicciones.
+
+La UI no convierte el score interno en un porcentaje. El score solo ordena
+candidatos; la presentacion publica es `Principal`, `Elegir version` u `Otra
+version`. Una primera Song de YouTube Music con titulo base correcto puede ser
+principal aun cuando la busqueda plana no incluya artista o duracion, siempre
+que no contradiga la variante solicitada. Los tokens `feat.`, `with`, `Radio
+Edit`, `Extended`, `remix`, `live`, `sped up/slowed`, `acoustic` y `remaster`
+se comparan por separado del titulo base.
 
 `CandidateScheduler` prioriza visibles, primeras cinco y resto en idle. Su
 concurrencia es 2 en Desktop y 1 en Android. En red medida el perfil ligero
@@ -211,6 +220,13 @@ se comprueban existencia, tamaño minimo, decodificacion y duracion; despues de
 ID3 se confirma de nuevo el tamaño escrito. Los errores de red, rate limit,
 candidato, edicion, extraccion, conversion, metadatos y escritura cruzan la
 frontera con un tipo identificable.
+
+Las letras sincronizadas usan LRCLIB como timeline. Cada timestamp genera una
+sola entrada LRC que puede contener original, romanizacion y traduccion; esto
+evita que reproductores interpreten las capas como versos duplicados. La
+romanizacion detecta la escritura de cada linea, completa huecos parciales de
+Letras.com y traduce directamente al destino resuelto. Cuando se guarda un
+sidecar `.lrc`, la misma letra sincronizada no se vuelve a incrustar en USLT.
 
 ## 8. Flujo Anime
 

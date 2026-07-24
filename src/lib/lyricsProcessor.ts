@@ -135,12 +135,18 @@ async function _getKuroshiro(): Promise<any | null> {
 
 // ─── Romanization ────────────────────────────────────────────────────────────
 
-export async function romanizeLines(lines: string[], script: Script): Promise<string[]> {
+export async function romanizeLines(lines: string[], _script: Script): Promise<string[]> {
   try {
-    if (script === 'japanese') return await _romanizeJapanese(lines)
-    if (script === 'korean')   return await _romanizeKorean(lines)
-    if (script === 'chinese')  return await _romanizeChinese(lines)
-    if (script !== 'latin')    return await _romanizeOther(lines)
+    const output: string[] = []
+    for (const line of lines) {
+      const lineScript = detectScript(line)
+      if (lineScript === 'latin') output.push(line)
+      else if (lineScript === 'japanese') output.push((await _romanizeJapanese([line]))[0])
+      else if (lineScript === 'korean') output.push((await _romanizeKorean([line]))[0])
+      else if (lineScript === 'chinese') output.push((await _romanizeChinese([line]))[0])
+      else output.push((await _romanizeOther([line]))[0])
+    }
+    return output
   } catch { /* silencioso */ }
   return lines
 }
@@ -306,7 +312,6 @@ export function buildLRC(
         return
       }
       selectedLines.push(line)
-      synced.push(`${ts}${line}`)
       plain.push(line)
     }
 
@@ -320,6 +325,7 @@ export function buildLRC(
 
     const tra = translated?.[idx]
     if (flags.translation) pushDistinct(tra)
+    synced.push(`${ts}${selectedLines.join('  •  ')}`)
   })
 
   return { synced: synced.join('\n'), plain: plain.join('\n') }
