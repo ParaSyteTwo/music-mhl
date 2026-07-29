@@ -39,8 +39,9 @@ vi.mock('@/lib/api/animeApi', () => ({
 }));
 
 vi.mock('@/data/globalArtists', () => ({
+  GLOBAL_ARTISTS_POOL: [],
   buildAffinityPool: () => [],
-  artistColor: () => '#000000',
+  buildArtistVisuals: () => [],
 }));
 
 import SearchPage from './SearchPage';

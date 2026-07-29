@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.4.8-beta.5 - 2026-07-28
+
+- Renovada la pantalla principal con una composición más expresiva sin perder
+  el estilo oscuro, limpio y ligero de MHL Music.
+- La colección de descubrimiento crece hasta 336 artistas repartidos en 18
+  géneros, con 12 sugerencias visibles y rotación manual.
+- Las nuevas tandas evitan los 36 artistas mostrados recientemente y equilibran
+  afinidad con los géneros escuchados y exploración global.
+- Incorporadas 24 paletas cromáticas con resolución de colisiones para que los
+  12 artistas visibles no repitan color principal ni secundario.
+- Añadidos tests de diversidad, deduplicación, rotación y estabilidad visual.
+- `versionCode` incrementado a `31` y versión alineada en frontend, Android y
+  Desktop.
+
 ## v1.4.8-beta.4 - 2026-07-28
 
 - La primera Song de YouTube Music pasa a ser la opción principal salvo que
