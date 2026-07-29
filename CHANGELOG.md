@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.4.8-beta.4 - 2026-07-28
+
+- La primera Song de YouTube Music pasa a ser la opción principal salvo que
+  exista una contradicción demostrable de versión o edición.
+- Los resultados semánticamente equivalentes se colapsan, conservando por
+  separado variantes reales como colaboradores, Radio Edit, Extended, THE
+  FIRST TAKE, directo, remix, acústica o remaster.
+- La resolución automática y el selector inicial usan búsquedas ligeras; el
+  enriquecimiento y YouTube general quedan bajo `Buscar más opciones`.
+- Retiradas del flujo activo las rutas Web/Railway, el modo mantenimiento y
+  APIs sin consumidores de los bridges Desktop y Android.
+- Eliminadas tres dependencias y varias utilidades de interfaz sin uso,
+  conservando `kuromoji` para la romanización japonesa.
+- `versionCode` incrementado a `30` y versión alineada en frontend, Android y
+  Desktop.
+
 ## v1.4.8-beta.3 - 2026-07-23
 
 - Simplificado el selector: la primera Song de YouTube Music se usa directamente

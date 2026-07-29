@@ -1,7 +1,7 @@
 {
   "name": "mhl-music",
   "private": false,
-  "version": "1.4.8-beta.3",
+  "version": "1.4.8-beta.4",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -25,7 +25,6 @@
     "@capacitor/filesystem": "^8.1.2",
     "@capacitor/status-bar": "^8.0.1",
     "browser-id3-writer": "^6.3.1",
-    "clsx": "^2.1.1",
     "framer-motion": "^12.36.0",
     "kuroshiro": "^1.2.0",
     "kuroshiro-analyzer-kuromoji": "^1.1.0",
@@ -35,8 +34,6 @@
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.30.1",
     "sonner": "^1.7.4",
-    "tailwind-merge": "^3.5.0",
-    "tailwindcss-animate": "^1.0.7",
     "transliteration": "^2.6.1",
     "wanakana": "^5.3.1",
     "zustand": "^5.0.11"

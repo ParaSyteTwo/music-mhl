@@ -9,7 +9,6 @@ import { getCandidateMatchPresentation, type CandidateMatchTone } from '@/lib/ca
 import type { Track } from '@/types/music';
 import { useI18n } from '@/lib/useI18n';
 import type { EditionPreference } from '@/lib/download/candidateResolver';
-import type { ResolutionProfile } from '@/store/musicStore';
 
 const toneStyles: Record<CandidateMatchTone, {
   card: string;
@@ -40,14 +39,12 @@ const toneStyles: Record<CandidateMatchTone, {
 export function CandidatePicker({
   track,
   animeSearchEnabled,
-  resolutionProfile,
   editionPreference,
   onClose,
   onSelect,
 }: {
   track: Track;
   animeSearchEnabled: boolean;
-  resolutionProfile: ResolutionProfile;
   editionPreference: EditionPreference;
   onClose: () => void;
   onSelect: (videoId: string) => void;
@@ -75,7 +72,7 @@ export function CandidatePicker({
     const loadCandidates = async () => {
       try {
         const cands = await getDownloadCandidates(track, animeSearchEnabled, {
-          depth: resolutionProfile === 'economy' ? 'light' : 'deep', editionPreference,
+          depth: 'light', editionPreference,
         });
         if (!active) return;
         setCandidates(cands);
@@ -96,7 +93,7 @@ export function CandidatePicker({
     return () => {
       active = false;
     };
-  }, [animeSearchEnabled, editionPreference, resolutionProfile, track, t]);
+  }, [animeSearchEnabled, editionPreference, track, t]);
 
   function fmt(s: number) {
     const m = Math.floor(s / 60);

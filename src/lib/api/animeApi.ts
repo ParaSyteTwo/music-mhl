@@ -1,7 +1,7 @@
 import { Track } from '@/types/music';
 import type { Anime, AnimeTheme } from '@/types/anime';
 import { getDownloadCandidates } from '@/lib/api/musicApi';
-import { requirePyWebViewApi, getRailwayUrl, railwayHeaders } from '@/lib/api/musicApi';
+import { requirePyWebViewApi } from '@/lib/api/musicApi';
 
 export interface AnimeSearchResponse {
   success: boolean;
@@ -343,24 +343,7 @@ export async function searchAnime(
         });
         results = parseAnimeList(payload);
       } else {
-        const url = `${getRailwayUrl()}/anime/search`;
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: railwayHeaders(),
-          body: JSON.stringify({ query: normalizedQuery, limit }),
-        });
-        const text = await res.text();
-        if (!res.ok) {
-          let err: { error?: string; detail?: string } | null = null;
-          try { err = JSON.parse(text); } catch { /* ignore */ }
-          const statusText = res.status === 401 ? 'Unauthorized' : (err?.error || err?.detail || `HTTP ${res.status}`);
-          return { success: false, error: statusText };
-        }
-        const data = JSON.parse(text) as { results?: Anime[]; error?: string };
-        if (data.error) {
-          return { success: false, error: data.error };
-        }
-        results = data.results || [];
+        return { success: false, error: 'Unsupported platform' };
       }
 
       setCachedValue(searchCache, cacheKey, results, ANIME_CACHE_TTL_MS, ANIME_CACHE_MAX_ENTRIES);
@@ -409,24 +392,7 @@ export async function getAnimeThemes(
       } else if (isAndroidPlatform()) {
         themes = await getAnimeThemesDirect(anilistId);
       } else {
-        const url = `${getRailwayUrl()}/anime/themes`;
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: railwayHeaders(),
-          body: JSON.stringify({ anilistId }),
-        });
-        const text = await res.text();
-        if (!res.ok) {
-          let err: { error?: string; detail?: string } | null = null;
-          try { err = JSON.parse(text); } catch { /* ignore */ }
-          const statusText = res.status === 401 ? 'Unauthorized' : (err?.error || err?.detail || `HTTP ${res.status}`);
-          return { success: false, error: statusText };
-        }
-        const data = JSON.parse(text) as { themes?: AnimeTheme[]; error?: string };
-        if (data.error) {
-          return { success: false, error: data.error };
-        }
-        themes = data.themes || [];
+        return { success: false, error: 'Unsupported platform' };
       }
 
       setCachedValue(themesCache, cacheKey, themes, ANIME_CACHE_TTL_MS, ANIME_CACHE_MAX_ENTRIES);

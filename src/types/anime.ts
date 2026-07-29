@@ -21,13 +21,3 @@ export interface AnimeTheme {
   audioUrl: string | null;
   videoUrl: string | null;
 }
-
-export interface AnimeSearchResult {
-  success: true;
-  results: Anime[];
-}
-
-export interface AnimeThemesResult {
-  success: true;
-  themes: AnimeTheme[];
-}

@@ -84,9 +84,7 @@ export class CandidateScheduler {
     if (item.priority === 2 && (context.metered || this.settings.profile === 'economy')) return;
 
     const options: CandidateSearchOptions = {
-      depth: context.metered && this.settings.cellularPolicy !== 'full'
-        ? 'light'
-        : this.settings.profile === 'economy' ? 'light' : 'deep',
+      depth: 'light',
       editionPreference: this.settings.editionPreference,
     };
     try {

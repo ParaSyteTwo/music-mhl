@@ -46,6 +46,19 @@ describe('CandidateScheduler', () => {
     expect(resolver.mock.calls[0][2]).toMatchObject({ depth: 'light' });
   });
 
+  it('keeps automatic Wi-Fi resolution light and reserves deep search for manual review', async () => {
+    const resolver = vi.fn(async (
+      _track: Track,
+      _animeSearchEnabled: boolean,
+      _options: CandidateSearchOptions,
+    ) => []);
+    const scheduler = new CandidateScheduler(settings, async () => context(), resolver, 1);
+    scheduler.startSession();
+    scheduler.enqueue(track(1), 'visible', () => {});
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(resolver.mock.calls[0][2]).toMatchObject({ depth: 'light' });
+  });
+
   it.each([
     { online: false },
     { batterySaver: true },

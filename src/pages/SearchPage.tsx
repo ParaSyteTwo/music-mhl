@@ -142,7 +142,7 @@ export default function SearchPage() {
     setBestResolvingId(key);
     try {
       const candidates = await getDownloadCandidates(track, animeSearchEnabled, {
-        depth: 'deep', editionPreference,
+        depth: 'light', editionPreference,
       });
       cacheBestCandidate(track, candidates);
       const verified = candidates.find(canDownloadWithOneTap);
@@ -839,7 +839,6 @@ export default function SearchPage() {
       <CandidatePicker
         track={pickerTrack}
         animeSearchEnabled={animeSearchEnabled}
-        resolutionProfile={resolutionProfile}
         editionPreference={editionPreference}
         onClose={() => setPickerTrack(null)}
             onSelect={(videoId) => {

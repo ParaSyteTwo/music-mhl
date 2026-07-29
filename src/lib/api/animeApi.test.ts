@@ -50,11 +50,6 @@ function clearPlatform(): void {
   getDownloadCandidatesMock.mockReset();
 }
 
-function setWebEnv(): void {
-  (import.meta.env as Record<string, string | undefined>).VITE_RAILWAY_URL = 'https://railway.test';
-  (import.meta.env as Record<string, string | undefined>).VITE_SERVICE_API_KEY = 'test-key';
-}
-
 function setPyWebViewPlatform(api: { anime_search: ReturnType<typeof vi.fn>; anime_get_themes: ReturnType<typeof vi.fn> }): void {
   (window as { pywebview?: unknown }).pywebview = { api };
 }
@@ -65,7 +60,6 @@ function setAndroidPlatform(): void {
 
 beforeEach(() => {
   clearPlatform();
-  setWebEnv();
 });
 
 afterEach(() => {
@@ -73,19 +67,13 @@ afterEach(() => {
 });
 
 describe('searchAnime', () => {
-  it('calls fetch with the right URL on web', async () => {
-    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ results: [sampleAnime] }), { status: 200 }),
-    );
+  it('rejects unsupported platforms without making a network request', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
 
     const result = await searchAnime('naruto', 5);
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe('https://railway.test/anime/search');
-    expect(init?.method).toBe('POST');
-    expect(JSON.parse(init?.body as string)).toEqual({ query: 'naruto', limit: 5 });
-    expect(result).toEqual({ success: true, results: [sampleAnime] });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result).toEqual({ success: false, error: 'Unsupported platform' });
   });
 
   it('calls anime_search on the desktop bridge when running in pywebview', async () => {
@@ -137,20 +125,24 @@ describe('searchAnime', () => {
     expect(body.variables.search).toBe('naruto');
   });
 
-  it('returns Unauthorized when the backend responds 401', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 }),
-    );
-
-    const result = await searchAnime('naruto', 5);
-
-    expect(result.success).toBe(false);
-    expect(result.error).toBe('Unauthorized');
-  });
-
-  it('caches the result and skips the next fetch on web', async () => {
+  it('caches the result and skips the next AniList request on Android', async () => {
+    setAndroidPlatform();
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ results: [sampleAnime] }), { status: 200 }),
+      new Response(JSON.stringify({
+        data: {
+          Page: {
+            media: [{
+              id: 20,
+              title: { romaji: 'Naruto', english: 'Naruto', native: null },
+              coverImage: { large: 'cover.jpg' },
+              format: 'TV',
+              episodes: 220,
+              startDate: { year: 2002 },
+              description: 'Ninja story',
+            }],
+          },
+        },
+      }), { status: 200 }),
     );
 
     const first = await searchAnime('naruto', 5);
@@ -162,19 +154,13 @@ describe('searchAnime', () => {
 });
 
 describe('getAnimeThemes', () => {
-  it('calls fetch on web with the anilistId in the body', async () => {
-    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ themes: [sampleTheme] }), { status: 200 }),
-    );
+  it('rejects unsupported platforms without making a network request', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
 
     const result = await getAnimeThemes(20);
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe('https://railway.test/anime/themes');
-    expect(init?.method).toBe('POST');
-    expect(JSON.parse(init?.body as string)).toEqual({ anilistId: 20 });
-    expect(result).toEqual({ success: true, themes: [sampleTheme] });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result).toEqual({ success: false, error: 'Unsupported platform' });
   });
 
   it('calls anime_get_themes on the desktop bridge when running in pywebview', async () => {

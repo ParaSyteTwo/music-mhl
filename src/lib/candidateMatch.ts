@@ -19,6 +19,7 @@ const REASON_BADGES: Record<string, string> = {
   radio_edit: 'candidateRadioEdit',
   extended: 'candidateExtended',
   acoustic: 'candidateAcoustic',
+  first_take: 'candidateFirstTake',
   remaster: 'candidateRemaster',
   featured_artist_mismatch: 'candidateFeaturedVersion',
   featured_artist_missing: 'candidateFeaturedVersion',
