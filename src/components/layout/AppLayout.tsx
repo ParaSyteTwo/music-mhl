@@ -11,13 +11,15 @@ export function AppLayout() {
   const dominantColor = useMusicStore((s) => s.dominantColor);
   const currentTrack = useMusicStore((s) => s.currentTrack);
   return (
-    <div className="flex flex-col h-[100dvh] bg-background overflow-hidden">
+    <div className="relative isolate flex flex-col h-[100dvh] bg-background overflow-hidden">
+      <div className="app-ambient fixed inset-0 z-0 pointer-events-none" aria-hidden="true" />
+
       {/* Dynamic color gradient from album art */}
       {currentTrack && dominantColor && (
         <div
-          className="fixed top-0 left-0 right-0 h-40 z-0 pointer-events-none"
+          className="fixed top-0 left-0 right-0 h-52 z-0 pointer-events-none"
           style={{
-            background: `linear-gradient(to bottom, rgba(${dominantColor}, 0.08), transparent)`,
+            background: `radial-gradient(ellipse at 50% -15%, rgba(${dominantColor}, 0.15), transparent 68%)`,
             transition: 'background 800ms ease',
           }}
         />
@@ -35,7 +37,10 @@ export function AppLayout() {
           minHeight: 'calc(44px + var(--sat))',
         }}
       >
-        <span className="text-sm font-semibold tracking-tight text-[#F5F5F0]">MHL Music</span>
+        <span className="inline-flex items-center gap-2 text-sm font-semibold tracking-tight text-[#F5F5F0]">
+          <span className="h-2 w-2 rounded-[3px] bg-[#C8F04B] shadow-[0_0_14px_rgba(200,240,75,0.55)]" />
+          MHL Music
+        </span>
       </header>
 
       {/* Desktop top nav */}
@@ -48,6 +53,11 @@ export function AppLayout() {
           minHeight: 'calc(48px + var(--sat))',
         }}
       >
+        <span className="mr-2 inline-flex items-center gap-2 font-[family-name:Syne] text-sm font-bold tracking-[-0.03em] text-[#F5F5F0]">
+          <span className="h-2.5 w-2.5 rotate-12 rounded-[3px] bg-[#C8F04B] shadow-[0_0_16px_rgba(200,240,75,0.45)]" />
+          MHL
+        </span>
+        <span className="h-4 w-px bg-white/[0.08]" aria-hidden="true" />
         <NavLink to="/" className={({ isActive }) => `flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors ${isActive ? 'text-[#C8F04B] bg-[rgba(200,240,75,0.1)]' : 'text-[#999] hover:text-[#F5F5F0]'}`}>
           <Search className="w-4 h-4" /> {t('search')}
         </NavLink>

@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Download, Play, Pause, Search, Loader2, Music, CheckCircle, X, ArrowLeft, Tv, Zap } from 'lucide-react';
+import { Download, Play, Pause, Search, Loader2, Music, CheckCircle, X, ArrowLeft, Tv, Zap, RefreshCw, Sparkles } from 'lucide-react';
 import { useMusicStore } from '@/store/musicStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getDownloadCandidates, type DownloadCandidate } from '@/lib/api/musicApi';
 import type { Track } from '@/types/music';
-import { buildAffinityPool, artistColor } from '@/data/globalArtists';
+import { GLOBAL_ARTISTS_POOL, buildAffinityPool, buildArtistVisuals } from '@/data/globalArtists';
 import { useI18n } from '@/lib/useI18n';
 import { CandidatePicker } from '@/components/ui/CandidatePicker';
 import { AnimeCard } from '@/components/ui/AnimeCard';
@@ -26,6 +26,12 @@ function formatDuration(seconds: number) {
 
 function candidateTrackKey(track: Track): string {
   return String(track.deezerId ?? track.id);
+}
+
+function artistMonogram(name: string): string {
+  const words = name.replace(/[()[\].!]/g, ' ').split(/\s+/).filter(Boolean);
+  if (words.length === 0) return '♪';
+  return words.slice(0, 2).map((word) => word[0]).join('').toLocaleUpperCase();
 }
 
 type BestCandidateEntry = {
@@ -77,6 +83,8 @@ export default function SearchPage() {
   const [bestCandidates, setBestCandidates] = useState<Record<string, BestCandidateEntry>>({});
   const [bestResolvingId, setBestResolvingId] = useState<string | null>(null);
   const [resolutionStates, setResolutionStates] = useState<Record<string, ResolutionState>>({});
+  const [artistRotation, setArtistRotation] = useState(0);
+  const [artistExclusions, setArtistExclusions] = useState<string[]>([]);
   const { recent, remove: removeRecent, refresh: refreshRecent } = useRecentSearches();
   const isNativeProduct = Capacitor.isNativePlatform() || (typeof window !== 'undefined' && 'pywebview' in window);
   const scheduler = useMemo(() => new CandidateScheduler({
@@ -226,8 +234,15 @@ export default function SearchPage() {
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
   const suggestedSearches = useMemo(
-    () => buildAffinityPool(mostDownloadedArtists, 6),
-    [mostDownloadedArtists],
+    () => buildAffinityPool(mostDownloadedArtists, 12, {
+      rotation: artistRotation,
+      exclude: artistExclusions,
+    }),
+    [artistExclusions, artistRotation, mostDownloadedArtists],
+  );
+  const suggestedArtists = useMemo(
+    () => buildArtistVisuals(suggestedSearches),
+    [suggestedSearches],
   );
   const reduceResultMotion = useMemo(() => {
     if (typeof navigator === 'undefined') return false;
@@ -250,6 +265,11 @@ export default function SearchPage() {
     setQuery(term);
     performSearch(term);
     refreshRecent();
+  };
+
+  const rotateArtistSuggestions = () => {
+    setArtistExclusions((current) => [...current, ...suggestedSearches].slice(-36));
+    setArtistRotation((current) => current + 1);
   };
 
   const isDownloading = (trackId: string) =>
@@ -380,38 +400,49 @@ export default function SearchPage() {
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-      className="px-4 sm:px-8 py-4 sm:py-10 max-w-5xl mx-auto"
+      className="px-4 sm:px-8 py-4 sm:py-8 max-w-6xl mx-auto"
     >
-      <div className="mb-5 sm:mb-8 text-center">
-        <h1 className="text-xl sm:text-3xl font-bold tracking-tight font-[family-name:Syne] text-[#F5F5F0]">
-          MHL Music
-        </h1>
-        <p className="text-[11px] sm:text-sm text-[#666660] mt-0.5">{t('appTagline')}</p>
-      </div>
+      <section className={`home-hero ${showEmpty ? 'home-hero-expanded' : ''}`}>
+        <div className="home-hero-orb home-hero-orb-one" aria-hidden="true" />
+        <div className="home-hero-orb home-hero-orb-two" aria-hidden="true" />
+        <div className="relative z-10 text-center">
+          <div className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.035] px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.22em] text-[#A6C955]">
+            <Sparkles className="h-3 w-3" />
+            {t('discoverEyebrow')}
+          </div>
+          <h1 className="mt-3 text-3xl sm:text-5xl font-extrabold tracking-[-0.045em] font-[family-name:Syne] text-[#F5F5F0]">
+            MHL <span className="home-title-accent">Music</span>
+          </h1>
+          <p className="mx-auto mt-1.5 max-w-lg text-xs sm:text-sm text-[#7C7C76]">
+            {t('appTagline')}
+          </p>
+        </div>
 
-      <div className="relative mb-3 sm:mb-5">
-        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#666660]" />
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={handleKeyDown}
-          onFocus={() => setInputFocused(true)}
-          onBlur={() => setTimeout(() => setInputFocused(false), 200)}
-          placeholder={t('searchPlaceholder')}
-          className="w-full pl-10 pr-10 py-3 rounded-xl bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.08)] text-sm text-[#F5F5F0] placeholder:text-[#444] focus:outline-none focus:border-[#C8F04B] focus:shadow-[0_0_0_3px_rgba(200,240,75,0.15)] transition-all"
-        />
-        {isSearching ? (
-          <Loader2 className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#C8F04B] animate-spin" />
-        ) : query ? (
-          <button
-            onMouseDown={(e) => { e.preventDefault(); setQuery(''); performSearch(''); }}
-            className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-[rgba(255,255,255,0.1)] hover:bg-[rgba(255,255,255,0.18)] flex items-center justify-center transition-colors"
-          >
-            <X className="w-3 h-3 text-[#888]" />
-          </button>
-        ) : null}
-      </div>
+        <div className="home-search-shell relative z-10 mt-5 sm:mt-7">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-[#85857E]" />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onFocus={() => setInputFocused(true)}
+            onBlur={() => setTimeout(() => setInputFocused(false), 200)}
+            placeholder={t('searchPlaceholder')}
+            className="w-full pl-11 pr-11 py-3.5 sm:py-4 rounded-2xl bg-transparent text-sm sm:text-[15px] text-[#F5F5F0] placeholder:text-[#55554F] focus:outline-none"
+          />
+          {isSearching ? (
+            <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#C8F04B] animate-spin" />
+          ) : query ? (
+            <button
+              onMouseDown={(e) => { e.preventDefault(); setQuery(''); performSearch(''); }}
+              className="absolute right-3.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-white/[0.08] hover:bg-white/[0.14] flex items-center justify-center transition-colors"
+              aria-label={t('clearSearch')}
+            >
+              <X className="w-3 h-3 text-[#A0A09A]" />
+            </button>
+          ) : null}
+        </div>
+      </section>
 
       {inputFocused && !query.trim() && recent.length > 0 && (
         <div className="mb-4">
@@ -437,28 +468,68 @@ export default function SearchPage() {
       )}
 
       {showEmpty && (
-        <div className="mb-6">
-          <p className="text-[10px] uppercase tracking-widest text-[#555] mb-3 text-center">{t('tryWith')}</p>
-          <div className="grid grid-cols-3 gap-2 max-w-sm mx-auto">
-            {suggestedSearches.map((term) => {
-              const color = artistColor(term);
-              return (
-                <button
-                  key={term}
-                  onClick={() => handleSuggestionClick(term)}
-                  style={{
-                    color,
-                    borderColor: color.replace('hsl', 'hsla').replace(')', ', 0.35)'),
-                    ['--hover-bg' as string]: color.replace('hsl', 'hsla').replace(')', ', 0.08)'),
-                  }}
-                  className="px-3 py-2 rounded-xl text-xs font-semibold border bg-transparent hover:bg-[var(--hover-bg)] transition-all text-center truncate"
-                >
-                  {term}
-                </button>
-              );
-            })}
+        <section className="artist-discovery mb-7">
+          <div className="flex items-end justify-between gap-4 mb-3.5 px-0.5">
+            <div className="min-w-0">
+              <p className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.2em] text-[#8FAE48]">
+                <Sparkles className="w-3 h-3" />
+                {t('discoverArtists')}
+              </p>
+              <p className="mt-1 text-[11px] sm:text-xs text-[#62625D]">
+                {t('artistPoolHint', { count: GLOBAL_ARTISTS_POOL.length })}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={rotateArtistSuggestions}
+              className="group inline-flex flex-shrink-0 items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.025] px-3 py-1.5 text-[10px] font-medium text-[#8B8B85] hover:border-white/[0.16] hover:text-[#F5F5F0] transition-all"
+            >
+              <RefreshCw className="w-3 h-3 transition-transform duration-500 group-hover:rotate-180" />
+              {t('refreshArtists')}
+            </button>
           </div>
-        </div>
+          <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-2.5">
+            {suggestedArtists.map((artist, index) => (
+              <button
+                key={artist.name}
+                onClick={() => handleSuggestionClick(artist.name)}
+                style={{
+                  background: `linear-gradient(145deg, ${artist.primary}1F 0%, rgba(255,255,255,0.025) 52%, ${artist.secondary}14 100%)`,
+                  borderColor: `${artist.primary}35`,
+                  boxShadow: `inset 0 1px 0 rgba(255,255,255,0.055), 0 14px 34px -28px ${artist.glow}`,
+                }}
+                className="artist-card group relative min-w-0 overflow-hidden rounded-2xl border px-2.5 py-3 text-left"
+              >
+                <span
+                  className="absolute -right-4 -top-5 h-14 w-14 rounded-full opacity-20 blur-2xl transition-opacity group-hover:opacity-45"
+                  style={{ background: artist.secondary }}
+                  aria-hidden="true"
+                />
+                <span
+                  className="flex h-7 w-7 items-center justify-center rounded-lg text-[9px] font-extrabold text-[#080808] shadow-lg"
+                  style={{
+                    background: `linear-gradient(135deg, ${artist.primary}, ${artist.secondary})`,
+                    boxShadow: `0 8px 22px -10px ${artist.glow}`,
+                  }}
+                >
+                  {artistMonogram(artist.name)}
+                </span>
+                <span className="mt-2 block truncate text-[10px] sm:text-[11px] font-semibold leading-tight text-[#EAEAE5]">
+                  {artist.name}
+                </span>
+                <span className="mt-2 flex items-center gap-1.5">
+                  <span
+                    className="h-1 flex-1 rounded-full opacity-65 transition-all group-hover:opacity-100"
+                    style={{ background: `linear-gradient(90deg, ${artist.primary}, ${artist.secondary})` }}
+                  />
+                  <span className="font-mono text-[8px] text-white/25">
+                    {String(index + 1).padStart(2, '0')}
+                  </span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
       )}
 
       {searchResults.length > 0 && !isSearching && (
