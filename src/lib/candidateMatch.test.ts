@@ -78,4 +78,18 @@ describe('candidate match presentation', () => {
     expect(result.detailKey).toBe('candidateDetailVersionMismatch');
     expect(result.badgeKeys).toContain('candidateFeaturedVersion');
   });
+
+  it('marks THE FIRST TAKE as a distinct version', () => {
+    const result = getCandidateMatchPresentation(track, candidate({
+      title: 'Song - From THE FIRST TAKE',
+      verification: 'rejected',
+      evidence: {
+        ...candidate().evidence,
+        contradictions: ['first_take'],
+      },
+      rejectionReasons: ['first_take'],
+    }));
+    expect(result.tone).toBe('alternate');
+    expect(result.badgeKeys).toContain('candidateFirstTake');
+  });
 });

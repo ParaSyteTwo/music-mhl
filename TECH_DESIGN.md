@@ -183,11 +183,11 @@ consulta del usuario
   -> catalogo Deezer
   -> Track canonico: titulo, artista, album, portada, ISRC y edicion
   -> YouTube Music search #songs
-  -> candidateResolver compartido: evidencia + edicion + verificacion
-  -> enriquecer los dos mejores en modo profundo
-  -> YouTube general solo como fallback profundo
-  -> primera Song sin contradicciones: boton de un toque
-  -> variantes feat./with, Radio Edit, Extended, remix o edicion: selector
+  -> candidateResolver compartido: identidad semantica + contradicciones
+  -> primera Song sin version incompatible: boton de un toque
+  -> colapsar resultados duplicados de la misma version
+  -> variantes feat./with, Radio Edit, Extended, THE FIRST TAKE, remix o edicion: selector
+  -> enriquecer y usar YouTube general solo al pedir Buscar mas opciones
   -> descargar audio
   -> escribir metadatos canonicos
   -> verificar archivo
@@ -202,18 +202,25 @@ tipo de resultado, edicion y contradicciones.
 
 La UI no convierte el score interno en un porcentaje. El score solo ordena
 candidatos; la presentacion publica es `Principal`, `Elegir version` u `Otra
-version`. Una primera Song de YouTube Music con titulo base correcto puede ser
-principal aun cuando la busqueda plana no incluya artista o duracion, siempre
-que no contradiga la variante solicitada. Los tokens `feat.`, `with`, `Radio
-Edit`, `Extended`, `remix`, `live`, `sped up/slowed`, `acoustic` y `remaster`
-se comparan por separado del titulo base.
+version`. La primera Song de YouTube Music es principal por posicion aunque el
+titulo este localizado o la respuesta plana no incluya artista, duracion o
+edicion. Solo deja de ser principal cuando el resultado contiene una
+contradiccion demostrable con la variante solicitada o una edicion conocida
+incompatible. Los tokens `feat.`, `with`, `Radio Edit`, `Extended`, `THE FIRST
+TAKE`, `remix`, `live`, `sped up/slowed`, `acoustic` y `remaster` se comparan
+por separado del titulo base. Tras ordenar, candidatos con la misma identidad
+semantica se colapsan; explicita y limpia se conservan separadas cuando ambas
+estan identificadas.
 
 `CandidateScheduler` prioriza visibles, primeras cinco y resto en idle. Su
 concurrencia es 2 en Desktop y 1 en Android. En red medida el perfil ligero
 limita la consulta a tres candidatos, cinco pistas por consulta y omite
-enriquecimiento, ISRC y fallback general. La cache nativa persiste 200 pistas:
-72 horas para resultados positivos y 10 minutos para vacios, con deduplicacion
-de solicitudes concurrentes.
+enriquecimiento, ISRC y fallback general. La resolucion automatica tambien usa
+busqueda ligera en Wi-Fi porque YouTube Music Songs ya aporta la autoridad
+necesaria; el modo profundo queda reservado para `Buscar mas opciones` y
+recuperaciones controladas. La cache nativa persiste 200 pistas: 72 horas para
+resultados positivos y 10 minutos para vacios, con deduplicacion de solicitudes
+concurrentes.
 
 La descarga usa mejor audio disponible y conversion MP3 calidad 0. Tras ella
 se comprueban existencia, tamaño minimo, decodificacion y duracion; despues de

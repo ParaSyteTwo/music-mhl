@@ -17,7 +17,6 @@ import {
   resolveEffectiveLanguage,
   resolveSystemLanguage,
 } from '@/lib/language';
-import { detectPlatform } from '@/lib/platform';
 import { decodeBase64ArrayBuffer, encodeArrayBufferBase64 } from '@/lib/binaryEncoding';
 import { getDeviceContext } from '@/lib/deviceContext';
 import { canDownloadWithOneTap, type EditionPreference } from '@/lib/download/candidateResolver';
@@ -29,25 +28,9 @@ function storeText(mode: UiLanguageMode, key: string, vars?: Record<string, stri
   return translate(resolveEffectiveLanguage(mode), key, vars);
 }
 
-function getProgressLabel(progress: number, lang: Lang = 'es'): string {
-  if (progress >= 100) return translate(lang, 'progressCompleted');
-  if (progress >= 90) return translate(lang, 'progressSavingFile');
-  if (progress >= 70) return translate(lang, 'progressWritingMetadata');
-  if (progress >= 30) return translate(lang, 'progressGettingAudio');
-  return translate(lang, 'phaseSearchingYoutube');
-}
-
-export { getProgressLabel };
-
 let searchRequestId = 0;
 let isProcessingDownloadQueue = false;
 let rateLimitCooldownUntil = 0;
-
-export function getDownloadQueueDelayMs(
-  currentPlatform: ReturnType<typeof detectPlatform> = detectPlatform(),
-): number {
-  return currentPlatform === 'web' ? 3000 : 0;
-}
 
 function cleanTrackTitleForFileName(title: string): string {
   const normalized = title
@@ -173,11 +156,6 @@ interface MusicStore {
   setYtDlpVersion: (version: string | null) => void;
   setYtDlpUpdateAvailable: (v: boolean) => void;
   setYtDlpUpdating: (v: boolean) => void;
-
-  // ─── Maintenance mode ───
-  isMaintenanceMode: boolean;
-  maintenanceUntil: number | null;
-  setMaintenanceMode: (active: boolean, until?: number | null) => void;
 
   // ─── Download history for suggestions ───
   mostDownloadedArtists: string[];
@@ -376,11 +354,6 @@ export const useMusicStore = create<MusicStore>()(
 
             const [nextId, ...rest] = downloadQueue;
             set({ downloadQueue: rest });
-
-            const queueDelayMs = getDownloadQueueDelayMs();
-            if (queueDelayMs > 0) {
-              await new Promise((resolve) => setTimeout(resolve, queueDelayMs));
-            }
 
             const dl = get().downloads.find((d) => d.id === nextId);
             if (dl && dl.status === 'queued') {
@@ -677,26 +650,6 @@ export const useMusicStore = create<MusicStore>()(
                 resolvedVideoId = alternative.videoId;
               }
 
-              if (msg === '__MAINTENANCE__' && detectPlatform() === 'web') {
-                get().setMaintenanceMode(true);
-                updateDl({
-                  status: 'error',
-                  error: storeText(get().uiLanguageMode, 'maintenanceDownloadError'),
-                });
-                // Polling hasta que el servidor salga de mantenimiento
-                const poll = setInterval(async () => {
-                  try {
-                    const res = await fetch(`${(import.meta as { env: Record<string, string> }).env.VITE_RAILWAY_URL}/health`);
-                    const data = await res.json() as { maintenance?: boolean; maintenance_until?: number };
-                    if (!data.maintenance) {
-                      get().setMaintenanceMode(false, null);
-                      clearInterval(poll);
-                    }
-                  } catch { /* ignorar errores de red */ }
-                }, 30_000);
-                return;
-              }
-
               console.error(`Download attempt ${attempt}/${maxAttempts} failed:`, msg);
 
               if (attempt === maxAttempts) {
@@ -837,11 +790,6 @@ export const useMusicStore = create<MusicStore>()(
         setYtDlpVersion: (version) => set({ ytDlpVersion: version }),
         setYtDlpUpdateAvailable: (v) => set({ ytDlpUpdateAvailable: v }),
         setYtDlpUpdating: (v) => set({ ytDlpUpdating: v }),
-
-        // ─── Maintenance mode ───
-        isMaintenanceMode: false,
-        maintenanceUntil: null,
-        setMaintenanceMode: (active, until = null) => set({ isMaintenanceMode: active, maintenanceUntil: until ?? null }),
 
         // ─── Download history for suggestions ───
         mostDownloadedArtists: [],

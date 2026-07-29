@@ -9,11 +9,7 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
-import android.app.Activity;
-import android.content.Intent;
-import android.content.Context;
 import android.net.Uri;
-import android.os.Environment;
 import com.yausername.youtubedl_android.YoutubeDL;
 import com.yausername.youtubedl_android.YoutubeDLRequest;
 import com.yausername.youtubedl_android.YoutubeDLResponse;
@@ -30,11 +26,9 @@ import java.io.DataInputStream;
 import java.io.OutputStream;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.IOException;
 import android.util.Base64;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.regex.Matcher;
@@ -186,47 +180,6 @@ public class YtDlpPlugin extends Plugin {
         });
     }
 
-    @PluginMethod
-    public void searchMany(PluginCall call) {
-        JSArray rawQueries = call.getArray("queries");
-        if (rawQueries == null || rawQueries.length() == 0) {
-            call.reject("Missing queries parameter");
-            return;
-        }
-        Integer requestedLimit = call.getInt("limit");
-        int limit = requestedLimit != null ? Math.max(1, Math.min(requestedLimit, 20)) : 5;
-
-        List<String> queries = new ArrayList<>();
-        for (int i = 0; i < rawQueries.length(); i++) {
-            String query = rawQueries.optString(i, "").trim();
-            if (!query.isEmpty()) {
-                queries.add(query);
-            }
-        }
-        if (queries.isEmpty()) {
-            call.reject("No valid queries");
-            return;
-        }
-
-        executor.execute(() -> {
-            try {
-                ensureInitialized();
-                JSArray batches = new JSArray();
-                for (String query : queries) {
-                    batches.put(runSearch(query, limit, "youtube", false));
-                }
-
-                JSObject result = new JSObject();
-                result.put("success", true);
-                result.put("results", batches);
-                bridge.getActivity().runOnUiThread(() -> call.resolve(result));
-            } catch (Exception e) {
-                Log.e(TAG, "searchMany failed: " + e.getMessage(), e);
-                bridge.getActivity().runOnUiThread(() -> call.reject("Search failed: " + e.getMessage()));
-            }
-        });
-    }
-
     private JSArray runSearch(String query, int limit, String source, boolean enrich) throws Exception {
         boolean youtubeMusic = "youtube_music".equals(source);
         String target = youtubeMusic
@@ -350,52 +303,6 @@ public class YtDlpPlugin extends Plugin {
         } catch (Exception detailError) {
             Log.w(TAG, "Candidate enrichment failed: " + detailError.getMessage());
         }
-    }
-
-    @PluginMethod
-    public void getStreamUrl(PluginCall call) {
-        String videoId = call.getString("videoId");
-        if (videoId == null || videoId.isEmpty()) {
-            call.reject("Missing videoId parameter");
-            return;
-        }
-
-        executor.execute(() -> {
-            try {
-                ensureInitialized();
-
-                String url = "https://www.youtube.com/watch?v=" + videoId;
-                YoutubeDLRequest request = new YoutubeDLRequest(url);
-                request.addOption("-f", "bestaudio[ext=m4a]/bestaudio");
-                request.addOption("--get-url");
-                request.addOption("--no-playlist");
-
-                Log.i(TAG, "Getting stream URL for: " + videoId);
-                YoutubeDLResponse response = YoutubeDL.getInstance().execute(request);
-                String streamUrl = response.getOut();
-                if (streamUrl != null) {
-                    streamUrl = streamUrl.trim();
-                }
-                String errOutput = response.getErr();
-                if (errOutput != null && !errOutput.isEmpty()) {
-                    Log.w(TAG, "getStreamUrl stderr: " + errOutput.substring(0, Math.min(500, errOutput.length())));
-                }
-
-                if (streamUrl == null || streamUrl.isEmpty()) {
-                    bridge.getActivity().runOnUiThread(() -> call.reject("No stream URL found"));
-                    return;
-                }
-
-                Log.i(TAG, "Got stream URL length: " + streamUrl.length());
-                JSObject result = new JSObject();
-                result.put("success", true);
-                result.put("url", streamUrl);
-                bridge.getActivity().runOnUiThread(() -> call.resolve(result));
-            } catch (Exception e) {
-                Log.e(TAG, "getStreamUrl failed: " + e.getMessage(), e);
-                bridge.getActivity().runOnUiThread(() -> call.reject("Stream extraction failed: " + e.getMessage()));
-            }
-        });
     }
 
     @PluginMethod
@@ -541,12 +448,6 @@ public class YtDlpPlugin extends Plugin {
         }
     }
 
-    // Keep old method name for compatibility
-    @PluginMethod
-    public void downloadAsMp3(PluginCall call) {
-        downloadAudio(call);
-    }
-
     /**
      * Guarda audio ya procesado (con ID3 tags) en Music/MHL Music via MediaStore.
      * Recibe: fileName (string), data (base64 string)
@@ -595,83 +496,6 @@ public class YtDlpPlugin extends Plugin {
                 bridge.getActivity().runOnUiThread(() -> call.resolve(result));
             } catch (Exception e) {
                 Log.e(TAG, "saveTaggedAudioToMusic failed", e);
-                bridge.getActivity().runOnUiThread(() -> call.reject(e.getMessage()));
-            }
-        });
-    }
-
-    @PluginMethod
-    public void saveAudioToMusicMediaStore(PluginCall call) {
-        String videoId = call.getString("videoId");
-        String fileNameHint = call.getString("fileName");
-        if (videoId == null || videoId.isEmpty()) {
-            call.reject("Missing videoId");
-            return;
-        }
-
-        executor.execute(() -> {
-            File cacheDir = new File(getContext().getCacheDir(), "ytdlp");
-            cacheDir.mkdirs();
-            File[] prevFiles = cacheDir.listFiles();
-            if (prevFiles != null) { for (File f : prevFiles) f.delete(); }
-
-            try {
-                ensureInitialized();
-
-                String url = "https://www.youtube.com/watch?v=" + videoId;
-                String outputPath = new File(cacheDir, "temp_audio.mp3").getAbsolutePath();
-
-                YoutubeDLRequest request = new YoutubeDLRequest(url);
-                request.addOption("-x");
-                request.addOption("--audio-format", "mp3");
-                request.addOption("-o", outputPath);
-                request.addOption("--no-playlist");
-                // Usar cliente Android para evitar SABR streaming forzado por YouTube (403)
-                request.addOption("--extractor-args", "youtube:player_client=android,web");
-
-                YoutubeDL.getInstance().execute(request);
-
-                File audioFile = new File(outputPath);
-                if (!audioFile.exists() || audioFile.length() == 0) {
-                    bridge.getActivity().runOnUiThread(() -> call.reject("No audio file produced"));
-                    return;
-                }
-
-                ContentValues values = new ContentValues();
-                values.put(MediaStore.Audio.Media.DISPLAY_NAME, fileNameHint != null ? fileNameHint : "audio.mp3");
-                values.put(MediaStore.Audio.Media.MIME_TYPE, "audio/mpeg");
-                values.put(MediaStore.Audio.Media.RELATIVE_PATH, "Music/MHL Music");
-                values.put(MediaStore.Audio.Media.IS_PENDING, 1);
-
-                ContentResolver resolver = getContext().getContentResolver();
-                Uri itemUri = resolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values);
-
-                if (itemUri == null) {
-                    bridge.getActivity().runOnUiThread(() -> call.reject("MediaStore insert failed"));
-                    return;
-                }
-
-                try (OutputStream os = resolver.openOutputStream(itemUri);
-                     FileInputStream fis = new FileInputStream(audioFile)) {
-                    byte[] buffer = new byte[8192];
-                    int bytesRead;
-                    while ((bytesRead = fis.read(buffer)) != -1) {
-                        os.write(buffer, 0, bytesRead);
-                    }
-                }
-
-                values.clear();
-                values.put(MediaStore.Audio.Media.IS_PENDING, 0);
-                resolver.update(itemUri, values, null, null);
-                audioFile.delete();
-
-                JSObject result = new JSObject();
-                result.put("success", true);
-                result.put("uri", itemUri.toString());
-                bridge.getActivity().runOnUiThread(() -> call.resolve(result));
-
-            } catch (Exception e) {
-                Log.e(TAG, "saveAudioToMusicMediaStore failed", e);
                 bridge.getActivity().runOnUiThread(() -> call.reject(e.getMessage()));
             }
         });

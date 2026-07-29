@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { getDownloadQueueDelayMs, useMusicStore } from './musicStore';
+import { useMusicStore } from './musicStore';
 import { searchDeezer } from '@/lib/api/musicApi';
 
 // Mock external dependencies
@@ -296,12 +296,6 @@ describe('useMusicStore', () => {
       const state = useMusicStore.getState();
 
       expect(state.downloads).toEqual([]);
-    });
-
-    it('delays queued downloads only on web', () => {
-      expect(getDownloadQueueDelayMs('web')).toBe(3000);
-      expect(getDownloadQueueDelayMs('android')).toBe(0);
-      expect(getDownloadQueueDelayMs('pywebview')).toBe(0);
     });
 
     it('keeps a curated source URL in the queued download', () => {

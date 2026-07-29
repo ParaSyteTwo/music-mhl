@@ -73,15 +73,24 @@ describe('candidateResolver', () => {
     expect(result.rejectionReasons).toContain('edition_incompatible');
   });
 
-  it('does not verify an unknown edition when the catalog edition is known', () => {
+  it('does not block a YouTube Music song when its edition metadata is absent', () => {
     const [result] = resolveDownloadCandidates(track, [candidate({ edition: 'unknown' })]);
-    expect(result.verification).toBe('probable');
+    expect(result.verification).toBe('verified');
   });
 
-  it('rejects a materially wrong duration', () => {
-    const [result] = resolveDownloadCandidates(track, [candidate({ duration: 245 })]);
+  it('uses duration only to protect the general YouTube fallback', () => {
+    const [result] = resolveDownloadCandidates(track, [candidate({
+      source: 'youtube',
+      duration: 245,
+    })]);
     expect(result.verification).toBe('rejected');
     expect(result.rejectionReasons).toContain('duration_incompatible');
+  });
+
+  it('does not require duration metadata from a YouTube Music song', () => {
+    const [result] = resolveDownloadCandidates(track, [candidate({ duration: 0 })]);
+    expect(result.verification).toBe('verified');
+    expect(result.rejectionReasons).not.toContain('duration_incompatible');
   });
 
   it('does not reject a remix when the catalog explicitly requests it', () => {
@@ -160,6 +169,73 @@ describe('candidateResolver', () => {
       candidate({ videoId: 'clean', edition: 'clean' }),
     ]);
     expect(results.every((result) => result.verification !== 'verified')).toBe(true);
+  });
+
+  it('trusts the first localized YouTube Music song and separates real versions', () => {
+    const localizedTrack: Track = {
+      ...track,
+      title: 'Where Our Blue Is',
+      canonicalTitle: 'Where Our Blue Is',
+      artist: 'Tatsuya Kitani',
+      edition: 'unknown',
+    };
+    const results = resolveDownloadCandidates(localizedTrack, [
+      candidate({
+        videoId: 'main',
+        title: '青のすみか - Where Our Blue Is',
+        artist: '',
+        channel: '',
+        duration: 0,
+        edition: 'unknown',
+      }),
+      candidate({
+        videoId: 'first-take',
+        title: '青のすみか - From THE FIRST TAKE - Where Our Blue Is',
+        artist: '',
+        channel: '',
+        duration: 0,
+        edition: 'unknown',
+      }),
+      candidate({
+        videoId: 'acoustic',
+        title: '青のすみか (Acoustic ver.) - Where Our Blue Is',
+        artist: '',
+        channel: '',
+        duration: 0,
+        edition: 'unknown',
+      }),
+    ]);
+
+    expect(results[0].videoId).toBe('main');
+    expect(results[0].verification).toBe('verified');
+    expect(results.find((result) => result.videoId === 'first-take')?.rejectionReasons)
+      .toContain('first_take');
+    expect(results.find((result) => result.videoId === 'acoustic')?.rejectionReasons)
+      .toContain('acoustic');
+  });
+
+  it('collapses duplicate YouTube Music songs with the same semantic version', () => {
+    const results = resolveDownloadCandidates(track, [
+      candidate({ videoId: 'main-1', edition: 'unknown' }),
+      candidate({ videoId: 'main-2', edition: 'unknown' }),
+      candidate({ videoId: 'acoustic', title: 'Example Song (Acoustic)', edition: 'unknown' }),
+    ]);
+
+    expect(results.map((result) => result.videoId)).toEqual(['main-1', 'acoustic']);
+    expect(results[0].verification).toBe('verified');
+  });
+
+  it('trusts the first YouTube Music song even when only its localized title is exposed', () => {
+    const [result] = resolveDownloadCandidates(track, [candidate({
+      title: 'サンプル曲',
+      artist: '',
+      channel: '',
+      duration: 0,
+      edition: 'unknown',
+    })]);
+
+    expect(result.evidence.titleMatch).toBe(false);
+    expect(result.verification).toBe('verified');
   });
 
   it('produces the same contract from recorded Desktop and Android metadata', () => {

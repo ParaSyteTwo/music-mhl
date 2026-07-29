@@ -1,6 +1,6 @@
 import type { Track, TrackEdition } from '@/types/music';
 
-export const CANDIDATE_RESOLVER_VERSION = 4;
+export const CANDIDATE_RESOLVER_VERSION = 5;
 
 export type CandidateSource = 'youtube_music' | 'youtube';
 export type CandidateVerification = 'verified' | 'probable' | 'review' | 'rejected';
@@ -57,6 +57,7 @@ const ALTERED_PATTERNS: Array<[string, RegExp]> = [
   ['radio_edit', /\b(radio edit|radio version|single edit)\b/i],
   ['extended', /\b(extended|extended version|extended mix)\b/i],
   ['acoustic', /\b(acoustic|unplugged)\b/i],
+  ['first_take', /\b(?:from\s+)?the first take\b/i],
   ['remaster', /\b(remaster(?:ed)?(?:\s+\d{4})?)\b/i],
   ['music_video', /\b(official music video|music video|m\/v|visualizer)\b/i],
 ];
@@ -155,8 +156,52 @@ function editionCompatibility(
 function classifyLabel(evidence: CandidateEvidence): string {
   if (evidence.contradictions.length) return evidence.contradictions[0];
   if (evidence.isrcMatch) return 'ISRC exacto';
-  if (evidence.youtubeMusicSong && evidence.official) return 'YouTube Music oficial';
+  if (evidence.youtubeMusicSong) return 'Canción de YouTube Music';
   return 'Revisar coincidencia';
+}
+
+function semanticIdentity(track: Track, candidate: DownloadCandidate): string {
+  const requestedTitle = normalizeCandidateText(track.canonicalTitle?.trim() || track.title);
+  const normalizedTitle = normalizeCandidateText(candidate.title);
+  const baseTitle = candidate.evidence.titleMatch ? requestedTitle : normalizedTitle;
+  const variants = variantReasons(candidate.title).sort().join(',');
+  const feature = (
+    featuredArtist(candidate.title)
+    || additionalStructuredArtists(candidate.artist ?? '', track.artist)
+  );
+  return `${baseTitle}|variant:${variants}|feature:${feature}`;
+}
+
+function deduplicateSemanticCandidates(
+  track: Track,
+  ranked: DownloadCandidate[],
+): DownloadCandidate[] {
+  const groups = new Map<string, DownloadCandidate[]>();
+  for (const candidate of ranked) {
+    const key = semanticIdentity(track, candidate);
+    const group = groups.get(key) ?? [];
+    group.push(candidate);
+    groups.set(key, group);
+  }
+
+  const result: DownloadCandidate[] = [];
+  for (const group of groups.values()) {
+    const knownEditions = new Set(
+      group
+        .map((candidate) => candidate.edition)
+        .filter((edition) => edition !== 'unknown'),
+    );
+    if (knownEditions.size <= 1) {
+      result.push(group[0]);
+      continue;
+    }
+
+    for (const edition of knownEditions) {
+      const candidate = group.find((item) => item.edition === edition);
+      if (candidate) result.push(candidate);
+    }
+  }
+  return result.sort((a, b) => b.score - a.score);
 }
 
 export function resolveDownloadCandidates(
@@ -169,6 +214,10 @@ export function resolveDownloadCandidates(
   const wantedArtist = normalizeCandidateText(track.artist);
   const wantedAlbum = normalizeCandidateText(track.canonicalAlbum?.trim() || track.album);
   const unique = new Map<string, DownloadCandidate>();
+  const firstYouTubeMusicSongIndex = rawCandidates.findIndex((candidate) => (
+    (candidate.source ?? 'youtube') === 'youtube_music'
+    && (!candidate.resultType || /song|track/i.test(candidate.resultType))
+  ));
 
   for (const [rawIndex, raw] of rawCandidates.entries()) {
     if (!raw.videoId) continue;
@@ -200,6 +249,7 @@ export function resolveDownloadCandidates(
     const catalogArtistMatch = Boolean(candidateArtist) && containsWords(candidateArtist, wantedArtist);
     const hasArtistEvidence = Boolean(candidateArtist || channel);
     const artistContradiction = hasArtistEvidence && !artistMatch;
+    const firstYouTubeMusicSong = youtubeMusicSong && rawIndex === firstYouTubeMusicSongIndex;
     const official = (
       /\b(topic|vevo|official|provided to youtube)\b/i.test(`${raw.channel} ${raw.title}`)
       || (youtubeMusicSong && catalogArtistMatch)
@@ -210,7 +260,13 @@ export function resolveDownloadCandidates(
     );
     const editionMatch = editionCompatibility(track, edition, preference);
     if (editionMatch === false) contradictions.push('edition_incompatible');
-    if (durationDifference !== null && durationDifference > 0.12) contradictions.push('duration_incompatible');
+    if (
+      !youtubeMusicSong
+      && durationDifference !== null
+      && durationDifference > 0.12
+    ) {
+      contradictions.push('duration_incompatible');
+    }
 
     const evidence: CandidateEvidence = {
       isrcMatch,
@@ -224,45 +280,34 @@ export function resolveDownloadCandidates(
       contradictions: [...new Set(contradictions)],
     };
 
-    let score = 0;
-    if (titleMatch) score += 35;
-    if (artistMatch) score += 25;
-    if (albumMatch) score += 8;
-    if (youtubeMusicSong) score += 18;
-    if (official) score += 12;
-    if (durationDifference !== null) {
+    let score = Math.max(0, 20 - rawIndex);
+    if (youtubeMusicSong) score += 300;
+    if (firstYouTubeMusicSong) score += 500;
+    if (titleMatch) score += 200;
+    if (artistMatch) score += 40;
+    if (albumMatch) score += 10;
+    if (official) score += 10;
+    if (!youtubeMusicSong && durationDifference !== null) {
       if (durationDifference <= 0.02) score += 30;
-      else if (durationDifference <= 0.05) score += 16;
+      else if (durationDifference <= 0.05) score += 15;
       else if (durationDifference > 0.12) score -= 35;
     }
     if (editionMatch === true) score += 10;
-    if (isrcMatch) score += 1000;
-    score += Math.max(0, 10 - rawIndex);
-    score -= evidence.contradictions.length * 60;
+    if (isrcMatch) score += 2000;
+    score -= evidence.contradictions.length * 600;
 
-    const unknownEditionBlocksVerification = (
-      preference !== 'ask'
-      && targetEdition(track, preference) !== 'unknown'
-      && edition === 'unknown'
-      && !isrcMatch
-    );
     let verification: CandidateVerification;
-    if (evidence.contradictions.length > 0 || !titleMatch || artistContradiction) {
+    if (evidence.contradictions.length > 0) {
       verification = 'rejected';
     } else if (
       isrcMatch
-      || (
-        youtubeMusicSong
-        && official
-        && durationDifference !== null
-        && durationDifference <= 0.02
-        && !unknownEditionBlocksVerification
-      )
+      || (youtubeMusicSong && (firstYouTubeMusicSong || titleMatch))
     ) {
       verification = 'verified';
+    } else if (!titleMatch || artistContradiction) {
+      verification = 'rejected';
     } else if (
-      youtubeMusicSong
-      || (durationDifference !== null && durationDifference <= 0.05)
+      durationDifference !== null && durationDifference <= 0.05
     ) {
       verification = 'probable';
     } else {
@@ -277,7 +322,9 @@ export function resolveDownloadCandidates(
       evidence,
       rejectionReasons: evidence.contradictions,
       score,
-      label: classifyLabel(evidence),
+      label: firstYouTubeMusicSong && verification === 'verified'
+        ? 'Primera canción de YouTube Music'
+        : classifyLabel(evidence),
       confidence: verification === 'verified' ? 'alta' : verification === 'probable' ? 'media' : 'baja',
     };
     const previous = unique.get(candidate.videoId);
@@ -297,33 +344,7 @@ export function resolveDownloadCandidates(
       }
     }
   }
-
-  const primary = ranked[0];
-  const expectedEdition = targetEdition(track, preference);
-  const primaryEditionResolved = (
-    preference === 'ask'
-    || expectedEdition === 'unknown'
-    || expectedEdition === 'clean'
-    || primary?.evidence.editionMatch === true
-    || primary?.evidence.isrcMatch
-  );
-  if (
-    primary
-    && primary.verification === 'probable'
-    && primary.evidence.youtubeMusicSong
-    && primary.evidence.titleMatch
-    && primary.evidence.contradictions.length === 0
-    && primaryEditionResolved
-    && (
-      primary.evidence.durationDifference === null
-      || primary.evidence.durationDifference <= 0.05
-    )
-  ) {
-    primary.verification = 'verified';
-    primary.confidence = 'alta';
-    primary.label = 'Primera canción de YouTube Music';
-  }
-  return ranked.slice(0, 3);
+  return deduplicateSemanticCandidates(track, ranked).slice(0, 3);
 }
 
 export function canDownloadWithOneTap(candidate: DownloadCandidate | undefined): boolean {

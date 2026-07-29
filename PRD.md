@@ -91,11 +91,13 @@ musical normal de un usuario que no haya optado por la feature.
 
 - [ ] Deezer conserva titulo, artista, album, ISRC y edicion como identidad canonica.
 - [ ] YouTube Music `#songs` es la fuente primaria y YouTube general solo se consulta en verificacion profunda cuando no existe una coincidencia valida.
-- [ ] La primera cancion de YouTube Music se descarga con un toque cuando el titulo base coincide y no hay contradicciones de version, colaboracion o edicion; el selector aparece solo ante ambiguedad real.
+- [ ] La primera Song de YouTube Music se considera la version principal aunque el titulo este localizado o falten artista, duracion o edicion; solo se bloquea cuando el resultado demuestra una version distinta o una edicion conocida incompatible.
+- [ ] Resultados semanticamente duplicados de la misma version se colapsan; el selector conserva unicamente diferencias reales como colaboracion, Radio Edit, Extended, THE FIRST TAKE, directo, remix o acustica.
 - [ ] El selector no muestra porcentajes sinteticos: identifica la opcion principal, las versiones que requieren eleccion y las alternativas incompatibles.
 - [ ] Toda descarga musical recibe un `videoId` resuelto y ninguna plataforma repite una busqueda oculta.
 - [ ] La preferencia de edicion admite catalogo, explicita, limpia o preguntar; catalogo es el valor predeterminado.
 - [ ] Android ejecuta una resolucion simultanea y Desktop dos. Datos moviles en modo ligero no supera cinco canciones por consulta.
+- [ ] La resolucion automatica y el clic normal usan busqueda ligera; el enriquecimiento y YouTube general solo se ejecutan mediante `Buscar mas opciones` o recuperacion controlada.
 - [ ] La cola se cancela al cambiar consulta y se pausa sin red, con la app oculta, ahorro de bateria o menos del 20 por ciento sin cargar.
 - [ ] La cache persistente guarda positivos 72 horas, vacios 10 minutos y como maximo 200 pistas.
 - [ ] La traduccion de letras usa un idioma independiente y el locale nativo de Windows o Android.

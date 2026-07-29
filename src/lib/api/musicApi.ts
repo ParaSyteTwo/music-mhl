@@ -21,40 +21,12 @@ interface PyWebViewApi {
   deezer_search?: (query: string, limit: number, index: number) => Promise<unknown>
   deezer_track?: (trackId: string) => Promise<unknown>
   deezer_album?: (albumId: string) => Promise<unknown>
-  deezer_artist?: (artistId: string) => Promise<{
-    success?: boolean
-    info?: {
-      id?: string | number
-      name?: string
-      picture_xl?: string
-      picture_big?: string
-      nb_fan?: number
-    }
-    top?: { data?: RawDeezerTrack[] }
-    albums?: { data?: unknown[] }
-    related?: { data?: unknown[] }
-  }>
 }
 
 interface PyWebViewWindow extends Window {
   pywebview?: {
     api?: PyWebViewApi
   }
-}
-
-interface ProxiedTrack {
-  id?: string
-  deezerId?: string | number
-  title?: string
-  title_short?: string
-  canonicalTitle?: string
-  artist?: string
-  album?: string
-  canonicalAlbum?: string
-  duration?: number
-  cover?: string
-  preview?: string
-  edition?: Track['edition']
 }
 
 interface RawDeezerTrack {
@@ -77,18 +49,6 @@ interface RawDeezerTrack {
   track_position?: number
 }
 
-interface RawDeezerArtist {
-  id?: string | number
-  name?: string
-  picture_xl?: string
-  picture_big?: string
-  nb_fan?: number
-}
-
-interface RawDeezerList<T> {
-  data?: T[]
-}
-
 interface RawDeezerAlbum {
   id?: string | number
   genres?: { data?: Array<{ name?: string }> }
@@ -101,10 +61,6 @@ function isRunningInPyWebView(): boolean {
     new URLSearchParams(window.location.search).get('platform') === 'pywebview' ||
     'pywebview' in window
   );
-}
-
-function isNativeApp(): boolean {
-  return Capacitor.isNativePlatform() || isRunningInPyWebView();
 }
 
 export class DesktopBridgeUnavailableError extends Error {
@@ -120,39 +76,7 @@ export function requirePyWebViewApi(): PyWebViewApi {
   return api;
 }
 
-export function getRailwayUrl(): string {
-  return (import.meta.env.VITE_RAILWAY_URL as string | undefined)?.replace(/\/$/, '') ?? '';
-}
-
-export function getRailwayKey(): string {
-  return (import.meta.env.VITE_SERVICE_API_KEY as string | undefined) ?? '';
-}
-
-export function railwayHeaders(): HeadersInit {
-  return {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${getRailwayKey()}`,
-  };
-}
-
 // ─── Helpers para Desktop Python ───────────────────────────────────────────────────────
-
-// ─── Map pre-transformed data from backend ───
-function mapProxiedTrack(t: ProxiedTrack): Track {
-  return {
-    id: t.id || `dz-${t.deezerId}`,
-    title: t.title || 'Unknown',
-    canonicalTitle: t.canonicalTitle || t.title_short || t.title || 'Unknown',
-    artist: t.artist || 'Unknown',
-    album: t.album || 'Unknown',
-    canonicalAlbum: t.canonicalAlbum || t.album || 'Unknown',
-    duration: t.duration || 0,
-    cover: t.cover || '',
-    preview: t.preview || '',
-    deezerId: t.deezerId == null ? undefined : Number(t.deezerId),
-    edition: t.edition ?? 'unknown',
-  };
-}
 
 // ─── Llamada directa a Deezer: pywebview (bridge Python) o fetch directo ───
 async function callDeezerDirect<T = unknown>(path: string): Promise<T> {
@@ -162,7 +86,7 @@ async function callDeezerDirect<T = unknown>(path: string): Promise<T> {
     if (pyapi) {
       const url = new URL(path, 'https://api.deezer.com');
       const segments = url.pathname.split('/').filter(Boolean);
-      // Rutas simples: /search, /track/{id}, /album/{id}, /artist/{id}
+      // Rutas simples: /search, /track/{id}, /album/{id}
       if (segments[0] === 'search') {
         return await pyapi.deezer_search?.(
           url.searchParams.get('q') || '',
@@ -176,10 +100,6 @@ async function callDeezerDirect<T = unknown>(path: string): Promise<T> {
       if (segments[0] === 'album' && segments[1]) {
         return await pyapi.deezer_album?.(segments[1]) as T;
       }
-      if (segments[0] === 'artist' && segments[1] && !segments[2]) {
-        return await pyapi.deezer_artist?.(segments[1]) as T;
-      }
-      // Rutas anidadas (/artist/{id}/top, etc.) no implementadas en bridge — usar fetch (si CORS lo permite)
     }
     // Fallback: fetch directo (funciona si no hay CORS restrictions)
     const res = await fetch(`https://api.deezer.com${path}`);
@@ -208,23 +128,6 @@ function mapRawDeezerTrack(t: RawDeezerTrack): Track {
   };
 }
 
-// ─── Helper: call Railway /deezer endpoint ───
-async function callDeezerProxy(body: Record<string, unknown>) {
-  const res = await fetch(`${getRailwayUrl()}/deezer`, {
-    method: 'POST',
-    headers: railwayHeaders(),
-    body: JSON.stringify(body),
-  });
-  const text = await res.text();
-  if (!res.ok) {
-    let err: { error?: string; detail?: string } | null = null;
-    try { err = JSON.parse(text); } catch { /* ignore */ }
-    throw new Error(err?.error || err?.detail || 'Deezer proxy error');
-  }
-  if (!text) throw new Error('Empty response from Deezer proxy');
-  return JSON.parse(text);
-}
-
 // ─── Deezer Search ───
 export async function searchDeezer(query: string, offset = 0, limit = 25): Promise<Track[]> {
   const normalizedQuery = query.trim().replace(/\s+/g, ' ');
@@ -239,14 +142,10 @@ export async function searchDeezer(query: string, offset = 0, limit = 25): Promi
 
   const request = (async () => {
     try {
-      let tracks: Track[];
-      if (isNativeApp()) {
-        const data = await callDeezerDirect<{ data?: RawDeezerTrack[] }>(`/search?q=${encodeURIComponent(normalizedQuery)}&limit=${limit}&index=${offset}`);
-        tracks = (data.data || []).map(mapRawDeezerTrack);
-      } else {
-        const data = await callDeezerProxy({ action: 'search', query: normalizedQuery, limit, offset });
-        tracks = (data.tracks || []).map(mapProxiedTrack);
-      }
+      const data = await callDeezerDirect<{ data?: RawDeezerTrack[] }>(
+        `/search?q=${encodeURIComponent(normalizedQuery)}&limit=${limit}&index=${offset}`,
+      );
+      const tracks = (data.data || []).map(mapRawDeezerTrack);
       setCachedValue(searchCache, cacheKey, tracks, SEARCH_CACHE_TTL_MS, SEARCH_CACHE_MAX_ENTRIES);
       return tracks;
     } catch (error) {
@@ -261,70 +160,20 @@ export async function searchDeezer(query: string, offset = 0, limit = 25): Promi
   return request;
 }
 
-// ─── Deezer Artist Data ───
-export async function getDeezerArtist(artistId: string) {
-  if (isRunningInPyWebView()) {
-    // Usar el bridge Python que ya hace todas las llamadas internamente
-    const pyapi = (window as PyWebViewWindow).pywebview?.api;
-    if (pyapi?.deezer_artist) {
-      const result = await pyapi.deezer_artist(artistId);
-      if (result.success) {
-        return {
-          success: true,
-          info: { id: result.info.id, name: result.info.name, picture: result.info.picture_xl || result.info.picture_big || '', fans: result.info.nb_fan || 0 },
-          topTracks: (result.top?.data || []).map(mapRawDeezerTrack),
-          albums: (result.albums?.data || []),
-          related: (result.related?.data || []),
-        };
-      }
-      return result;
-    }
-  }
-  if (Capacitor.isNativePlatform()) {
-    const [info, top, albums, related] = await Promise.all([
-      callDeezerDirect<RawDeezerArtist>(`/artist/${artistId}`),
-      callDeezerDirect<RawDeezerList<RawDeezerTrack>>(`/artist/${artistId}/top?limit=10`),
-      callDeezerDirect<RawDeezerList<unknown>>(`/artist/${artistId}/albums?limit=10`),
-      callDeezerDirect<RawDeezerList<unknown>>(`/artist/${artistId}/related?limit=8`),
-    ]);
-    return {
-      success: true,
-      info: { id: info.id, name: info.name, picture: info.picture_xl || info.picture_big || '', fans: info.nb_fan || 0 },
-      topTracks: (top.data || []).map(mapRawDeezerTrack),
-      albums: (albums.data || []),
-      related: (related.data || []),
-    };
-  }
-  return callDeezerProxy({ action: 'artist', artistId });
-}
-
-// ─── Deezer Album Data ───
-export async function getDeezerAlbum(albumId: string) {
-  return callDeezerProxy({ action: 'album', albumId });
-}
-
 // ─── Full metadata for a track (genre, year, track number) ───
 export async function getDeezerTrackMeta(trackId: string | number): Promise<{ genre: string | null; year: number | null; trackNumber: number | null }> {
   try {
-    if (isNativeApp()) {  // incluye pywebview → callDeezerDirect usa fetch() del webview
-      const track = await callDeezerDirect<RawDeezerTrack>(`/track/${trackId}`);
-      const releaseDate: string | undefined = track.release_date;
-      const year = releaseDate ? parseInt(releaseDate.split('-')[0], 10) : null;
-      let genre: string | null = null;
-      if (track.album?.id) {
-        try {
-          const album = await callDeezerDirect<RawDeezerAlbum>(`/album/${track.album.id}`);
-          genre = album.genres?.data?.[0]?.name ?? null;
-        } catch { /* genre no crítico */ }
-      }
-      return { genre, year, trackNumber: track.track_position ?? null };
+    const track = await callDeezerDirect<RawDeezerTrack>(`/track/${trackId}`);
+    const releaseDate: string | undefined = track.release_date;
+    const year = releaseDate ? parseInt(releaseDate.split('-')[0], 10) : null;
+    let genre: string | null = null;
+    if (track.album?.id) {
+      try {
+        const album = await callDeezerDirect<RawDeezerAlbum>(`/album/${track.album.id}`);
+        genre = album.genres?.data?.[0]?.name ?? null;
+      } catch { /* genre no crítico */ }
     }
-    const data = await callDeezerProxy({ action: 'trackMeta', trackId: String(trackId) });
-    return {
-      genre: data?.genre || null,
-      year: data?.year || null,
-      trackNumber: data?.trackNumber || null,
-    };
+    return { genre, year, trackNumber: track.track_position ?? null };
   } catch {
     return { genre: null, year: null, trackNumber: null };
   }
@@ -373,8 +222,6 @@ const searchCache = new Map<string, TimedCacheEntry<Track[]>>();
 const searchRequests = new Map<string, Promise<Track[]>>();
 const candidateCache = new Map<string, TimedCacheEntry<DownloadCandidate[]>>();
 const candidateRequests = new Map<string, Promise<DownloadCandidate[]>>();
-const candidatePrefetchRequests = new Set<string>();
-let activeCandidatePrefetches = 0;
 
 function getCachedValue<T>(cache: Map<string, TimedCacheEntry<T>>, key: string): T | undefined {
   const entry = cache.get(key);
@@ -402,7 +249,7 @@ function setCachedValue<T>(
 }
 
 function canUsePersistentCandidateCache(): boolean {
-  return typeof localStorage !== 'undefined' && isNativeApp();
+  return typeof localStorage !== 'undefined';
 }
 
 function readPersistentCandidateCache(): Record<string, TimedCacheEntry<DownloadCandidate[]>> {
@@ -549,19 +396,6 @@ async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   } finally {
     if (timeoutId) clearTimeout(timeoutId);
   }
-}
-
-function rankDownloadCandidates(
-  track: Track,
-  candidates: Array<RawDownloadCandidate & Partial<DownloadCandidate>>,
-  animeSearchEnabled = false,
-): DownloadCandidate[] {
-  void animeSearchEnabled;
-  return resolveDownloadCandidates(track, candidates, { editionPreference: 'catalog' });
-}
-
-function shouldExpandCandidateSearch(candidates: Array<Partial<DownloadCandidate>>): boolean {
-  return candidates.length < 2 || candidates[0]?.confidence !== 'alta';
 }
 
 // ─── Get YouTube candidates for user selection ───
@@ -721,28 +555,6 @@ export async function getExpandedDownloadCandidates(
   }
 }
 
-export async function prefetchDownloadCandidates(
-  track: Track,
-  animeSearchEnabled = false,
-  options: CandidateSearchOptions = {},
-): Promise<DownloadCandidate[] | null> {
-  const cacheKey = buildCandidateCacheKey(track, animeSearchEnabled, false, options);
-  const cached = getCachedValue(candidateCache, cacheKey) ?? getPersistentCandidateCacheValue(cacheKey);
-  if (cached) return cached;
-  if (candidatePrefetchRequests.has(cacheKey) || activeCandidatePrefetches >= 1) return null;
-
-  candidatePrefetchRequests.add(cacheKey);
-  activeCandidatePrefetches++;
-  try {
-    return await getDownloadCandidates(track, animeSearchEnabled, options);
-  } catch {
-    return null;
-  } finally {
-    activeCandidatePrefetches = Math.max(0, activeCandidatePrefetches - 1);
-    candidatePrefetchRequests.delete(cacheKey);
-  }
-}
-
 export function invalidateDownloadCandidateCache(track: Track): void {
   const identity = String(track.isrc || track.deezerId || track.id);
   for (const key of candidateCache.keys()) {
@@ -759,19 +571,9 @@ export function invalidateDownloadCandidateCache(track: Track): void {
   if (changed) writePersistentCandidateCache(entries);
 }
 
-interface WebDownloadTicketResponse {
-  success: boolean;
-  downloadUrl?: string;  // Viejo: descarga desde backend
-  audioUrl?: string;     // Nuevo (B2): descarga directo de YouTube
-  fileName?: string;
-  expiresAt?: string;
-  error?: string;
-}
-
 // ─── Download track audio ───
 // Android: yt-dlp local (via YtDlpPlugin nativo)
 // Desktop Python: yt-dlp.exe local (via pywebview)
-// Web: Railway emite un ticket de descarga de corta duración
 export async function downloadTrackAudio(
   track: Track,
   onProgress?: (progress: number) => void,
@@ -827,69 +629,7 @@ export async function downloadTrackAudio(
     }
   }
 
-  // Web: obtener ticket de Railway y luego descargar
-  onProgress?.(15);
-
-  const ticketRes = await fetch(`${getRailwayUrl()}/download-ticket`, {
-    method: 'POST',
-    headers: railwayHeaders(),
-    body: JSON.stringify({
-      title: getPreferredTrackTitle(track),
-      artist: track.artist,
-      album: getPreferredAlbumName(track),
-      format: 'mp3',
-      duration: track.duration ?? 0,
-      ...(videoIdOverride ? { videoId: videoIdOverride } : {}),
-    }),
-  });
-
-  if (!ticketRes.ok) {
-    const text = await ticketRes.text().catch(() => '');
-    let err: { error?: string; maintenance?: boolean } = {};
-    try { err = JSON.parse(text); } catch { /* ignore */ }
-    if (err.maintenance) throw new Error('__MAINTENANCE__');
-    throw new Error(err.error || 'Error descargando audio');
-  }
-
-  const ticket = (await ticketRes.json()) as WebDownloadTicketResponse;
-  if (!ticket.success) {
-    throw new Error(ticket.error || 'No se pudo obtener el ticket de descarga');
-  }
-
-  // OPCIÓN B2: Si tenemos audioUrl (descarga directa de YouTube)
-  if (ticket.audioUrl) {
-    console.log('[B2] Usando descarga directa de YouTube URL');
-    onProgress?.(45);
-    const audioRes = await fetch(ticket.audioUrl);
-    if (!audioRes.ok) {
-      const text = await audioRes.text().catch(() => '');
-      let err: { error?: string; maintenance?: boolean } = {};
-      try { err = JSON.parse(text); } catch { /* ignore */ }
-      if (err.maintenance) throw new Error('__MAINTENANCE__');
-      throw new Error(err.error || 'Error descargando audio');
-    }
-    onProgress?.(85);
-    return audioRes.arrayBuffer();
-  }
-
-  // Fallback: descarga tradicional desde backend (downloadUrl)
-  if (!ticket.downloadUrl) {
-    throw new Error(ticket.error || 'No se pudo obtener URL de descarga');
-  }
-
-  onProgress?.(45);
-  const audioRes = await fetch(ticket.downloadUrl);
-  if (!audioRes.ok) {
-    const text = await audioRes.text().catch(() => '');
-    let err: { error?: string; maintenance?: boolean } = {};
-    try { err = JSON.parse(text); } catch { /* ignore */ }
-    if (err.maintenance) throw new Error('__MAINTENANCE__');
-    throw new Error(err.error || 'Error descargando audio');
-  }
-
-  onProgress?.(85);
-  const buffer = await audioRes.arrayBuffer();
-  return buffer;
+  throw new DownloadFailure('candidate_invalid', 'Plataforma no compatible');
 }
 
 // ─── Lyrics ───
@@ -1126,8 +866,6 @@ export const __testing = {
   buildAndroidCandidateQueries,
   getAndroidPrimaryCandidateLimit,
   buildCandidateCacheKey,
-  rankDownloadCandidates,
-  shouldExpandCandidateSearch,
   getCacheSizes: () => ({
     searches: searchCache.size,
     candidates: candidateCache.size,
@@ -1137,7 +875,5 @@ export const __testing = {
     searchRequests.clear();
     candidateCache.clear();
     candidateRequests.clear();
-    candidatePrefetchRequests.clear();
-    activeCandidatePrefetches = 0;
   },
 }

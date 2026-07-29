@@ -188,11 +188,11 @@ describe('musicApi request reuse', () => {
   it('deduplicates equal searches in flight and caches the result', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({
-        tracks: [{
+        data: [{
           id: '1',
           title: 'Song',
-          artist: 'Artist',
-          album: 'Album',
+          artist: { name: 'Artist' },
+          album: { title: 'Album' },
           duration: 180,
         }],
       }), { status: 200 }),
@@ -211,7 +211,7 @@ describe('musicApi request reuse', () => {
 
   it('bounds search cache memory on long sessions', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async () => (
-      new Response(JSON.stringify({ tracks: [] }), { status: 200 })
+      new Response(JSON.stringify({ data: [] }), { status: 200 })
     ));
 
     await Promise.all(
@@ -221,7 +221,7 @@ describe('musicApi request reuse', () => {
     expect(__testing.getCacheSizes().searches).toBeLessThanOrEqual(100);
   });
 
-  it('reuses candidate prefetch when the picker asks for the same track', async () => {
+  it('deduplicates concurrent candidate requests for the same track', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({
         success: true,
@@ -235,13 +235,13 @@ describe('musicApi request reuse', () => {
       }), { status: 200 }),
     );
 
-    const [prefetched, pickerResult] = await Promise.all([
+    const [first, second] = await Promise.all([
       getDownloadCandidates(track),
       getDownloadCandidates(track),
     ]);
 
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(pickerResult).toEqual(prefetched);
+    expect(second).toEqual(first);
   });
 });
 
@@ -297,34 +297,6 @@ describe('musicApi candidate ranking', () => {
     const normal = __testing.buildCandidateCacheKey(animeTrack, false, false);
     const anime = __testing.buildCandidateCacheKey(animeTrack, true, false);
     expect(normal).not.toBe(anime);
-  });
-
-  it('returns at most three unique candidates ordered by quality', () => {
-    const ranked = __testing.rankDownloadCandidates(track, [
-      { videoId: 'cover', title: 'Song cover', channel: 'Fan', duration: 180, score: 80 },
-      { videoId: 'official', title: 'Artist - Song Official Audio', channel: 'Artist - Topic', duration: 180, score: 100 },
-      { videoId: 'live', title: 'Artist - Song live concert', channel: 'Artist', duration: 230, score: 110 },
-      { videoId: 'official', title: 'Artist - Song', channel: 'Artist', duration: 180, score: 90 },
-      { videoId: 'remix', title: 'Artist - Song remix', channel: 'Uploader', duration: 205, score: 100 },
-    ]);
-
-    expect(ranked).toHaveLength(3);
-    expect(new Set(ranked.map((candidate) => candidate.videoId)).size).toBe(3);
-    expect(ranked[0].videoId).toBe('official');
-    expect(ranked.map((candidate) => candidate.score)).toEqual(
-      [...ranked].map((candidate) => candidate.score).sort((a, b) => b - a),
-    );
-  });
-
-  it('expands only when primary results are insufficient', () => {
-    expect(__testing.shouldExpandCandidateSearch([
-      { videoId: '1', title: 'Song', channel: 'Artist', duration: 180, score: 150, confidence: 'alta' },
-      { videoId: '2', title: 'Song', channel: 'Artist', duration: 181, score: 130, confidence: 'alta' },
-    ])).toBe(false);
-
-    expect(__testing.shouldExpandCandidateSearch([
-      { videoId: '1', title: 'Song', channel: 'Artist', duration: 180, score: 100, confidence: 'media' },
-    ])).toBe(true);
   });
 
 });

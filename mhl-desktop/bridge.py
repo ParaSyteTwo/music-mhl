@@ -1,7 +1,6 @@
 """
 MHL Music — Python bridge expuesto al frontend React via pywebview.
 Todas las llamadas externas (Deezer, YouTube/yt-dlp, filesystem) pasan por aquí.
-Cero dependencia del backend Fly.io.
 """
 import base64
 import json
@@ -38,12 +37,6 @@ def _bin(name: str) -> str:
     return str(p) if p.exists() else name
 
 
-# ── Helpers internos ──────────────────────────────────────────────────────────
-
-def _safe(s: str) -> str:
-    return re.sub(r'[/\\?%*:|"<>]', '', s).strip()
-
-
 def _encode_audio_bytes(value: bytes) -> str:
     return base64.b64encode(value).decode('ascii')
 
@@ -66,15 +59,13 @@ def _metadata_text(data: dict, *keys: str) -> str:
 
 
 # ── Anime client (AniList + animethemes.moe) ─────────────────────────────────
-# Replica la misma forma de respuesta que el backend (services/ytdlp-service/modules/anime_client.py)
-# para que el frontend pueda cambiar de plataforma sin diferencias. Implementación
-# síncrona con `requests` (no `httpx`) porque `requests` ya está en requirements.txt.
+# Implementación síncrona con `requests`, que ya forma parte del runtime Desktop.
 
 _ANILIST_ENDPOINT = 'https://graphql.anilist.co'
 _ANIMETHEMES_ENDPOINT = 'https://api.animethemes.moe'
 _ANIME_HEADERS = {
     'Content-Type': 'application/json',
-    'User-Agent': 'MHLMusic/1.4.8-beta.3',
+    'User-Agent': 'MHLMusic/1.4.8-beta.4',
 }
 _ANIME_TIMEOUT = 10
 
@@ -389,21 +380,6 @@ class Bridge:
         except Exception as e:
             return {'error': str(e)}
 
-    def deezer_artist(self, artist_id: str) -> dict:
-        try:
-            info, top, albums, related = [
-                requests.get(url, timeout=10).json()
-                for url in [
-                    f'https://api.deezer.com/artist/{artist_id}',
-                    f'https://api.deezer.com/artist/{artist_id}/top?limit=10',
-                    f'https://api.deezer.com/artist/{artist_id}/albums?limit=10',
-                    f'https://api.deezer.com/artist/{artist_id}/related?limit=8',
-                ]
-            ]
-            return {'success': True, 'info': info, 'top': top, 'albums': albums, 'related': related}
-        except Exception as e:
-            return {'success': False, 'error': str(e)}
-
     # ── Anime (AniList + animethemes.moe, llamadas directas desde Python) ────
 
     def anime_search(self, query: str, limit: int = 10) -> dict:
@@ -539,66 +515,6 @@ class Bridge:
         except Exception:
             return
 
-    def _get_yt_thumbnail_url(self, video_id: str) -> str | None:
-        """Extrae la URL de la miniatura de YouTube para un video dado."""
-        args = [
-            _bin('yt-dlp.exe'),
-            f'https://www.youtube.com/watch?v={video_id}',
-            '--dump-json', '--no-playlist', '--skip-download',
-            '--quiet', '--no-warnings',
-        ]
-        try:
-            r = subprocess.run(
-                args, capture_output=True, text=True, creationflags=CREATE_NO_WINDOW,
-                timeout=10, encoding='utf-8', errors='replace',
-            )
-            for line in r.stdout.strip().splitlines():
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    d = json.loads(line)
-                    # thumbnails: array con multiple resoluciones. highest quality es thumbnail[-1]
-                    thumbs = d.get('thumbnail') or ''
-                    if not thumbs and 'thumbnails' in d:
-                        thumbs_list = d.get('thumbnails') or []
-                        if thumbs_list:
-                            thumbs = thumbs_list[-1].get('url') or thumbs_list[-1].get('path') or ''
-                    return thumbs if thumbs else None
-                except Exception:
-                    pass
-        except Exception:
-            pass
-        return None
-
-    def _download_cover_from_yt_thumbnail(self, video_id: str) -> tuple[bytes, str] | tuple[None, None]:
-        """
-        Descarga la miniatura de YouTube como imagen para el cover.
-        Returns (image_bytes, mime_type) o (None, None) si falla.
-        YouTube siempre tiene thumbnail, así que esto siempre debería funcionar.
-        """
-        thumb_url = self._get_yt_thumbnail_url(video_id)
-        if not thumb_url:
-            return None, None
-
-        # YouTube thumbnails vienen en formatos como:
-        # https://i.ytimg.com/vi/{video_id}/maxresdefault.jpg
-        # https://i.ytimg.com/vi/{video_id}/hqdefault.jpg
-        # Asegurar que usamos max resolution
-        if 'ytimg' in thumb_url and '/maxresdefault' not in thumb_url:
-            thumb_url = thumb_url.replace('/hqdefault', '/maxresdefault').replace('/mqdefault', '/maxresdefault').replace('/sddefault', '/maxresdefault').replace('/default', '/maxresdefault')
-
-        try:
-            r = requests.get(thumb_url, timeout=10, headers={
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                'Referer': 'https://www.youtube.com/',
-            })
-            if r.ok and len(r.content) > 0:
-                return r.content, r.headers.get('Content-Type', 'image/jpeg')
-        except Exception as e:
-            print(f'[DEBUG] YT thumbnail download error: {e}')
-        return None, None
-
     def letras_fetch(self, url: str) -> dict:
         parsed = urlparse(url or '')
         if parsed.scheme != 'https' or parsed.netloc not in {'www.letras.com', 'letras.com'}:
@@ -618,72 +534,6 @@ class Bridge:
             return {'success': True, 'html': response.text, 'url': response.url}
         except requests.RequestException as exc:
             return {'success': False, 'error': str(exc)}
-
-    # ── Download audio ────────────────────────────────────────────────────────
-
-    def download_and_save(self, params: dict) -> dict:
-        """
-        Descarga audio y retorna bytes + metadata al frontend.
-        El frontend escribe los ID3 tags con browser-id3-writer.
-        """
-        video_id = params.get('videoId') or None
-        title = params.get('title', '')
-        artist = params.get('artist', '')
-        album = params.get('album', '')
-        cover_url = params.get('coverUrl', '')
-        genre = params.get('genre')
-        year = params.get('year')
-        track_number = params.get('trackNumber')
-        lyrics = params.get('lyrics')
-        print(f'[DEBUG] download_and_save: title={title}, artist={artist}, cover_url={cover_url[:50] if cover_url else "EMPTY"}...')
-
-        if not video_id:
-            return {'success': False, 'error': 'candidate_invalid: resolved videoId required'}
-
-        ext = 'mp3'
-        output_dir = settings.get('download_folder', str(Path.home() / 'Music' / 'MHL Music'))
-        os.makedirs(output_dir, exist_ok=True)
-        safe_filename = f'{_safe(title)} - {_safe(artist)}.{ext}'
-        output_path = os.path.join(output_dir, safe_filename)
-
-        tmpdir = tempfile.mkdtemp(prefix='mhl_')
-        tmppath = os.path.join(tmpdir, f'audio.{ext}')
-
-        try:
-            args = [
-                _bin('yt-dlp.exe'),
-                f'https://www.youtube.com/watch?v={video_id}',
-                '-x', '--audio-format', 'mp3',
-                '--audio-quality', '0',
-                '-o', tmppath,
-                '--no-playlist', '--force-overwrites',
-                '--ffmpeg-location', _bin('ffmpeg.exe'),
-                '--quiet',
-            ]
-            proc = subprocess.run(args, capture_output=True, creationflags=CREATE_NO_WINDOW, timeout=300, encoding='utf-8', errors='replace')
-
-            result_path = tmppath
-            if not os.path.exists(result_path):
-                files = list(Path(tmpdir).iterdir())
-                if files:
-                    result_path = str(files[0])
-
-            if proc.returncode != 0 or not os.path.exists(result_path):
-                err_detail = (proc.stderr or '').strip()
-                return {'success': False, 'error': f'yt-dlp error {proc.returncode}: {err_detail}'}
-
-            shutil.copy2(result_path, output_path)
-            return {'success': True, 'filename': safe_filename, 'path': output_path}
-
-        except subprocess.TimeoutExpired:
-            return {'success': False, 'error': 'Timeout: la descarga tardó demasiado'}
-        except Exception as e:
-            return {'success': False, 'error': str(e)}
-        finally:
-            try:
-                shutil.rmtree(tmpdir, ignore_errors=True)
-            except Exception:
-                pass
 
     def get_raw_audio(
         self,
@@ -886,23 +736,3 @@ class Bridge:
             directory=settings.get('download_folder', str(Path.home() / 'Music')),
         )
         return selected[0] if selected else ''
-
-    def open_folder(self, path: str) -> dict:
-        """Abre una carpeta en el explorador de Windows."""
-        try:
-            os.startfile(path)
-            return {'success': True}
-        except Exception as e:
-            return {'success': False, 'error': str(e)}
-
-    # ── yt-dlp info ───────────────────────────────────────────────────────────
-
-    def get_ytdlp_version(self) -> str:
-        try:
-            r = subprocess.run(
-                [_bin('yt-dlp.exe'), '--version'],
-                capture_output=True, text=True, timeout=10,
-            )
-            return r.stdout.strip()
-        except Exception:
-            return 'desconocido'
