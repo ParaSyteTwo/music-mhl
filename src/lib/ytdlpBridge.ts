@@ -31,6 +31,8 @@ interface YtDlpPluginInterface {
   saveTaggedAudioToMusic(options: { fileName: string; data: string }): Promise<{ success: boolean; uri: string }>;
   tagAndSaveM4A(options: { fileName: string; data: string; coverUrl?: string; title?: string; artist?: string; album?: string; lyrics?: string }): Promise<{ success: boolean; uri: string }>;
   addListener(eventName: 'downloadProgress', listenerFunc: (event: YtDlpProgressEvent) => void): Promise<PluginListenerHandle>;
+  startForegroundService(options: { title?: string; text?: string }): Promise<void>;
+  stopForegroundService(): Promise<void>;
 }
 
 const YtDlp = registerPlugin<YtDlpPluginInterface>('YtDlp');
@@ -170,4 +172,16 @@ export async function addDownloadProgressListener(
   } catch {
     return null;
   }
+}
+
+export async function startForegroundService(title?: string, text?: string): Promise<void> {
+  if (!Capacitor.isNativePlatform()) return;
+  if (!initialized) await initYtDlp();
+  await YtDlp.startForegroundService({ title, text });
+}
+
+export async function stopForegroundService(): Promise<void> {
+  if (!Capacitor.isNativePlatform()) return;
+  if (!initialized) await initYtDlp();
+  await YtDlp.stopForegroundService();
 }

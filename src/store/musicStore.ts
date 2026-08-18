@@ -149,6 +149,10 @@ interface MusicStore {
   setCellularResolutionPolicy: (v: CellularResolutionPolicy) => void;
   setEditionPreference: (v: EditionPreference) => void;
 
+  // ─── Auto-download ───
+  autoDownload: boolean;
+  setAutoDownload: (v: boolean) => void;
+
   // ─── yt-dlp status ───
   ytDlpVersion: string | null;
   ytDlpUpdateAvailable: boolean;
@@ -495,7 +499,18 @@ export const useMusicStore = create<MusicStore>()(
               toast.success(storeText(get().uiLanguageMode, 'downloadCompletedToast', {
                 title: track.title,
                 artist: track.artist,
-              }), { duration: 4000 });
+              }), {
+                duration: 6000,
+                action: {
+                  label: storeText(get().uiLanguageMode, 'openInPlayer'),
+                  onClick: () => {
+                    import('@/lib/openFileBridge').then(({ openDownloadedFile }) => {
+                      const dl = get().downloads.find(d => d.id === id);
+                      openDownloadedFile(dl?.fileName, dl?.mediaUri, get().preferredPlayerPackage ?? undefined);
+                    });
+                  },
+                },
+              });
             } catch (error) {
               const msg = error instanceof Error ? error.message : 'Download failed';
               updateDl({ status: 'error', error: msg });
@@ -524,10 +539,8 @@ export const useMusicStore = create<MusicStore>()(
                 supplementalDataPromise,
               ]);
               updateDl({ progress: 80 });
-              // Preferir synced (LRC con timestamps) — Retro Music lo sincroniza automáticamente
-              const lyrics = lyricsResult.synced && get().saveLrcFile
-                ? null
-                : lyricsResult.plain || null;
+              // Siempre incrustar la mejor versión de lyrics en el audio
+              const lyrics = lyricsResult.synced || lyricsResult.plain || null;
 
               if (Capacitor.isNativePlatform()) {
                 const { tagAndSaveM4A } = await import('@/lib/ytdlpBridge');
@@ -607,7 +620,18 @@ export const useMusicStore = create<MusicStore>()(
               toast.success(storeText(get().uiLanguageMode, 'downloadCompletedToast', {
                 title: track.title,
                 artist: track.artist,
-              }), { duration: 4000 });
+              }), {
+                duration: 6000,
+                action: {
+                  label: storeText(get().uiLanguageMode, 'openInPlayer'),
+                  onClick: () => {
+                    import('@/lib/openFileBridge').then(({ openDownloadedFile }) => {
+                      const dl = get().downloads.find(d => d.id === id);
+                      openDownloadedFile(dl?.fileName, dl?.mediaUri, get().preferredPlayerPackage ?? undefined);
+                    });
+                  },
+                },
+              });
               return;
             } catch (error) {
               const msg = error instanceof Error ? error.message : 'Download failed';
@@ -745,7 +769,7 @@ export const useMusicStore = create<MusicStore>()(
         lyricRomanization: true,
         lyricTranslation: true,
         lyricLatinOnly: false,
-        saveLrcFile: true,
+        saveLrcFile: false,
         lyricsTargetLanguage: 'system',
         setLyricOriginal: (v) => set({ lyricOriginal: v }),
         setLyricRomanization: (v) => set({ lyricRomanization: v }),
@@ -765,6 +789,10 @@ export const useMusicStore = create<MusicStore>()(
         setResolutionProfile: (v) => set({ resolutionProfile: v }),
         setCellularResolutionPolicy: (v) => set({ cellularResolutionPolicy: v }),
         setEditionPreference: (v) => set({ editionPreference: v }),
+
+        // ─── Auto-download ───
+        autoDownload: true,
+        setAutoDownload: (v) => set({ autoDownload: v }),
 
         // ─── Reproductor externo preferido (Android) ───
         preferredPlayerPackage: null as string | null,
@@ -810,6 +838,7 @@ export const useMusicStore = create<MusicStore>()(
         editionPreference: state.editionPreference,
         mostDownloadedArtists: state.mostDownloadedArtists,
         preferredPlayerPackage: state.preferredPlayerPackage,
+        autoDownload: state.autoDownload,
         // localFileRefs excluded — File objects cannot be serialized
       }),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -827,7 +856,7 @@ export const useMusicStore = create<MusicStore>()(
         lyricRomanization: persisted?.lyricRomanization ?? true,
         lyricTranslation: persisted?.lyricTranslation ?? true,
         lyricLatinOnly: persisted?.lyricLatinOnly ?? false,
-        saveLrcFile: persisted?.saveLrcFile ?? true,
+        saveLrcFile: persisted?.saveLrcFile ?? false,
         lyricsTargetLanguage: isLyricsTargetLanguage(persisted?.lyricsTargetLanguage)
           ? persisted.lyricsTargetLanguage
           : 'system',
@@ -844,6 +873,7 @@ export const useMusicStore = create<MusicStore>()(
           : 'catalog',
         mostDownloadedArtists: persisted?.mostDownloadedArtists ?? [],
         preferredPlayerPackage: persisted?.preferredPlayerPackage ?? null,
+        autoDownload: persisted?.autoDownload ?? true,
       }),
     }
   )

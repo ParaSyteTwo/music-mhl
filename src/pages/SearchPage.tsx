@@ -76,6 +76,7 @@ export default function SearchPage() {
     resolutionProfile,
     cellularResolutionPolicy,
     editionPreference,
+    autoDownload,
   } = useMusicStore();
 
   const [query, setQuery] = useState(searchQuery);
@@ -88,6 +89,7 @@ export default function SearchPage() {
   const [artistExclusions, setArtistExclusions] = useState<string[]>([]);
   const { recent, remove: removeRecent, refresh: refreshRecent } = useRecentSearches();
   const isNativeProduct = Capacitor.isNativePlatform() || (typeof window !== 'undefined' && 'pywebview' in window);
+  const autoDownloadTriggeredRef = useRef<string | null>(null);
   const scheduler = useMemo(() => new CandidateScheduler({
     profile: resolutionProfile,
     cellularPolicy: cellularResolutionPolicy,
@@ -300,6 +302,7 @@ export default function SearchPage() {
     scheduler.startSession();
     setBestCandidates({});
     setResolutionStates({});
+    autoDownloadTriggeredRef.current = null;
     if (!autoCandidateResolution || !isNativeProduct || animeMode || searchResults.length === 0 || isSearching) return;
     for (const track of searchResults.slice(0, 5)) {
       const key = candidateTrackKey(track);
@@ -316,6 +319,24 @@ export default function SearchPage() {
       scheduler.startSession();
     };
   }, [animeMode, autoCandidateResolution, cacheBestCandidate, isNativeProduct, isSearching, scheduler, searchQuery, searchResults]);
+
+  // ─── Auto-download: descarga automática del primer resultado verificado ───
+  useEffect(() => {
+    if (!autoDownload || !isNativeProduct || animeMode || searchResults.length === 0) return;
+    const firstTrack = searchResults[0];
+    const firstKey = candidateTrackKey(firstTrack);
+    if (autoDownloadTriggeredRef.current === searchQuery) return;
+    if (isDownloading(firstTrack.id) || isDownloaded(firstTrack.id)) return;
+    const state = resolutionStates[firstKey];
+    const cached = bestCandidates[firstKey];
+    if (state === 'verified' && cached) {
+      autoDownloadTriggeredRef.current = searchQuery;
+      startDownloadWithVideoId(firstTrack, cached.videoId);
+      toast(t('autoDownloadStarted', { title: firstTrack.title, artist: firstTrack.artist }), {
+        duration: 4000,
+      });
+    }
+  }, [autoDownload, animeMode, bestCandidates, downloads, isNativeProduct, resolutionStates, searchQuery, searchResults, startDownloadWithVideoId, t]);
 
   useEffect(() => {
     const updateVisibility = () => scheduler.setPaused(document.hidden);

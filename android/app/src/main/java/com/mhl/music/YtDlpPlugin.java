@@ -20,6 +20,8 @@ import org.json.JSONObject;
 
 import android.content.ContentResolver;
 import android.content.ContentValues;
+import android.content.Context;
+import android.content.Intent;
 import android.provider.MediaStore;
 import android.media.MediaMetadataRetriever;
 import java.io.DataInputStream;
@@ -103,6 +105,38 @@ public class YtDlpPlugin extends Plugin {
                 bridge.getActivity().runOnUiThread(() -> call.reject("Failed to initialize yt-dlp: " + e.getMessage()));
             }
         });
+    }
+
+    @PluginMethod
+    public void startForegroundService(PluginCall call) {
+        String title = call.getString("title", "MHL Music");
+        String text = call.getString("text", "Descargando en segundo plano...");
+        
+        Intent intent = new Intent(getContext(), DownloadForegroundService.class);
+        intent.putExtra("title", title);
+        intent.putExtra("text", text);
+        
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            getContext().startForegroundService(intent);
+        } else {
+            getContext().startService(intent);
+        }
+        
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void stopForegroundService(PluginCall call) {
+        Intent intent = new Intent(getContext(), DownloadForegroundService.class);
+        intent.setAction("STOP");
+        
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            getContext().startForegroundService(intent);
+        } else {
+            getContext().startService(intent);
+        }
+        
+        call.resolve();
     }
 
     @PluginMethod

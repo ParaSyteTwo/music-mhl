@@ -31,6 +31,7 @@ export default function SettingsPage() {
     resolutionProfile, setResolutionProfile,
     cellularResolutionPolicy, setCellularResolutionPolicy,
     editionPreference, setEditionPreference,
+    autoDownload, setAutoDownload,
   } = useMusicStore();
 
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'done' | 'skipped' | 'error'>('idle');
@@ -197,13 +198,32 @@ export default function SettingsPage() {
         </div>
       </section>
 
+      {/* Descarga automática */}
+      <section className="mb-8">
+        <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">{t('autoDownload')}</h2>
+        <div className="p-4 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)]">
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={autoDownload}
+              onChange={(e) => setAutoDownload(e.target.checked)}
+              className="mt-0.5"
+            />
+            <div>
+              <p className="text-sm text-[#F5F5F0]">{t('autoDownload')}</p>
+              <p className="text-xs text-[#666660] mt-0.5">{t('autoDownloadDesc')}</p>
+            </div>
+          </label>
+        </div>
+      </section>
+
       
       <section className="mb-8">
         <button
           onClick={() => setShowAdvanced(!showAdvanced)}
           className="flex items-center gap-2 text-xs font-mono uppercase tracking-widest text-[#8A8A8A] hover:text-[#C8F04B] transition-colors mb-3"
         >
-          {showAdvanced ? '▼' : '▶'} Opciones Avanzadas
+          {showAdvanced ? '▼' : '▶'} {t('advancedOptions')}
         </button>
         {showAdvanced && (
           <div className="space-y-8 animate-in slide-in-from-top-2 fade-in duration-200">
@@ -277,37 +297,153 @@ export default function SettingsPage() {
                 </label>
               </div>
             </section>
+
+            {/* Letras */}
+            <section>
+              <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">{t('lyrics')}</h2>
+              <div className="p-4 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] space-y-3">
+                <div>
+                  <p className="text-xs text-[#777] mb-2">{t('lyricsTargetLanguage')}</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {([['system', t('languageSystem')], ['es', t('languageSpanish')], ['en', t('languageEnglish')]] as Array<[LyricsTargetLanguage, string]>).map(([mode, label]) => (
+                      <button key={mode} type="button" onClick={() => setLyricsTargetLanguage(mode)} className={`px-3 py-2 rounded-lg text-xs font-semibold ${lyricsTargetLanguage === mode ? 'bg-[#C8F04B] text-[#18181A]' : 'bg-[rgba(255,255,255,0.04)] text-[#B0B0B0]'}`}>{label}</button>
+                    ))}
+                  </div>
+                </div>
+                {isPyWebView && (
+                  <label className="flex items-start gap-3 cursor-pointer pt-1">
+                    <input
+                      type="checkbox"
+                      checked={saveLrcFile}
+                      onChange={e => setSaveLrcFile(e.target.checked)}
+                      className="mt-0.5"
+                    />
+                    <div>
+                      <p className="text-sm text-[#F5F5F0]">{t('saveLrcFile')}</p>
+                      <p className="text-xs text-[#666660] mt-0.5">{t('saveLrcFileHelp')}</p>
+                    </div>
+                  </label>
+                )}
+              </div>
+            </section>
+
+            {/* yt-dlp — solo visible en Android, con diseño coherente */}
+            {isAndroid && (
+              <section>
+                <h2 className="text-xs font-semibold uppercase tracking-widest text-[#8A8A8A] mb-2 flex items-center gap-2">
+                  {t('downloadEngine')}
+                  {ytDlpUpdateAvailable && (
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#C8F04B]/20 text-[#C8F04B] border border-[#C8F04B]/30">
+                      {t('updateAvailable')}
+                    </span>
+                  )}
+                </h2>
+                <div className="p-4 rounded-lg bg-[#18181A] border border-[#232325] flex flex-col gap-2">
+                  <div className="flex items-center gap-3">
+                    <div className={`rounded-full p-2 ${ytDlpUpdateAvailable ? 'bg-[#C8F04B]/10' : 'bg-[#232325]'}`}>
+                      <RefreshCw className={`w-6 h-6 ${ytDlpUpdateAvailable ? 'text-[#C8F04B]' : 'text-[#8A8A8A]'}`} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-base font-semibold text-[#F5F5F0]">yt-dlp</span>
+                        <span className="text-xs font-mono text-[#8A8A8A]">{ytDlpVersion ?? 'cargando…'}</span>
+                      </div>
+                      <p className="text-xs text-[#8A8A8A] mt-0.5">{t('downloadEngineHelp')}</p>
+                      {ytDlpUpdateAvailable && (
+                        <p className="text-xs text-[#C8F04B] mt-1 font-medium">
+                          {t('updateRecommended')}
+                        </p>
+                      )}
+                      {updateStatus === 'done' && (
+                        <p className="text-xs text-[#C8F04B] mt-1 flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" /> {t('updatedOk')}
+                        </p>
+                      )}
+                      {updateStatus === 'skipped' && (
+                        <p className="text-xs text-[#8A8A8A] mt-1">{t('alreadyLatest')}</p>
+                      )}
+                      {updateStatus === 'error' && (
+                        <p className="text-xs text-red-400 mt-1">{t('updateError')}</p>
+                      )}
+                    </div>
+                    <button
+                      onClick={handleUpdate}
+                      disabled={ytDlpUpdating}
+                      className={`ml-2 flex items-center gap-1.5 px-3 py-2 rounded-md text-xs font-semibold transition-colors shadow-sm ${
+                        ytDlpUpdateAvailable
+                          ? 'bg-[#C8F04B] text-[#18181A] hover:bg-[#d4f56a]'
+                          : 'bg-[#232325] text-[#8A8A8A] hover:text-[#F5F5F0]'
+                      } disabled:opacity-50 disabled:cursor-wait`}
+                    >
+                      <RefreshCw className={`w-4 h-4 ${ytDlpUpdating ? 'animate-spin' : ''}`} />
+                      {ytDlpUpdating ? t('updating') : t('update')}
+                    </button>
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {/* Backup Section */}
+            <section>
+              <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">{t('backupRestore') || 'BACKUP & RESTORE'}</h2>
+              <div className="p-4 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] flex flex-col gap-4">
+                <p className="text-xs text-[#8A8A8A]">
+                  {t('backupDesc') || 'Exporta tu historial de descargas para restaurarlo en otro dispositivo. Esto solo guarda la lista de canciones, no los archivos de audio.'}
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      const state = localStorage.getItem('mhl-store');
+                      if (!state) return;
+                      const blob = new Blob([state], { type: 'application/json' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `mhl-music-backup-${new Date().toISOString().split('T')[0]}.json`;
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                      URL.revokeObjectURL(url);
+                    }}
+                    className="flex-1 py-2 rounded-md bg-[#232325] text-xs font-semibold text-[#F5F5F0] border border-[rgba(255,255,255,0.05)] hover:bg-[#2A2A2D]"
+                  >
+                    {t('exportBackup') || 'Exportar JSON'}
+                  </button>
+                  <label className="flex-1 cursor-pointer">
+                    <div className="w-full text-center py-2 rounded-md bg-[#C8F04B] text-xs font-semibold text-[#18181A] hover:bg-[#d4f56a]">
+                      {t('importBackup') || 'Importar JSON'}
+                    </div>
+                    <input
+                      type="file"
+                      accept=".json"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = (event) => {
+                          try {
+                            const data = event.target?.result as string;
+                            const parsed = JSON.parse(data);
+                            if (parsed && parsed.state && parsed.state.downloads) {
+                              localStorage.setItem('mhl-store', data);
+                              window.location.reload();
+                            } else {
+                              alert(t('invalidBackup') || 'El archivo no tiene el formato correcto.');
+                            }
+                          } catch {
+                            alert(t('invalidBackup') || 'El archivo está corrupto.');
+                          }
+                        };
+                        reader.readAsText(file);
+                      }}
+                    />
+                  </label>
+                </div>
+              </div>
+            </section>
           </div>
         )}
-      </section>
-
-      {/* Letras */}
-      <section className="mb-8">
-        <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">{t('lyrics')}</h2>
-        <div className="p-4 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] space-y-3">
-          <div>
-            <p className="text-xs text-[#777] mb-2">{t('lyricsTargetLanguage')}</p>
-            <div className="grid grid-cols-3 gap-2">
-              {([['system', t('languageSystem')], ['es', t('languageSpanish')], ['en', t('languageEnglish')]] as Array<[LyricsTargetLanguage, string]>).map(([mode, label]) => (
-                <button key={mode} type="button" onClick={() => setLyricsTargetLanguage(mode)} className={`px-3 py-2 rounded-lg text-xs font-semibold ${lyricsTargetLanguage === mode ? 'bg-[#C8F04B] text-[#18181A]' : 'bg-[rgba(255,255,255,0.04)] text-[#B0B0B0]'}`}>{label}</button>
-              ))}
-            </div>
-          </div>
-          {isPyWebView && (
-            <label className="flex items-start gap-3 cursor-pointer pt-1">
-              <input
-                type="checkbox"
-                checked={saveLrcFile}
-                onChange={e => setSaveLrcFile(e.target.checked)}
-                className="mt-0.5"
-              />
-              <div>
-                <p className="text-sm text-[#F5F5F0]">{t('saveLrcFile')}</p>
-                <p className="text-xs text-[#666660] mt-0.5">{t('saveLrcFileHelp')}</p>
-              </div>
-            </label>
-          )}
-        </div>
       </section>
 
       <section className="mb-8">
@@ -562,121 +698,6 @@ export default function SettingsPage() {
           </p>
         </section>
       )}
-
-      {isAndroid && (
-        <section className="mb-8">
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-[#8A8A8A] mb-2 flex items-center gap-2">
-            {t('downloadEngine')}
-            {ytDlpUpdateAvailable && (
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#C8F04B]/20 text-[#C8F04B] border border-[#C8F04B]/30">
-                {t('updateAvailable')}
-              </span>
-            )}
-          </h2>
-          <div className="p-4 rounded-lg bg-[#18181A] border border-[#232325] flex flex-col gap-2">
-            <div className="flex items-center gap-3">
-              <div className={`rounded-full p-2 ${ytDlpUpdateAvailable ? 'bg-[#C8F04B]/10' : 'bg-[#232325]'}`}>
-                <RefreshCw className={`w-6 h-6 ${ytDlpUpdateAvailable ? 'text-[#C8F04B]' : 'text-[#8A8A8A]'}`} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-base font-semibold text-[#F5F5F0]">yt-dlp</span>
-                  <span className="text-xs font-mono text-[#8A8A8A]">{ytDlpVersion ?? 'cargando…'}</span>
-                </div>
-                <p className="text-xs text-[#8A8A8A] mt-0.5">{t('downloadEngineHelp')}</p>
-                {ytDlpUpdateAvailable && (
-                  <p className="text-xs text-[#C8F04B] mt-1 font-medium">
-                    {t('updateRecommended')}
-                  </p>
-                )}
-                {updateStatus === 'done' && (
-                  <p className="text-xs text-[#C8F04B] mt-1 flex items-center gap-1">
-                    <CheckCircle2 className="w-3 h-3" /> {t('updatedOk')}
-                  </p>
-                )}
-                {updateStatus === 'skipped' && (
-                  <p className="text-xs text-[#8A8A8A] mt-1">{t('alreadyLatest')}</p>
-                )}
-                {updateStatus === 'error' && (
-                  <p className="text-xs text-red-400 mt-1">{t('updateError')}</p>
-                )}
-              </div>
-              <button
-                onClick={handleUpdate}
-                disabled={ytDlpUpdating}
-                className={`ml-2 flex items-center gap-1.5 px-3 py-2 rounded-md text-xs font-semibold transition-colors shadow-sm ${
-                  ytDlpUpdateAvailable
-                    ? 'bg-[#C8F04B] text-[#18181A] hover:bg-[#d4f56a]'
-                    : 'bg-[#232325] text-[#8A8A8A] hover:text-[#F5F5F0]'
-                } disabled:opacity-50 disabled:cursor-wait`}
-              >
-                <RefreshCw className={`w-4 h-4 ${ytDlpUpdating ? 'animate-spin' : ''}`} />
-                {ytDlpUpdating ? t('updating') : t('update')}
-              </button>
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* Backup Section */}
-      <section className="mb-8">
-        <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">{t('backupRestore') || 'BACKUP & RESTORE'}</h2>
-        <div className="p-4 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] flex flex-col gap-4">
-          <p className="text-xs text-[#8A8A8A]">
-            {t('backupDesc') || 'Exporta tu historial de descargas para restaurarlo en otro dispositivo. Esto solo guarda la lista de canciones, no los archivos de audio.'}
-          </p>
-          <div className="flex gap-2">
-            <button
-              onClick={() => {
-                const state = localStorage.getItem('mhl-store');
-                if (!state) return;
-                const blob = new Blob([state], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `mhl-music-backup-${new Date().toISOString().split('T')[0]}.json`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-              }}
-              className="flex-1 py-2 rounded-md bg-[#232325] text-xs font-semibold text-[#F5F5F0] border border-[rgba(255,255,255,0.05)] hover:bg-[#2A2A2D]"
-            >
-              {t('exportBackup') || 'Exportar JSON'}
-            </button>
-            <label className="flex-1 cursor-pointer">
-              <div className="w-full text-center py-2 rounded-md bg-[#C8F04B] text-xs font-semibold text-[#18181A] hover:bg-[#d4f56a]">
-                {t('importBackup') || 'Importar JSON'}
-              </div>
-              <input
-                type="file"
-                accept=".json"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  const reader = new FileReader();
-                  reader.onload = (event) => {
-                    try {
-                      const data = event.target?.result as string;
-                      const parsed = JSON.parse(data);
-                      if (parsed && parsed.state && parsed.state.downloads) {
-                        localStorage.setItem('mhl-store', data);
-                        window.location.reload();
-                      } else {
-                        alert(t('invalidBackup') || 'El archivo no tiene el formato correcto.');
-                      }
-                    } catch {
-                      alert(t('invalidBackup') || 'El archivo está corrupto.');
-                    }
-                  };
-                  reader.readAsText(file);
-                }}
-              />
-            </label>
-          </div>
-        </div>
-      </section>
 
       {/* About Section */}
       <section className="mb-8">
