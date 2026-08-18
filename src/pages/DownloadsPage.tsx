@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { useMusicStore } from '@/store/musicStore';
-import { CheckCircle, Loader2, XCircle, Music, Trash2, Clock, ExternalLink, Zap } from 'lucide-react';
+import { CheckCircle, Loader2, XCircle, Music, Trash2, Clock, ExternalLink, Zap, RefreshCw } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Capacitor } from '@capacitor/core';
 import { openDownloadedFile } from '@/lib/openFileBridge';
@@ -136,7 +137,8 @@ export default function DownloadsPage() {
   const { downloads, startDownload, removeDownload, preferredPlayerPackage } = useMusicStore();
   const isNative = Capacitor.isNativePlatform();
 
-  const completed = downloads.filter((d) => d.status === 'completed');
+  const completed = [...downloads].filter((d) => d.status === 'completed').reverse();
+  const [showAllCompleted, setShowAllCompleted] = useState(false);
   const active = downloads.filter((d) => d.status === 'downloading');
   const queued = downloads.filter((d) => d.status === 'queued');
   const failed = downloads.filter((d) => d.status === 'error');
@@ -224,7 +226,7 @@ export default function DownloadsPage() {
         <section className="mb-8">
           <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">{t('completed')}</h2>
           <div className="space-y-1">
-            {completed.map((dl) => (
+            {(showAllCompleted ? completed : completed.slice(0, 2)).map((dl) => (
               <div
                 key={dl.id}
                 className="flex items-center gap-2.5 sm:gap-3 px-2 sm:px-3 py-2 sm:py-2.5 rounded-lg hover:bg-[rgba(255,255,255,0.03)] active:bg-[rgba(255,255,255,0.04)] transition-colors group"
@@ -244,6 +246,15 @@ export default function DownloadsPage() {
                   <p className="text-[11px] sm:text-xs text-[#666660]">{dl.track.artist} · {dl.track.album}</p>
                 </div>
                 <span className="text-xs tabular-nums text-[#444] hidden sm:block">{formatDuration(dl.track.duration)}</span>
+                
+                <button
+                  onClick={() => startDownload(dl.track)}
+                  className="p-2 text-[#666660] hover:text-[#C8F04B] active:text-[#C8F04B] transition-colors sm:opacity-0 sm:group-hover:opacity-100 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                  title={t('retry') || 'Redescargar'}
+                >
+                  <RefreshCw className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
+                </button>
+
                 {(dl.mediaUri || dl.fileName) && (
                   <button
                     onClick={() => void openDownloadedFile(dl.fileName, dl.mediaUri, preferredPlayerPackage ?? undefined)}
@@ -263,6 +274,14 @@ export default function DownloadsPage() {
               </div>
             ))}
           </div>
+          {completed.length > 2 && (
+            <button
+              onClick={() => setShowAllCompleted(!showAllCompleted)}
+              className="mt-2 text-xs text-[#666660] hover:text-[#F5F5F0] transition-colors px-3 py-2 w-full text-center border border-[rgba(255,255,255,0.05)] rounded-lg hover:bg-[rgba(255,255,255,0.02)]"
+            >
+              {showAllCompleted ? (t('hide') || 'Ocultar') : `Ver ${completed.length - 2} más...`}
+            </button>
+          )}
         </section>
       )}
 
