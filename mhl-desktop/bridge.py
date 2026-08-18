@@ -65,7 +65,7 @@ _ANILIST_ENDPOINT = 'https://graphql.anilist.co'
 _ANIMETHEMES_ENDPOINT = 'https://api.animethemes.moe'
 _ANIME_HEADERS = {
     'Content-Type': 'application/json',
-    'User-Agent': 'MHLMusic/1.4.9-beta.3',
+    'User-Agent': 'MHLMusic/1.4.9-beta.4',
 }
 _ANIME_TIMEOUT = 10
 
@@ -603,7 +603,7 @@ class Bridge:
             args = [
                 _bin('yt-dlp.exe'),
                 input_url,
-                '-f', 'bestaudio[ext=m4a]/bestaudio',
+                '-f', 'bestaudio[ext=m4a]/bestaudio/best',
                 '-x', '--audio-format', 'm4a',
                 '--audio-quality', '0',
                 '-o', tmppath,

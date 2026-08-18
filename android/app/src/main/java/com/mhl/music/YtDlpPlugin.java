@@ -382,7 +382,7 @@ public class YtDlpPlugin extends Plugin {
                 String outputPath = outputFile.getAbsolutePath();
 
                 YoutubeDLRequest request = new YoutubeDLRequest(url);
-                request.addOption("-f", "bestaudio[ext=m4a]/bestaudio");
+                request.addOption("-f", "bestaudio[ext=m4a]/bestaudio/best");
                 request.addOption("-x");
                 request.addOption("--audio-format", "m4a");
                 request.addOption("--audio-quality", "0");
