@@ -621,6 +621,66 @@ export default function SettingsPage() {
         </section>
       )}
 
+      {/* Backup Section */}
+      <section className="mb-8">
+        <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">{t('backupRestore') || 'BACKUP & RESTORE'}</h2>
+        <div className="p-4 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] flex flex-col gap-4">
+          <p className="text-xs text-[#8A8A8A]">
+            {t('backupDesc') || 'Exporta tu historial de descargas para restaurarlo en otro dispositivo. Esto solo guarda la lista de canciones, no los archivos de audio.'}
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                const state = localStorage.getItem('music-storage');
+                if (!state) return;
+                const blob = new Blob([state], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `mhl-music-backup-${new Date().toISOString().split('T')[0]}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+              }}
+              className="flex-1 py-2 rounded-md bg-[#232325] text-xs font-semibold text-[#F5F5F0] border border-[rgba(255,255,255,0.05)] hover:bg-[#2A2A2D]"
+            >
+              {t('exportBackup') || 'Exportar JSON'}
+            </button>
+            <label className="flex-1 cursor-pointer">
+              <div className="w-full text-center py-2 rounded-md bg-[#C8F04B] text-xs font-semibold text-[#18181A] hover:bg-[#d4f56a]">
+                {t('importBackup') || 'Importar JSON'}
+              </div>
+              <input
+                type="file"
+                accept=".json"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = (event) => {
+                    try {
+                      const data = event.target?.result as string;
+                      const parsed = JSON.parse(data);
+                      if (parsed && parsed.state && parsed.state.downloads) {
+                        localStorage.setItem('music-storage', data);
+                        window.location.reload();
+                      } else {
+                        alert(t('invalidBackup') || 'El archivo no tiene el formato correcto.');
+                      }
+                    } catch {
+                      alert(t('invalidBackup') || 'El archivo está corrupto.');
+                    }
+                  };
+                  reader.readAsText(file);
+                }}
+              />
+            </label>
+          </div>
+        </div>
+      </section>
+
       {/* About Section */}
       <section className="mb-8">
         <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">{t('about')}</h2>

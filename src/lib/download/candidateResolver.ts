@@ -348,5 +348,7 @@ export function resolveDownloadCandidates(
 }
 
 export function canDownloadWithOneTap(candidate: DownloadCandidate | undefined): boolean {
-  return candidate?.verification === 'verified';
+  if (!candidate) return false;
+  // Auto-download unless there are explicitly rejected contradictions (like missing features/variants)
+  return candidate.verification === 'verified' || candidate.verification === 'probable' || (candidate.score > 0 && candidate.rejectionReasons.length === 0);
 }

@@ -251,10 +251,27 @@ export default function SearchPage() {
   }, []);
 
   const handleSearch = () => {
-    if (query.trim()) {
-      performSearch(query);
-      refreshRecent();
+    const trimmed = query.trim();
+    if (!trimmed) return;
+    
+    const isUrl = /^https?:\/\/(www\.)?(youtube\.com|youtu\.be|music\.youtube\.com|soundcloud\.com|open\.spotify\.com)\/.+/.test(trimmed);
+    if (isUrl) {
+      toast(t('downloadStarting') || 'Iniciando descarga directa...');
+      const dummyTrack: Track = {
+        id: trimmed,
+        title: 'Enlace Directo',
+        artist: 'YouTube',
+        album: 'MHL Music',
+        cover: '',
+        duration: 0,
+      };
+      startDownloadWithSourceUrl(dummyTrack, trimmed);
+      setQuery('');
+      return;
     }
+    
+    performSearch(trimmed);
+    refreshRecent();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -387,11 +404,26 @@ export default function SearchPage() {
 
     if (trimmed === searchQuery) return;
     const timeout = window.setTimeout(() => {
+      const isUrl = /^https?:\/\/(www\.)?(youtube\.com|youtu\.be|music\.youtube\.com|soundcloud\.com|open\.spotify\.com)\/.+/.test(trimmed);
+      if (isUrl) {
+        toast(t('downloadStarting') || 'Iniciando descarga directa...');
+        const dummyTrack: Track = {
+          id: trimmed,
+          title: 'Enlace Directo',
+          artist: 'YouTube',
+          album: 'MHL Music',
+          cover: '',
+          duration: 0,
+        };
+        startDownloadWithSourceUrl(dummyTrack, trimmed);
+        setQuery('');
+        return;
+      }
       performSearch(trimmed);
       refreshRecent();
     }, 200);
     return () => window.clearTimeout(timeout);
-  }, [query, searchQuery, performSearch, refreshRecent, animeSearchEnabled, animeMode, t]);
+  }, [query, searchQuery, performSearch, refreshRecent, animeSearchEnabled, animeMode, t, startDownloadWithSourceUrl]);
 
   const showEmpty = !query.trim() && searchResults.length === 0 && !isSearching;
 

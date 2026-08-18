@@ -128,6 +128,31 @@ function mapRawDeezerTrack(t: RawDeezerTrack): Track {
   };
 }
 
+// ─── iTunes Fallback ───
+async function searchITunes(query: string, limit = 25): Promise<Track[]> {
+  try {
+    const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(query)}&media=music&limit=${limit}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.results || []).map((t: any): Track => ({
+      id: `itunes_${t.trackId}`,
+      title: t.trackName || 'Unknown Title',
+      canonicalTitle: t.trackName || 'Unknown Title',
+      artist: t.artistName || 'Unknown Artist',
+      album: t.collectionName || 'Unknown Album',
+      canonicalAlbum: t.collectionName || 'Unknown Album',
+      duration: Math.floor((t.trackTimeMillis || 0) / 1000),
+      cover: (t.artworkUrl100 || '').replace('100x100bb', '1000x1000bb'),
+      preview: t.previewUrl || '',
+      isrc: '',
+      edition: t.trackExplicitness === 'explicit' ? 'explicit' : t.trackExplicitness === 'cleaned' ? 'clean' : 'unknown',
+    }));
+  } catch (error) {
+    console.error('iTunes fallback error:', error);
+    return [];
+  }
+}
+
 // ─── Deezer Search ───
 export async function searchDeezer(query: string, offset = 0, limit = 25): Promise<Track[]> {
   const normalizedQuery = query.trim().replace(/\s+/g, ' ');
@@ -145,12 +170,21 @@ export async function searchDeezer(query: string, offset = 0, limit = 25): Promi
       const data = await callDeezerDirect<{ data?: RawDeezerTrack[] }>(
         `/search?q=${encodeURIComponent(normalizedQuery)}&limit=${limit}&index=${offset}`,
       );
-      const tracks = (data.data || []).map(mapRawDeezerTrack);
+      let tracks = (data.data || []).map(mapRawDeezerTrack);
+      
+      // Fallback a iTunes si Deezer está caído o no encuentra nada
+      if (tracks.length === 0) {
+        console.log('[Search] Fallback to iTunes API');
+        tracks = await searchITunes(normalizedQuery, limit);
+      }
+      
       setCachedValue(searchCache, cacheKey, tracks, SEARCH_CACHE_TTL_MS, SEARCH_CACHE_MAX_ENTRIES);
       return tracks;
     } catch (error) {
       console.error('Deezer search error:', error);
-      return [];
+      console.log('[Search] Fallback to iTunes API on error');
+      const tracks = await searchITunes(normalizedQuery, limit);
+      return tracks;
     } finally {
       searchRequests.delete(cacheKey);
     }
@@ -162,6 +196,25 @@ export async function searchDeezer(query: string, offset = 0, limit = 25): Promi
 
 // ─── Full metadata for a track (genre, year, track number) ───
 export async function getDeezerTrackMeta(trackId: string | number): Promise<{ genre: string | null; year: number | null; trackNumber: number | null }> {
+  const idStr = String(trackId);
+  if (idStr.startsWith('itunes_')) {
+    try {
+      const realId = idStr.split('_')[1];
+      const res = await fetch(`https://itunes.apple.com/lookup?id=${realId}`);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      const t = data.results[0];
+      if (!t) throw new Error();
+      return {
+        genre: t.primaryGenreName || null,
+        year: t.releaseDate ? parseInt(t.releaseDate.substring(0, 4), 10) : null,
+        trackNumber: t.trackNumber || null,
+      };
+    } catch {
+      return { genre: null, year: null, trackNumber: null };
+    }
+  }
+
   try {
     const track = await callDeezerDirect<RawDeezerTrack>(`/track/${trackId}`);
     const releaseDate: string | undefined = track.release_date;

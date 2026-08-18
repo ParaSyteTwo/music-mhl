@@ -34,8 +34,8 @@ android {
         applicationId "com.mhl.music"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 32
-        versionName "1.4.8-beta.6"
+        versionCode 33
+        versionName "1.4.8-beta.7"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField(
             "boolean",
@@ -117,8 +117,17 @@ dependencies {
     implementation project(':capacitor-android')
 
     // youtubedl-android: yt-dlp + ffmpeg for local YouTube audio extraction
-    // v0.18.1 has Python 3.11 (required by latest yt-dlp) + quickJS for YouTube
     implementation 'io.github.junkfood02.youtubedl-android:library:0.18.1'
+    implementation 'io.github.junkfood02.youtubedl-android:ffmpeg:0.18.1'
+    
+    // jaudiotagger for native M4A tagging without ffmpeg execution
+    implementation 'net.jthink:jaudiotagger:3.0.1'
+
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
 
 tasks.register('verifyBundledYtDlp') {
     group = 'verification'
@@ -135,13 +144,6 @@ tasks.register('verifyBundledYtDlp') {
 }
 
 preBuild.dependsOn tasks.named('verifyBundledYtDlp')
-    implementation 'io.github.junkfood02.youtubedl-android:ffmpeg:0.18.1'
-
-    testImplementation "junit:junit:$junitVersion"
-    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
-    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
-    implementation project(':capacitor-cordova-android-plugins')
-}
 
 apply from: 'capacitor.build.gradle'
 

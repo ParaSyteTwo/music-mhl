@@ -394,7 +394,45 @@ class Bridge:
             # Input inválido (query vacía, etc.) — no es un error de red
             return {'success': False, 'error': str(e)}
         except Exception as e:
-            return {'success': False, 'error': str(e)}
+            return {'success': False, 'error': f'pywebview backend failed: {str(e)}'}
+
+    def tag_and_save_m4a(
+        self,
+        file_path: str,
+        audio_b64: str,
+        title: str,
+        artist: str,
+        album: str,
+        cover_url: str | None,
+        lyrics: str | None,
+    ) -> dict:
+        """Escribe M4A a disco e inyecta metadata via Mutagen."""
+        try:
+            os.makedirs(os.path.dirname(os.path.abspath(file_path)), exist_ok=True)
+            audio_bytes = base64.b64decode(audio_b64)
+            with open(file_path, 'wb') as f:
+                f.write(audio_bytes)
+            
+            from mutagen.mp4 import MP4, MP4Cover
+            
+            audio = MP4(file_path)
+            if title: audio["\xa9nam"] = title
+            if artist: audio["\xa9ART"] = artist
+            if album: audio["\xa9alb"] = album
+            if lyrics: audio["\xa9lyr"] = lyrics
+            
+            if cover_url:
+                try:
+                    res = requests.get(cover_url, timeout=10)
+                    if res.ok:
+                        audio["covr"] = [MP4Cover(res.content, imageformat=MP4Cover.FORMAT_JPEG)]
+                except Exception:
+                    pass
+                    
+            audio.save()
+            return {'success': True, 'size': os.path.getsize(file_path)}
+        except Exception as e:
+            return {'success': False, 'error': f'tagging failed: {str(e)}'}
 
     def anime_get_themes(self, anilist_id: int) -> dict:
         """
@@ -556,7 +594,7 @@ class Bridge:
         if not video_id and not source_url:
             return {'success': False, 'error': 'candidate_invalid: resolved videoId required'}
 
-        ext = 'mp3'
+        ext = 'm4a'
         tmpdir = tempfile.mkdtemp(prefix='mhl_')
         tmppath = os.path.join(tmpdir, f'audio.{ext}')
 
@@ -565,7 +603,7 @@ class Bridge:
             args = [
                 _bin('yt-dlp.exe'),
                 input_url,
-                '-x', '--audio-format', 'mp3',
+                '-x', '--audio-format', 'm4a',
                 '--audio-quality', '0',
                 '-o', tmppath,
                 '--no-playlist', '--force-overwrites',

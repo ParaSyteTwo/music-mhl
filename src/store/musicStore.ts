@@ -395,7 +395,7 @@ export const useMusicStore = create<MusicStore>()(
           updateDl({ status: 'downloading', progress: 5 });
 
           const maxAttempts = 3;
-          const resolvedFileName = buildDownloadFileName(track, 'mp3');
+          const resolvedFileName = buildDownloadFileName(track, 'm4a');
           const nativeContext = await getDeviceContext().catch(() => null);
           const lyricsTarget = get().lyricsTargetLanguage;
           const lyricsLanguage = lyricsTarget === 'system'
@@ -462,44 +462,32 @@ export const useMusicStore = create<MusicStore>()(
               const audioBuffer = decodeBase64ArrayBuffer(rawResult.data_b64 as string);
 
               updateDl({ progress: 70 });
-              // Escribir ID3 tags con browser-id3-writer (misma lógica que web/Android)
-              const taggedBlob = await writeID3Tags(audioBuffer, {
-                title: track.canonicalTitle?.trim() || track.title,
-                artist: track.artist,
-                album: getPreferredAlbumName(track),
-                coverUrl: track.cover,
-                ...(trackMeta.genre ? { genre: trackMeta.genre } : {}),
-                ...(trackMeta.year ? { year: trackMeta.year } : {}),
-                ...(trackMeta.trackNumber ? { trackNumber: trackMeta.trackNumber } : {}),
-                ...(lyrics ? { lyrics } : {}),
-              });
 
-              updateDl({ progress: 90 });
-              // Guardar archivo con nombre y ruta correcta
-              const fileName = buildDownloadFileName(track, 'mp3');
+              const fileName = buildDownloadFileName(track, 'm4a');
               const filePath = outputDir + '/' + fileName;
-              const taggedArr = await taggedBlob.arrayBuffer();
-              if (taggedArr.byteLength < 16 * 1024) throw new Error('metadata: el MP3 etiquetado es demasiado pequeño');
-              const writeResult = await api.write_file_bytes(
+              
+              const writeResult = await api.tag_and_save_m4a(
                 filePath,
-                Array.from(new Uint8Array(taggedArr)),
+                rawResult.data_b64 as string,
+                track.canonicalTitle?.trim() || track.title,
+                track.artist,
+                getPreferredAlbumName(track),
+                track.cover,
+                lyrics
               );
+              
               if (!writeResult?.success) {
                 throw new Error(writeResult?.error || 'No se pudo guardar el archivo descargado');
               }
-              if ((writeResult.size ?? 0) !== taggedArr.byteLength) {
-                throw new Error('write: el tamaño guardado no coincide con el MP3 etiquetado');
-              }
+              
+              updateDl({ progress: 95 });
 
-              // Guardar .lrc junto al MP3 para que reproductores lo lean con sincronización
+              // Guardar .lrc opcionalmente
               if (lyricsResult.synced && get().saveLrcFile) {
                 const lrcName = buildDownloadFileName(track, 'lrc');
                 const lrcPath = outputDir + '/' + lrcName;
                 const lrcBytes = new TextEncoder().encode(lyricsResult.synced);
-                const lrcWriteResult = await api.write_file_bytes(lrcPath, Array.from(lrcBytes));
-                if (!lrcWriteResult?.success) {
-                  throw new Error(lrcWriteResult?.error || 'No se pudo guardar el archivo LRC');
-                }
+                await api.write_file_bytes(lrcPath, Array.from(lrcBytes));
               }
 
               updateDl({ progress: 100, status: 'completed', error: undefined, fileName });
@@ -542,27 +530,22 @@ export const useMusicStore = create<MusicStore>()(
                 : lyricsResult.plain || null;
 
               if (Capacitor.isNativePlatform()) {
-                const taggedBlob = await writeID3Tags(audioBuffer, {
+                const { tagAndSaveM4A } = await import('@/lib/ytdlpBridge');
+                const base64 = encodeArrayBufferBase64(audioBuffer);
+                
+                const mediaUri = await tagAndSaveM4A({
+                  fileName: resolvedFileName,
+                  data: base64,
                   title: track.canonicalTitle?.trim() || track.title,
                   artist: track.artist,
                   album: getPreferredAlbumName(track),
                   coverUrl: track.cover,
-                  ...(trackMeta.genre ? { genre: trackMeta.genre } : {}),
-                  ...(trackMeta.year ? { year: trackMeta.year } : {}),
-                  ...(trackMeta.trackNumber ? { trackNumber: trackMeta.trackNumber } : {}),
-                  ...(lyrics ? { lyrics } : {}),
+                  lyrics: lyrics || undefined,
                 });
-                updateDl({ progress: 95 });
+                
+                updateDl({ progress: 95, mediaUri });
 
-                const arr = await taggedBlob.arrayBuffer();
-                if (arr.byteLength < 16 * 1024) throw new Error('metadata: el MP3 etiquetado es demasiado pequeño');
-                const base64 = encodeArrayBufferBase64(arr);
-                // Guardar en Music/MHL Music (visible en reproductores) via MediaStore
-                const { saveTaggedAudioToMusic } = await import('@/lib/ytdlpBridge');
-                const mediaUri = await saveTaggedAudioToMusic(resolvedFileName, base64);
-                updateDl({ mediaUri });
-
-                // Guardar .lrc junto al MP3 para que Retro Music lo sincronice
+                // Guardar .lrc junto al M4A
                 if (lyricsResult.synced && get().saveLrcFile) {
                   const lrcName = resolvedFileName.replace(/\.[^.]+$/, '.lrc');
                   Filesystem.writeFile({
@@ -570,48 +553,52 @@ export const useMusicStore = create<MusicStore>()(
                     data: lyricsResult.synced,
                     directory: Directory.ExternalStorage,
                     encoding: Encoding.UTF8,
-                  }).catch(() => { /* silencioso — no bloquea la descarga */ });
+                  }).catch(() => {});
                 }
               } else {
-                // Web: escribir ID3 tags y guardar como .mp3
-                const taggedBlob = await writeID3Tags(audioBuffer, {
-                  title: track.canonicalTitle?.trim() || track.title,
-                  artist: track.artist,
-                  album: getPreferredAlbumName(track),
-                  coverUrl: track.cover,
-                  ...(trackMeta.genre ? { genre: trackMeta.genre } : {}),
-                  ...(trackMeta.year ? { year: trackMeta.year } : {}),
-                  ...(trackMeta.trackNumber ? { trackNumber: trackMeta.trackNumber } : {}),
-                  ...(lyrics ? { lyrics } : {}),
-                });
-                updateDl({ progress: 95 });
-
-                const { downloadFolder } = get();
-                if (downloadFolder) {
-                  try {
-                    const fileHandle = await downloadFolder.getFileHandle(resolvedFileName, { create: true });
-                    const writable = await fileHandle.createWritable();
-                    await writable.write(taggedBlob);
-                    await writable.close();
-                  } catch {
-                    const blobUrl = URL.createObjectURL(taggedBlob);
-                    const a = document.createElement('a');
-                    a.href = blobUrl;
-                    a.download = resolvedFileName;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+                // Web/Desktop wrapper
+                const fileName = resolvedFileName;
+                
+                if (window.pywebview) {
+                  const { api } = window as any;
+                  const filePath = (get().downloadFolder as any) + '/' + fileName;
+                  
+                  const writeResult = await api.tag_and_save_m4a(
+                    filePath,
+                    encodeArrayBufferBase64(audioBuffer),
+                    track.canonicalTitle?.trim() || track.title,
+                    track.artist,
+                    getPreferredAlbumName(track),
+                    track.cover,
+                    lyrics
+                  );
+                  
+                  if (!writeResult?.success) {
+                    throw new Error(writeResult?.error || 'No se pudo guardar el archivo descargado');
                   }
                 } else {
-                  const blobUrl = URL.createObjectURL(taggedBlob);
+                  // Fallback Web (Not supported with browser-id3-writer for M4A)
+                  const blob = new Blob([audioBuffer], { type: 'audio/mp4' });
+                  const blobUrl = URL.createObjectURL(blob);
                   const a = document.createElement('a');
                   a.href = blobUrl;
-                  a.download = resolvedFileName;
+                  a.download = fileName;
                   document.body.appendChild(a);
                   a.click();
                   document.body.removeChild(a);
-                  setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+                  URL.revokeObjectURL(blobUrl);
+                }
+                
+                updateDl({ progress: 95 });
+
+                if (lyricsResult.synced && get().saveLrcFile) {
+                  const lrcName = resolvedFileName.replace(/\.[^.]+$/, '.lrc');
+                  if (window.pywebview) {
+                    const { api } = window as any;
+                    const lrcPath = (get().downloadFolder as any) + '/' + lrcName;
+                    const lrcBytes = new TextEncoder().encode(lyricsResult.synced);
+                    await api.write_file_bytes(lrcPath, Array.from(lrcBytes));
+                  }
                 }
               }
 

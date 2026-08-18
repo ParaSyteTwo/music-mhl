@@ -61,6 +61,27 @@ const App = () => {
           console.log(`[App] Initialized with ${downloads.length} downloaded track(s)`);
         }, 100);
       }
+
+      // Capacitor Background Task for Downloads
+      import('@capacitor/app').then(({ App: CapApp }) => {
+        let bgTaskId: string | null = null;
+        
+        CapApp.addListener('appStateChange', async ({ isActive }) => {
+          if (!isActive) {
+            const { activeDownloads } = useMusicStore.getState();
+            if (activeDownloads > 0) {
+              console.log('[App] Backgrounding with active downloads, requesting task');
+              bgTaskId = await CapApp.requestBackgroundTask();
+            }
+          } else {
+            if (bgTaskId) {
+              console.log('[App] Resuming, ending background task');
+              CapApp.finishBackgroundTask({ taskId: bgTaskId });
+              bgTaskId = null;
+            }
+          }
+        });
+      });
     }
   }, []);
 

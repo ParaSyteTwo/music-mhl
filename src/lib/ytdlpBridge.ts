@@ -29,6 +29,7 @@ interface YtDlpPluginInterface {
   search(options: { query: string; limit?: number; source?: 'youtube_music' | 'youtube'; enrich?: boolean }): Promise<{ success: boolean; results: YtDlpSearchResult[] }>;
   downloadAudio(options: { videoId?: string; sourceUrl?: string; expectedDuration?: number }): Promise<{ success: boolean; data: string; size: number; fileName?: string }>;
   saveTaggedAudioToMusic(options: { fileName: string; data: string }): Promise<{ success: boolean; uri: string }>;
+  tagAndSaveM4A(options: { fileName: string; data: string; coverUrl?: string; title?: string; artist?: string; album?: string; lyrics?: string }): Promise<{ success: boolean; uri: string }>;
   addListener(eventName: 'downloadProgress', listenerFunc: (event: YtDlpProgressEvent) => void): Promise<PluginListenerHandle>;
 }
 
@@ -133,6 +134,26 @@ export async function saveTaggedAudioToMusic(fileName: string, base64Data: strin
     if (timeoutId) clearTimeout(timeoutId);
   });
   if (!result?.success) throw new Error('MediaStore save failed');
+  return result.uri;
+}
+
+export async function tagAndSaveM4A(options: { fileName: string; data: string; coverUrl?: string; title?: string; artist?: string; album?: string; lyrics?: string }): Promise<string> {
+  if (!Capacitor.isNativePlatform()) throw new Error('Not on native platform');
+  if (!initialized) await initYtDlp();
+  const operation = YtDlp.tagAndSaveM4A(options);
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const result = await Promise.race([
+    operation,
+    new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(
+        () => reject(new Error('write: timeout guardando el M4A etiquetado')),
+        90_000,
+      );
+    }),
+  ]).finally(() => {
+    if (timeoutId) clearTimeout(timeoutId);
+  });
+  if (!result?.success) throw new Error('MediaStore tagAndSave failed');
   return result.uri;
 }
 
