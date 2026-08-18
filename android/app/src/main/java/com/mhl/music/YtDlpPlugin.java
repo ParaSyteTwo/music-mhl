@@ -375,7 +375,7 @@ public class YtDlpPlugin extends Plugin {
                     ? sourceUrl
                     : "https://www.youtube.com/watch?v=" + videoId;
 
-                String fileName = "audio_" + System.currentTimeMillis() + ".mp3";
+                String fileName = "audio_" + System.currentTimeMillis() + ".m4a";
 
                 // Descargar al caché privado (no visible para otras apps)
                 File outputFile = new File(cacheDir, fileName);
@@ -383,8 +383,7 @@ public class YtDlpPlugin extends Plugin {
 
                 YoutubeDLRequest request = new YoutubeDLRequest(url);
                 request.addOption("-x");
-                request.addOption("--audio-format", "mp3");
-                request.addOption("--audio-quality", "0");   // mejor calidad (~320kbps VBR)
+                request.addOption("--audio-format", "m4a");
                 request.addOption("-o", outputPath);
                 request.addOption("--no-playlist");
                 request.addOption("--no-part");               // sin archivos .part (menos I/O)
@@ -432,11 +431,11 @@ public class YtDlpPlugin extends Plugin {
                 try {
                     retriever.setDataSource(outputFile.getAbsolutePath());
                     String rawDuration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
-                    if (rawDuration == null) throw new IllegalStateException("Missing MP3 duration");
+                    if (rawDuration == null) throw new IllegalStateException("Missing M4A duration");
                     durationMs = Long.parseLong(rawDuration);
                 } catch (Exception validationError) {
                     outputFile.delete();
-                    bridge.getActivity().runOnUiThread(() -> call.reject("conversion: MP3 is not decodable"));
+                    bridge.getActivity().runOnUiThread(() -> call.reject("conversion: M4A is not decodable"));
                     return;
                 } finally {
                     retriever.release();
