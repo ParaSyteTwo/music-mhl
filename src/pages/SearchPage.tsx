@@ -79,6 +79,7 @@ export default function SearchPage() {
   } = useMusicStore();
 
   const [query, setQuery] = useState(searchQuery);
+  const inputRef = useRef<HTMLInputElement>(null);
   const [pickerTrack, setPickerTrack] = useState<Track | null>(null);
   const [bestCandidates, setBestCandidates] = useState<Record<string, BestCandidateEntry>>({});
   const [bestResolvingId, setBestResolvingId] = useState<string | null>(null);

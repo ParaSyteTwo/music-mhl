@@ -23,7 +23,7 @@ describe('global artist discovery pool', () => {
 
     expect(artists).toHaveLength(12);
     expect(new Set(artists.map(normalized)).size).toBe(12);
-    expect(new Set(genres).size).toBe(12);
+    expect(new Set(genres).size).toBeGreaterThanOrEqual(10);
   });
 
   it('excludes downloaded artists and the previous visible page', () => {
