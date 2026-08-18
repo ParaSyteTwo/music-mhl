@@ -587,7 +587,7 @@ def test_anime_requests_carry_user_agent_and_json_content_type_headers():
         bridge.anime_search("naruto", 5)
 
         assert captured_headers.get("Content-Type") == "application/json"
-        assert captured_headers.get("User-Agent") == "MHLMusic/1.4.8-rc.2"
+        assert captured_headers.get("User-Agent") == "MHLMusic/1.4.8"
 
 
 def test_letras_fetch_returns_html_from_letras_domain():
