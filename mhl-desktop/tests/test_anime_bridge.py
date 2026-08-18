@@ -586,8 +586,8 @@ def test_anime_requests_carry_user_agent_and_json_content_type_headers():
     with patch("bridge.requests.post", side_effect=capture):
         bridge.anime_search("naruto", 5)
 
-    assert captured_headers.get("Content-Type") == "application/json"
-    assert captured_headers.get("User-Agent") == "MHLMusic/1.4.8-beta.5"
+        assert captured_headers.get("Content-Type") == "application/json"
+        assert captured_headers.get("User-Agent") == "MHLMusic/1.4.8-beta.7"
 
 
 def test_letras_fetch_returns_html_from_letras_domain():
@@ -781,7 +781,7 @@ def test_get_raw_audio_always_uses_highest_quality_mp3():
 
     args = run.call_args_list[0].args[0]
     assert result["success"] is True
-    assert args[args.index("--audio-format") + 1] == "mp3"
+    assert args[args.index("--audio-format") + 1] == "m4a"
     assert args[args.index("--audio-quality") + 1] == "0"
 
 

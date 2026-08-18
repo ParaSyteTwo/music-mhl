@@ -65,7 +65,7 @@ _ANILIST_ENDPOINT = 'https://graphql.anilist.co'
 _ANIMETHEMES_ENDPOINT = 'https://api.animethemes.moe'
 _ANIME_HEADERS = {
     'Content-Type': 'application/json',
-    'User-Agent': 'MHLMusic/1.4.8-beta.6',
+    'User-Agent': 'MHLMusic/1.4.8-beta.7',
 }
 _ANIME_TIMEOUT = 10
 
@@ -763,14 +763,23 @@ class Bridge:
     # ── Filesystem helpers ────────────────────────────────────────────────────
 
     def pick_folder(self) -> str:
-        """Abre un diálogo para elegir carpeta. Devuelve la ruta o ''."""
+        """Abre un diálogo nativo para elegir carpeta (wrapper de webview.windows[0].create_file_dialog)."""
         import webview
+        try:
+            window = webview.windows[0]
+            result = window.create_file_dialog(webview.FOLDER_DIALOG)
+            if result and len(result) > 0:
+                return result[0]
+        except Exception as e:
+            print(f"[bridge] error picking folder: {e}")
+        return ""
 
-        window = getattr(self, '_window', None)
-        if window is None:
-            return ''
-        selected = window.create_file_dialog(
-            webview.FOLDER_DIALOG,
-            directory=settings.get('download_folder', str(Path.home() / 'Music')),
-        )
-        return selected[0] if selected else ''
+    def open_file(self, file_path: str) -> dict:
+        """Abre un archivo (o carpeta) usando la aplicación por defecto del sistema."""
+        try:
+            import os
+            # Solo para Windows
+            os.startfile(file_path)
+            return {"success": True}
+        except Exception as e:
+            return {"success": False, "error": str(e)}

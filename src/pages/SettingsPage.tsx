@@ -631,7 +631,7 @@ export default function SettingsPage() {
           <div className="flex gap-2">
             <button
               onClick={() => {
-                const state = localStorage.getItem('music-storage');
+                const state = localStorage.getItem('mhl-store');
                 if (!state) return;
                 const blob = new Blob([state], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
@@ -664,7 +664,7 @@ export default function SettingsPage() {
                       const data = event.target?.result as string;
                       const parsed = JSON.parse(data);
                       if (parsed && parsed.state && parsed.state.downloads) {
-                        localStorage.setItem('music-storage', data);
+                        localStorage.setItem('mhl-store', data);
                         window.location.reload();
                       } else {
                         alert(t('invalidBackup') || 'El archivo no tiene el formato correcto.');

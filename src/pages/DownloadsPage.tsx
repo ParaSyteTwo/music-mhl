@@ -244,7 +244,7 @@ export default function DownloadsPage() {
                   <p className="text-[11px] sm:text-xs text-[#666660]">{dl.track.artist} · {dl.track.album}</p>
                 </div>
                 <span className="text-xs tabular-nums text-[#444] hidden sm:block">{formatDuration(dl.track.duration)}</span>
-                {isNative && (dl.mediaUri || dl.fileName) && (
+                {(dl.mediaUri || dl.fileName) && (
                   <button
                     onClick={() => void openDownloadedFile(dl.fileName, dl.mediaUri, preferredPlayerPackage ?? undefined)}
                     className="px-2.5 py-2 text-[#C8F04B] hover:text-[#e6ff8a] transition-colors min-h-[44px] flex items-center gap-1.5"

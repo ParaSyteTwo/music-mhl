@@ -453,14 +453,18 @@ export default function SearchPage() {
         <div className="home-search-shell relative z-10 mt-5 sm:mt-7">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-[#85857E]" />
           <input
+            ref={inputRef}
             type="text"
+            placeholder={t('searchPlaceholder') || 'PON URL o NOMBRE DE CANCION'}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
             onFocus={() => setInputFocused(true)}
             onBlur={() => setTimeout(() => setInputFocused(false), 200)}
-            placeholder={t('searchPlaceholder')}
             className="w-full pl-11 pr-11 py-3.5 sm:py-4 rounded-2xl bg-transparent text-sm sm:text-[15px] text-[#F5F5F0] placeholder:text-[#55554F] focus:outline-none"
+            autoComplete="off"
+            autoCorrect="off"
+            spellCheck="false"
           />
           {isSearching ? (
             <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#C8F04B] animate-spin" />

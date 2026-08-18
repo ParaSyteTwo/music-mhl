@@ -27,7 +27,20 @@ export async function openDownloadedFile(
   mediaUri?: string,
   preferredPackage?: string,
 ): Promise<boolean> {
-  if (!Capacitor.isNativePlatform()) return false;
+  if (!Capacitor.isNativePlatform()) {
+    if (!fileName) return false;
+    try {
+      // Usamos el bridge en Desktop
+      const api = (window as any).pywebview?.api;
+      if (api?.open_file) {
+        await api.open_file(fileName);
+        return true;
+      }
+    } catch {
+      return false;
+    }
+    return false;
+  }
   if (!fileName && !mediaUri) return false;
   try {
     await OpenFile.openDownloadedFile({ fileName, mediaUri, preferredPackage });
