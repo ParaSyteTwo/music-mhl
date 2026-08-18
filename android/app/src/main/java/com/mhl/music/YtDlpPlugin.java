@@ -454,6 +454,114 @@ public class YtDlpPlugin extends Plugin {
      * Devuelve: uri (string)
      */
     @PluginMethod
+    
+    @PluginMethod
+    public void tagAndSaveM4A(PluginCall call) {
+        String fileName = call.getString("fileName");
+        String base64Data = call.getString("data");
+        String coverUrl = call.getString("coverUrl");
+        String title = call.getString("title", "");
+        String artist = call.getString("artist", "");
+        String album = call.getString("album", "");
+        String lyrics = call.getString("lyrics", "");
+
+        if (fileName == null || fileName.isEmpty() || base64Data == null || base64Data.isEmpty()) {
+            call.reject("fileName and data are required");
+            return;
+        }
+
+        executor.execute(() -> {
+            File tempAudio = null;
+            File tempCover = null;
+            try {
+                // Escribir audio base64 a archivo temporal
+                tempAudio = File.createTempFile("untagged", ".m4a", getContext().getCacheDir());
+                byte[] audioBytes = Base64.decode(base64Data, Base64.NO_WRAP);
+                try (FileOutputStream fos = new FileOutputStream(tempAudio)) {
+                    fos.write(audioBytes);
+                }
+
+                // Descargar cover si existe
+                if (coverUrl != null && !coverUrl.isEmpty()) {
+                    tempCover = File.createTempFile("cover", ".jpg", getContext().getCacheDir());
+                    try (InputStream in = new java.net.URL(coverUrl).openStream();
+                         FileOutputStream fos = new FileOutputStream(tempCover)) {
+                        byte[] buffer = new byte[8192];
+                        int bytesRead;
+                        while ((bytesRead = in.read(buffer)) != -1) {
+                            fos.write(buffer, 0, bytesRead);
+                        }
+                    } catch (Exception ignored) {}
+                }
+
+                // Tag usando jaudiotagger
+                try {
+                    org.jaudiotagger.audio.AudioFile audioFile = org.jaudiotagger.audio.AudioFileIO.read(tempAudio);
+                    org.jaudiotagger.tag.Tag tag = audioFile.getTag();
+                    if (tag == null) {
+                        tag = new org.jaudiotagger.tag.mp4.Mp4Tag();
+                        audioFile.setTag(tag);
+                    }
+                    if (!title.isEmpty()) tag.setField(org.jaudiotagger.tag.FieldKey.TITLE, title);
+                    if (!artist.isEmpty()) tag.setField(org.jaudiotagger.tag.FieldKey.ARTIST, artist);
+                    if (!album.isEmpty()) tag.setField(org.jaudiotagger.tag.FieldKey.ALBUM, album);
+                    if (!lyrics.isEmpty()) tag.setField(org.jaudiotagger.tag.FieldKey.LYRICS, lyrics);
+
+                    if (tempCover != null && tempCover.length() > 0) {
+                        org.jaudiotagger.tag.images.Artwork artwork = org.jaudiotagger.tag.images.ArtworkFactory.createArtworkFromFile(tempCover);
+                        tag.deleteArtworkField();
+                        tag.setField(artwork);
+                    }
+                    org.jaudiotagger.audio.AudioFileIO.write(audioFile);
+                } catch (Exception e) {
+                    Log.w(TAG, "Failed to tag M4A with jaudiotagger", e);
+                }
+
+                // Guardar en MediaStore
+                ContentValues values = new ContentValues();
+                values.put(MediaStore.Audio.Media.DISPLAY_NAME, fileName);
+                values.put(MediaStore.Audio.Media.MIME_TYPE, "audio/mp4");
+                values.put(MediaStore.Audio.Media.RELATIVE_PATH, "Music/MHL Music");
+                values.put(MediaStore.Audio.Media.IS_PENDING, 1);
+
+                ContentResolver resolver = getContext().getContentResolver();
+                Uri itemUri = resolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values);
+
+                if (itemUri == null) {
+                    bridge.getActivity().runOnUiThread(() -> call.reject("MediaStore insert failed"));
+                    return;
+                }
+
+                try (OutputStream os = resolver.openOutputStream(itemUri);
+                     FileInputStream in = new FileInputStream(tempAudio)) {
+                    byte[] buffer = new byte[8192];
+                    int len;
+                    while ((len = in.read(buffer)) > 0) {
+                        os.write(buffer, 0, len);
+                    }
+                }
+
+                values.clear();
+                values.put(MediaStore.Audio.Media.IS_PENDING, 0);
+                resolver.update(itemUri, values, null, null);
+
+                Log.i(TAG, "Saved tagged " + fileName + " to Music/MHL Music");
+
+                JSObject result = new JSObject();
+                result.put("success", true);
+                result.put("uri", itemUri.toString());
+                bridge.getActivity().runOnUiThread(() -> call.resolve(result));
+            } catch (Exception e) {
+                Log.e(TAG, "tagAndSaveM4A failed", e);
+                bridge.getActivity().runOnUiThread(() -> call.reject(e.getMessage()));
+            } finally {
+                if (tempAudio != null) tempAudio.delete();
+                if (tempCover != null) tempCover.delete();
+            }
+        });
+    }
+
+    @PluginMethod
     public void saveTaggedAudioToMusic(PluginCall call) {
         String fileName = call.getString("fileName");
         String base64Data = call.getString("data");

@@ -210,27 +210,7 @@ export default function SettingsPage() {
               </button>
             ))}
           </div>
-          <div>
-            <p className="text-xs text-[#777] mb-2">{t('cellularResolutionPolicy')}</p>
-            <div className="grid grid-cols-3 gap-2">
-              {(['off', 'light', 'full'] as const).map((policy) => (
-                <button key={policy} type="button" onClick={() => setCellularResolutionPolicy(policy)} className={`px-2 py-2 rounded-lg text-xs ${cellularResolutionPolicy === policy ? 'bg-[#C8F04B] text-[#18181A]' : 'bg-[rgba(255,255,255,0.04)] text-[#B0B0B0]'}`}>
-                  {t(`resolutionCellular${policy[0].toUpperCase()}${policy.slice(1)}`)}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div>
-            <p className="text-xs text-[#777] mb-2">{t('editionPreference')}</p>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {(['catalog', 'explicit', 'clean', 'ask'] as const).map((preference) => (
-                <button key={preference} type="button" onClick={() => setEditionPreference(preference)} className={`px-2 py-2 rounded-lg text-xs ${editionPreference === preference ? 'bg-[#C8F04B] text-[#18181A]' : 'bg-[rgba(255,255,255,0.04)] text-[#B0B0B0]'}`}>
-                  {t(`editionPreference${preference[0].toUpperCase()}${preference.slice(1)}`)}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
+                  </div>
       </section>
 
       {/* Letras */}
@@ -245,57 +225,6 @@ export default function SettingsPage() {
               ))}
             </div>
           </div>
-          <label className="flex items-start gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={lyricOriginal}
-              onChange={e => setLyricOriginal(e.target.checked)}
-              className="mt-0.5"
-            />
-            <div>
-              <p className="text-sm text-[#F5F5F0]">{t('lyricsOriginal')}</p>
-              <p className="text-xs text-[#666660] mt-0.5">{t('lyricsOriginalHelp')}</p>
-            </div>
-          </label>
-          <label className="flex items-start gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={lyricRomanization}
-              onChange={e => setLyricRomanization(e.target.checked)}
-              className="mt-0.5"
-            />
-            <div>
-              <p className="text-sm text-[#F5F5F0]">{t('lyricsRomanization')}</p>
-              <p className="text-xs text-[#666660] mt-0.5">{t('lyricsRomanizationHelp')}</p>
-            </div>
-          </label>
-          <label className="flex items-start gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={lyricLatinOnly}
-              onChange={e => setLyricLatinOnly(e.target.checked)}
-              className="mt-0.5"
-            />
-            <div>
-              <p className="text-sm text-[#F5F5F0]">{t('lyricsLatinOnly')}</p>
-              <p className="text-xs text-[#666660] mt-0.5">{t('lyricsLatinOnlyHelp')}</p>
-            </div>
-          </label>
-          <label className="flex items-start gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={lyricTranslation}
-              onChange={e => setLyricTranslation(e.target.checked)}
-              className="mt-0.5"
-            />
-            <div>
-              <p className="text-sm text-[#F5F5F0]">{t('lyricsTranslation')}</p>
-              <p className="text-xs text-[#666660] mt-0.5">{t('lyricsTranslationHelp')}</p>
-            </div>
-          </label>
-          {!lyricOriginal && !lyricRomanization && !lyricTranslation && !lyricLatinOnly && (
-            <p className="text-xs text-[#666660] italic pt-1">{t('lyricsNoneSelected')}</p>
-          )}
           {isPyWebView && (
             <label className="flex items-start gap-3 cursor-pointer pt-1">
               <input
