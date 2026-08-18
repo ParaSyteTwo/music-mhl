@@ -23,7 +23,6 @@ export default function SettingsPage() {
     lyricRomanization, setLyricRomanization,
     lyricTranslation, setLyricTranslation,
     lyricLatinOnly, setLyricLatinOnly,
-    saveLrcFile, setSaveLrcFile,
     uiLanguageMode, setUiLanguageMode,
     animeSearchEnabled, setAnimeSearchEnabled,
     lyricsTargetLanguage, setLyricsTargetLanguage,
@@ -310,20 +309,6 @@ export default function SettingsPage() {
                     ))}
                   </div>
                 </div>
-                {isPyWebView && (
-                  <label className="flex items-start gap-3 cursor-pointer pt-1">
-                    <input
-                      type="checkbox"
-                      checked={saveLrcFile}
-                      onChange={e => setSaveLrcFile(e.target.checked)}
-                      className="mt-0.5"
-                    />
-                    <div>
-                      <p className="text-sm text-[#F5F5F0]">{t('saveLrcFile')}</p>
-                      <p className="text-xs text-[#666660] mt-0.5">{t('saveLrcFileHelp')}</p>
-                    </div>
-                  </label>
-                )}
               </div>
             </section>
 

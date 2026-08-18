@@ -128,13 +128,11 @@ interface MusicStore {
   lyricRomanization: boolean;
   lyricTranslation: boolean;
   lyricLatinOnly: boolean;
-  saveLrcFile: boolean;
   lyricsTargetLanguage: LyricsTargetLanguage;
   setLyricOriginal: (v: boolean) => void;
   setLyricRomanization: (v: boolean) => void;
   setLyricTranslation: (v: boolean) => void;
   setLyricLatinOnly: (v: boolean) => void;
-  setSaveLrcFile: (v: boolean) => void;
   setLyricsTargetLanguage: (v: LyricsTargetLanguage) => void;
 
   // ─── Anime search (opt-in, off by default) ───
@@ -458,9 +456,7 @@ export const useMusicStore = create<MusicStore>()(
                 supplementalDataPromise,
               ]);
               if (!rawResult.success) throw new Error(rawResult.error || 'Error descargando audio');
-              const lyrics = lyricsResult.synced && get().saveLrcFile
-                ? null
-                : lyricsResult.plain || null;
+              const lyrics = lyricsResult.synced || lyricsResult.plain || null;
 
               updateDl({ progress: 50 });
               const audioBuffer = decodeBase64ArrayBuffer(rawResult.data_b64 as string);
@@ -486,14 +482,7 @@ export const useMusicStore = create<MusicStore>()(
               
               updateDl({ progress: 95 });
 
-              // Guardar .lrc opcionalmente
-              if (lyricsResult.synced && get().saveLrcFile) {
-                const lrcName = buildDownloadFileName(track, 'lrc');
-                const lrcPath = outputDir + '/' + lrcName;
-                const lrcBytes = new TextEncoder().encode(lyricsResult.synced);
-                await api.write_file_bytes(lrcPath, Array.from(lrcBytes));
-              }
-
+              
               updateDl({ progress: 100, status: 'completed', error: undefined, fileName });
               get().addMostDownloadedArtist(track.artist);
               toast.success(storeText(get().uiLanguageMode, 'downloadCompletedToast', {
@@ -558,17 +547,7 @@ export const useMusicStore = create<MusicStore>()(
                 
                 updateDl({ progress: 95, mediaUri });
 
-                // Guardar .lrc junto al M4A
-                if (lyricsResult.synced && get().saveLrcFile) {
-                  const lrcName = resolvedFileName.replace(/\.[^.]+$/, '.lrc');
-                  Filesystem.writeFile({
-                    path: `Music/MHL Music/${lrcName}`,
-                    data: lyricsResult.synced,
-                    directory: Directory.ExternalStorage,
-                    encoding: Encoding.UTF8,
-                  }).catch(() => {});
-                }
-              } else {
+                              } else {
                 // Web/Desktop wrapper
                 const fileName = resolvedFileName;
                 
@@ -604,15 +583,6 @@ export const useMusicStore = create<MusicStore>()(
                 
                 updateDl({ progress: 95 });
 
-                if (lyricsResult.synced && get().saveLrcFile) {
-                  const lrcName = resolvedFileName.replace(/\.[^.]+$/, '.lrc');
-                  if (window.pywebview) {
-                    const { api } = window as any;
-                    const lrcPath = (get().downloadFolder as any) + '/' + lrcName;
-                    const lrcBytes = new TextEncoder().encode(lyricsResult.synced);
-                    await api.write_file_bytes(lrcPath, Array.from(lrcBytes));
-                  }
-                }
               }
 
               updateDl({ progress: 100, status: 'completed', error: undefined, fileName: resolvedFileName });
@@ -769,13 +739,11 @@ export const useMusicStore = create<MusicStore>()(
         lyricRomanization: true,
         lyricTranslation: true,
         lyricLatinOnly: false,
-        saveLrcFile: false,
         lyricsTargetLanguage: 'system',
         setLyricOriginal: (v) => set({ lyricOriginal: v }),
         setLyricRomanization: (v) => set({ lyricRomanization: v }),
         setLyricTranslation: (v) => set({ lyricTranslation: v }),
         setLyricLatinOnly: (v) => set({ lyricLatinOnly: v }),
-        setSaveLrcFile: (v) => set({ saveLrcFile: v }),
         setLyricsTargetLanguage: (v) => set({ lyricsTargetLanguage: v }),
 
         // ─── Anime search (opt-in, off by default) ───
@@ -856,7 +824,6 @@ export const useMusicStore = create<MusicStore>()(
         lyricRomanization: persisted?.lyricRomanization ?? true,
         lyricTranslation: persisted?.lyricTranslation ?? true,
         lyricLatinOnly: persisted?.lyricLatinOnly ?? false,
-        saveLrcFile: persisted?.saveLrcFile ?? false,
         lyricsTargetLanguage: isLyricsTargetLanguage(persisted?.lyricsTargetLanguage)
           ? persisted.lyricsTargetLanguage
           : 'system',
