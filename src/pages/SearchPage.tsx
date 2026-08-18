@@ -488,43 +488,21 @@ export default function SearchPage() {
               {t('refreshArtists')}
             </button>
           </div>
-          <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-2.5">
-            {suggestedArtists.map((artist, index) => (
+          <div className="flex flex-wrap gap-2 sm:gap-2.5">
+            {suggestedArtists.map((artist) => (
               <button
                 key={artist.name}
                 onClick={() => handleSuggestionClick(artist.name)}
-                style={{
-                  background: `linear-gradient(145deg, ${artist.primary}1F 0%, rgba(255,255,255,0.025) 52%, ${artist.secondary}14 100%)`,
-                  borderColor: `${artist.primary}35`,
-                  boxShadow: `inset 0 1px 0 rgba(255,255,255,0.055), 0 14px 34px -28px ${artist.glow}`,
-                }}
-                className="artist-card group relative min-w-0 overflow-hidden rounded-2xl border px-2.5 py-3 text-left"
+                className="group flex items-center gap-2 pr-3 pl-1.5 py-1.5 rounded-full bg-[rgba(255,255,255,0.02)] hover:bg-[rgba(255,255,255,0.06)] border border-[rgba(255,255,255,0.04)] hover:border-[rgba(255,255,255,0.12)] transition-colors"
               >
-                <span
-                  className="absolute -right-4 -top-5 h-14 w-14 rounded-full opacity-20 blur-2xl transition-opacity group-hover:opacity-45"
-                  style={{ background: artist.secondary }}
-                  aria-hidden="true"
-                />
-                <span
-                  className="flex h-7 w-7 items-center justify-center rounded-lg text-[9px] font-extrabold text-[#080808] shadow-lg"
-                  style={{
-                    background: `linear-gradient(135deg, ${artist.primary}, ${artist.secondary})`,
-                    boxShadow: `0 8px 22px -10px ${artist.glow}`,
-                  }}
+                <div
+                  className="w-6 h-6 flex items-center justify-center rounded-full text-[9px] font-bold text-[#080808]"
+                  style={{ background: `linear-gradient(135deg, ${artist.primary}, ${artist.secondary})` }}
                 >
                   {artistMonogram(artist.name)}
-                </span>
-                <span className="mt-2 block truncate text-[10px] sm:text-[11px] font-semibold leading-tight text-[#EAEAE5]">
+                </div>
+                <span className="text-[11px] font-medium text-[#D0D0CA] truncate max-w-[120px]">
                   {artist.name}
-                </span>
-                <span className="mt-2 flex items-center gap-1.5">
-                  <span
-                    className="h-1 flex-1 rounded-full opacity-65 transition-all group-hover:opacity-100"
-                    style={{ background: `linear-gradient(90deg, ${artist.primary}, ${artist.secondary})` }}
-                  />
-                  <span className="font-mono text-[8px] text-white/25">
-                    {String(index + 1).padStart(2, '0')}
-                  </span>
                 </span>
               </button>
             ))}

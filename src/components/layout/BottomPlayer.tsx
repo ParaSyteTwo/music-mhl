@@ -46,10 +46,12 @@ export function BottomPlayer() {
           }}
         >
           <div
-            className="h-full transition-all duration-100"
+            className="h-full"
             style={{
               background: 'linear-gradient(90deg, #C8F04B 0%, #8BC34A 100%)',
-              width: `${Math.min(progressPercent, 100)}%`,
+              transform: `scaleX(${Math.min(progressPercent, 100) / 100})`,
+              transformOrigin: 'left',
+              willChange: 'transform',
             }}
           />
           <AnimatePresence>

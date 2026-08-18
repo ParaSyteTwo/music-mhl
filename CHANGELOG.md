@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.4.8-beta.6 - 2026-08-17
+
+- Rediseñada la "Artist Discovery" para ser mucho más sutil y elegante, usando un formato de píldoras ("pills") que reduce la sobrecarga visual y encaja mejor en el tema LUXURY DARK.
+- Optimizadas drásticamente las animaciones pesadas y desenfoques (`blur`) mediante aceleración por hardware (`transform-gpu` / `translateZ`) para prevenir tirones y lag en el scroll de Android.
+- Aumentada la superficie táctil (touch target) de los botones de "Reproducir" y "Descargar" en la lista móvil a un mínimo accesible de 44x44px.
+- Mejorado el rendimiento de `BottomPlayer` eliminando las transiciones de `width` en favor de `scaleX`, lo cual erradica por completo los costosos repintados del layout (reflows) durante la reproducción continua a 60 FPS.
+- Añadida transición suave al redimensionamiento del hero ("MHL Music") al momento de realizar búsquedas, evitando cortes abruptos.
+- `versionCode` actualizado para reflejar la versión `1.4.8-beta.6`.
+
 ## v1.4.8-beta.5 - 2026-07-28
 
 - Renovada la pantalla principal con una composición más expresiva sin perder
