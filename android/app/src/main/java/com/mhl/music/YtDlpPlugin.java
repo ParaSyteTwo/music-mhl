@@ -26,6 +26,8 @@ import java.io.DataInputStream;
 import java.io.OutputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.InputStream;
 import android.util.Base64;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -453,8 +455,6 @@ public class YtDlpPlugin extends Plugin {
      * Recibe: fileName (string), data (base64 string)
      * Devuelve: uri (string)
      */
-    @PluginMethod
-    
     @PluginMethod
     public void tagAndSaveM4A(PluginCall call) {
         String fileName = call.getString("fileName");
