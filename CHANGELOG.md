@@ -1,5 +1,24 @@
 # Changelog
 
+## v1.4.9 - 2026-08-20
+
+**MHL Music 1.4.9 (Estabilidad Extrema y Sandboxing)**
+
+🚀 **Rendimiento Extremo**
+- **Descargas Ultra Ligeras (Cero RAM):** Rediseño completo de la vía de descarga de audio para escribirse directamente al disco local en lugar de pasar por RAM en formato Base64. Las descargas masivas (mixes de más de 1 hora) ya no causan cierres inesperados de la aplicación.
+- **Adiós a los Congelamientos (CPU):** Se añadió un semáforo interno para limitar las descargas concurrentes en segundo plano a un máximo de 2. La interfaz ahora indica correctamente el estado "En cola..." para el resto de las descargas, evitando sobrecargar el CPU del dispositivo.
+
+🛠 **Correcciones y Estabilidad**
+- **Historial de Descargas sin Corrupción:** Se corrigió un problema crítico donde descargar cientos de canciones provocaba que la aplicación superara la cuota de memoria local (LocalStorage), corrompiendo los ajustes del usuario. Ahora el historial trunca inteligentemente a las últimas 100 canciones.
+- **Collapsible Downloads:** La interfaz de descargas fue rediseñada para poder colapsar los elementos completados, manteniendo una vista limpia, y agregando un botón de reintento.
+- **YouTube Music Fallback (SABR):** Hotfix de extracción de audio fallback a `/bestaudio/best` para evadir el experimento SABR que bloqueaba yt-dlp.
+
+🛡️ **Mejoras de Seguridad**
+- **Protección de Archivos Locales (Sandboxing):** Aplicado un bloqueo estricto de Path Traversal en la versión de Escritorio. La aplicación ahora tiene prohibido por completo leer, escribir o crear archivos fuera de la carpeta designada de `MHL Music`.
+
+🌐 **Red y Conectividad**
+- **Resiliencia Automática (Plan B):** Añadido fallback transparente a la API de iTunes en caso de que la búsqueda principal mediante Deezer arroje un error o rate limit (429/403). La UI notifica sutilmente al usuario sobre la búsqueda en el catálogo de respaldo para evitar confusión.
+
 ## v1.4.8-beta.6 - 2026-08-17
 
 - Rediseñada la "Artist Discovery" para ser mucho más sutil y elegante, usando un formato de píldoras ("pills") que reduce la sobrecarga visual y encaja mejor en el tema LUXURY DARK.

@@ -677,15 +677,21 @@ export const useMusicStore = create<MusicStore>()(
           if (existing && (existing.status === 'downloading' || existing.status === 'queued')) return;
 
           const id = `d${Date.now()}`;
-          set((s) => ({
-            downloads: [...s.downloads, {
+          set((s) => {
+            const newDownloads = [...s.downloads, {
               id,
               track,
               sourceUrlOverride: sourceUrl,
               progress: 0,
               status: 'queued' as const,
-            }],
-          }));
+            }];
+            // Limitar el historial para evitar corrupción
+            if (newDownloads.length > 100) {
+              const toRemove = newDownloads.length - 100;
+              newDownloads.splice(0, toRemove);
+            }
+            return { downloads: newDownloads };
+          });
           if (get().activeDownloads < 2) {
             get()._executeDownload(track, id, undefined, sourceUrl);
           } else {
@@ -698,15 +704,21 @@ export const useMusicStore = create<MusicStore>()(
           if (existing && (existing.status === 'downloading' || existing.status === 'queued')) return;
 
           const id = `d${Date.now()}`;
-          set((s) => ({
-            downloads: [...s.downloads, {
+          set((s) => {
+            const newDownloads = [...s.downloads, {
               id,
               track,
               videoIdOverride: videoId,
               progress: 0,
               status: 'queued' as const,
-            }],
-          }));
+            }];
+            // Limitar el historial para evitar corrupción
+            if (newDownloads.length > 100) {
+              const toRemove = newDownloads.length - 100;
+              newDownloads.splice(0, toRemove);
+            }
+            return { downloads: newDownloads };
+          });
           if (get().activeDownloads < 2) {
             get()._executeDownload(track, id, videoId);
           } else {

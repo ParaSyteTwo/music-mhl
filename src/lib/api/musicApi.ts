@@ -175,6 +175,11 @@ export async function searchDeezer(query: string, offset = 0, limit = 25): Promi
       // Fallback a iTunes si Deezer está caído o no encuentra nada
       if (tracks.length === 0) {
         console.log('[Search] Fallback to iTunes API');
+        if (typeof window !== 'undefined') {
+          import('sonner').then(({ toast }) => {
+            toast.info('Buscando en catálogo de respaldo...', { id: 'itunes-fallback' });
+          });
+        }
         tracks = await searchITunes(normalizedQuery, limit);
       }
       
@@ -183,6 +188,11 @@ export async function searchDeezer(query: string, offset = 0, limit = 25): Promi
     } catch (error) {
       console.error('Deezer search error:', error);
       console.log('[Search] Fallback to iTunes API on error');
+      if (typeof window !== 'undefined') {
+        import('sonner').then(({ toast }) => {
+          toast.info('Conexión inestable, usando catálogo de respaldo...', { id: 'itunes-fallback' });
+        });
+      }
       const tracks = await searchITunes(normalizedQuery, limit);
       return tracks;
     } finally {

@@ -34,8 +34,8 @@ android {
         applicationId "com.mhl.music"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 41
-        versionName "1.4.9-beta.6"
+        versionCode 42
+        versionName "1.4.9"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField(
             "boolean",
