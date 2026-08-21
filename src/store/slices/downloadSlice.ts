@@ -359,11 +359,6 @@ export const createDownloadSlice: StateCreator<
               progress: 0,
               status: 'queued' as const,
             }];
-            // Limitar el historial para evitar corrupción
-            if (newDownloads.length > 100) {
-              const toRemove = newDownloads.length - 100;
-              newDownloads.splice(0, toRemove);
-            }
             return { downloads: newDownloads };
           });
           if (get().activeDownloads < 2) {
@@ -386,11 +381,6 @@ export const createDownloadSlice: StateCreator<
               progress: 0,
               status: 'queued' as const,
             }];
-            // Limitar el historial para evitar corrupción
-            if (newDownloads.length > 100) {
-              const toRemove = newDownloads.length - 100;
-              newDownloads.splice(0, toRemove);
-            }
             return { downloads: newDownloads };
           });
           if (get().activeDownloads < 2) {

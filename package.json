@@ -1,7 +1,7 @@
 {
   "name": "mhl-music",
   "private": false,
-  "version": "1.5.0-beta.2",
+  "version": "1.5.0-beta.3",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -27,6 +27,7 @@
     "@capacitor/status-bar": "^8.0.1",
     "browser-id3-writer": "^6.3.1",
     "framer-motion": "^12.36.0",
+    "idb-keyval": "^6.3.0",
     "kuroshiro": "^1.2.0",
     "kuroshiro-analyzer-kuromoji": "^1.1.0",
     "lucide-react": "^0.462.0",

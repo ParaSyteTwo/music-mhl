@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage, StateStorage } from 'zustand/middleware';
+import { get, set as idbSet, del } from 'idb-keyval';
 import { MusicStore } from './slices/types';
 import { createPlayerSlice } from './slices/playerSlice';
 import { createSearchSlice } from './slices/searchSlice';
@@ -7,6 +8,29 @@ import { createDownloadSlice } from './slices/downloadSlice';
 import { createSettingsSlice } from './slices/settingsSlice';
 import { audioEngine } from '@/lib/audioEngine';
 import { isUiLanguageMode, isLyricsTargetLanguage, Lang } from '@/lib/language';
+
+const idbStorage: StateStorage = {
+  getItem: async (name: string): Promise<string | null> => {
+    const value = await get(name);
+    if (!value) {
+      // Migración automática de LocalStorage a IndexedDB en el primer arranque
+      const lsValue = localStorage.getItem(name);
+      if (lsValue) {
+        await idbSet(name, lsValue);
+        localStorage.removeItem(name);
+        return lsValue;
+      }
+      return null;
+    }
+    return value || null;
+  },
+  setItem: async (name: string, value: string): Promise<void> => {
+    await idbSet(name, value);
+  },
+  removeItem: async (name: string): Promise<void> => {
+    await del(name);
+  },
+};
 
 export const useMusicStore = create<MusicStore>()(
   persist(
@@ -47,6 +71,7 @@ export const useMusicStore = create<MusicStore>()(
     },
     {
       name: 'mhl-store',
+      storage: createJSONStorage(() => idbStorage),
       partialize: (state) => ({
         downloads: state.downloads.filter((d) => d.status === 'completed' || d.status === 'error'),
         volume: state.volume,
