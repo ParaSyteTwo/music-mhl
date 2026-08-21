@@ -931,23 +931,30 @@ export default function SearchPage() {
         ) : showEmpty ? (
           <motion.div
             key="empty"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="text-center py-12 sm:py-16 space-y-3"
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.4 }}
+            className="text-center py-16 sm:py-24 space-y-4"
           >
-            <Music className="w-16 h-16 text-[#333] mx-auto animate-pulse" />
-            <p className="text-sm text-[#666660]">{t('emptySearch')}</p>
+            <motion.div
+              animate={{ y: [0, -15, 0] }}
+              transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+              className="inline-block"
+            >
+              <Music className="w-20 h-20 text-[#333] mx-auto opacity-50 drop-shadow-2xl" />
+            </motion.div>
+            <p className="text-sm text-[#555] font-medium tracking-wide">{t('emptySearch')}</p>
           </motion.div>
         ) : null}
       </AnimatePresence>
 
       <AnimatePresence>
         {pickerTrack && (
-      <CandidatePicker
-        track={pickerTrack}
-        animeSearchEnabled={animeSearchEnabled}
-        editionPreference={editionPreference}
-        onClose={() => setPickerTrack(null)}
+          <CandidatePicker
+            track={pickerTrack}
+            animeSearchEnabled={animeSearchEnabled}
+            editionPreference={editionPreference}
+            onClose={() => setPickerTrack(null)}
             onSelect={(videoId) => {
               startDownloadWithVideoId(pickerTrack, videoId);
               setPickerTrack(null);

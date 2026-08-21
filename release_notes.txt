@@ -1,0 +1,10 @@
+MHL Music 1.5.0 Beta 1 (Arquitectura Limpia y Concurrencia Extrema)
+
+¡Bienvenidos a la primera beta de la versión 1.5.0! Hemos iniciado un ambicioso proceso de refactorización estructural. Esta primera entrega sienta las bases de rendimiento y escalabilidad de la aplicación, despidiéndonos del viejo estado global gigantesco para dar paso a un código ultra modular y descargas concurrentes a prueba de balas.
+
+🚀 **Rendimiento Extremo**
+*   **Concurrencia de Descargas Blindada:** En versiones anteriores, el motor de descargas en PC podía bloquearse si pedías demasiado. Hemos reprogramado el servidor interno de Python para usar "Threads" asíncronos. Ahora, puedes mandar descargas simultáneas y el sistema ni se despeinará.
+*   **Estado Global Ultra Rápido:** Hemos despedazado nuestro gigantesco archivo de control central ("God Object") en módulos ligeros y ágiles (Slices) bajo el estándar "Clean Architecture". Resultado: menos uso de RAM y una interfaz a prueba de tirones.
+
+🛠 **Correcciones y Estabilidad**
+*   **Gestión Inteligente de Metadatos:** Extrajimos y aislamos la lógica compleja que limpia y decide los nombres de tus archivos de audio. Ahora la interfaz principal respira mucho más ligera.
