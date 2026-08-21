@@ -1,18 +1,9 @@
-MHL Music 1.5.0 Beta 5 (Operación Blindaje)
+MHL Music 1.5.0 Beta 5 (Resurrección)
 
-Esta prerelease es una actualización masiva bajo el capó. Nuestros auditores (el temible "Red Team") destruyeron la aplicación para encontrar cada punto débil, y hemos reconstruido una base de código a prueba de balas. ¡Prepárate para la versión más estable, rápida y segura de MHL Music hasta la fecha!
-
-🚀 **Rendimiento Extremo**
-* **Adiós a los congelamientos de pantalla:** Aislando el reproductor de la interfaz de usuario, eliminamos cientos de re-renders basura que asfixiaban la tarjeta gráfica. Ahora todo fluye a 60 FPS, incluso en teléfonos Android de gama baja.
-* **Exterminio de Zombies:** Si una descarga falla en Windows, a veces quedaban procesos ocultos consumiendo batería y memoria de por vida. Ahora ejecutamos una orden de limpieza estricta que libera tu CPU y RAM al instante.
-
-🛡️ **Mejoras de Seguridad**
-* **Blindaje del Sistema de Archivos:** Reforzamos el motor de descargas en PC para impedir que un track malicioso intente guardarse fuera de tu carpeta de música. Hemos cerrado puertas de Directory Traversal y flujos ocultos de Windows (ADS) al 100%.
-
-🌐 **Red y Conectividad**
-* **Multi-hilo Dinámico en Android:** Antes, si perdías el WiFi a mitad de una descarga, toda la app se quedaba congelada esperando. Hemos inyectado un motor concurrente que maneja múltiples descargas a la vez sin trabar tus búsquedas.
+La Beta 4 introdujo mejoras importantes de rendimiento y seguridad, pero traía un bug crítico que dejaba la app en una pantalla negra permanente al iniciar. Esta Beta 5 resuelve el problema de raíz y te devuelve una app que arranca instantáneamente.
 
 🛠 **Correcciones y Estabilidad**
-* **Cola de Descargas Inmortal:** Reparamos un "deadlock" que trababa la cola de descargas si dos canciones terminaban a la vez o si YouTube te ponía en lista de espera. Ahora tu cola avanza sin importar qué.
-* **Resurrección Segura de Datos:** Solucionamos un error fatal donde el historial podía borrarse si cerrabas la app demasiado rápido. Además, tu historial está a salvo incluso si el disco de tu teléfono se llena (ahora te avisaremos).
-* **Inmunidad a Fallos Externos:** Si la API de Deezer sufre un error y nos envía datos corruptos, la app ya no colapsará en una Pantalla Blanca de la Muerte (WSOD).
+
+- **Adiós pantalla negra (WSOD):** La Beta 4 tenía un error fatal donde React se bloqueaba internamente al iniciar la app. El sistema de hidratación del estado (IndexedDB) hacía un "early return" que violaba las reglas de los Hooks de React, provocando que la app nunca pasara de la pantalla de carga. Ahora todos los hooks se ejecutan correctamente antes de verificar si el estado está listo.
+
+- **Hidratación a prueba de fallos:** Si el almacenamiento interno (IndexedDB) falla o está corrupto, la app ahora arranca con valores por defecto en lugar de quedarse congelada para siempre. Tus datos se recuperan en cuanto el almacenamiento vuelve a estar disponible.

@@ -24,7 +24,6 @@ function RouteFallback() {
 
 const App = () => {
   const _hasHydrated = useMusicStore((s) => s._hasHydrated);
-  if (!_hasHydrated) return <RouteFallback />;
   useEffect(() => {
     const refreshNativeLocale = () => {
       void getDeviceContext().then((context) => setNativeLocale(context.locale));
@@ -81,6 +80,8 @@ const App = () => {
       }
     });
   }, []);
+
+  if (!_hasHydrated) return <RouteFallback />;
 
   return (
     <BrowserRouter>

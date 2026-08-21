@@ -95,8 +95,12 @@ export const useMusicStore = create<MusicStore>()(
     {
       name: 'mhl-store',
       storage: createJSONStorage(() => idbStorage),
-      onRehydrateStorage: () => (state) => {
-        if (state) state.setHasHydrated(true);
+      onRehydrateStorage: () => (state, error) => {
+        if (error) {
+          console.error('[MusicStore] Hydration error:', error);
+        }
+        // Ensure the app always mounts even if IDB/LocalStorage is corrupted
+        useMusicStore.setState({ _hasHydrated: true });
       },
       partialize: (state) => ({
         downloads: state.downloads.filter((d) => d.status === 'completed' || d.status === 'error'),
