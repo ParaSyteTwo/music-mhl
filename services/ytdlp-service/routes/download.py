@@ -10,6 +10,7 @@ from typing import Any
 from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
+from starlette.concurrency import run_in_threadpool
 from yt_dlp import YoutubeDL
 
 from config import RAILWAY_PUBLIC_DOMAIN, TEMP_DIR, YTDLP_CLIENTS
@@ -305,7 +306,7 @@ def register_download_routes(app: FastAPI) -> None:
                             daemon=True,
                         ).start()
                         try:
-                            output = _run_ytdlp(client)
+                            output = await run_in_threadpool(_run_ytdlp, client)
                             ytdlp_ok = True
                             break
                         except Exception as retry_err:
