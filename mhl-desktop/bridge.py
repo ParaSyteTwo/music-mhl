@@ -65,7 +65,7 @@ _ANILIST_ENDPOINT = 'https://graphql.anilist.co'
 _ANIMETHEMES_ENDPOINT = 'https://api.animethemes.moe'
 _ANIME_HEADERS = {
     'Content-Type': 'application/json',
-    'User-Agent': 'MHLMusic/1.5.0-beta.4',
+    'User-Agent': 'MHLMusic/1.5.0-beta.5',
 }
 _ANIME_TIMEOUT = 10
 
@@ -409,7 +409,7 @@ class Bridge:
         """Escribe M4A a disco e inyecta metadata via Mutagen."""
         try:
             root = Path(settings.get('download_folder', str(Path.home() / 'Music' / 'MHL Music'))).resolve()
-            safe_rel_path = file_path.lstrip('\\/')
+            safe_rel_path = file_path.lstrip('\/'); if ':' in safe_rel_path: return {'success': False, 'error': 'Invalid path (ADS blocked)'}
             target_path = (root / safe_rel_path).resolve()
             
             if not str(target_path).startswith(str(root)):
@@ -619,7 +619,29 @@ class Bridge:
                 '--socket-timeout', '15', '--retries', '2', '--fragment-retries', '2',
                 '--quiet',
             ]
-            proc = subprocess.run(args, capture_output=True, creationflags=CREATE_NO_WINDOW, timeout=300, encoding='utf-8', errors='replace')
+            creation_flags = CREATE_NO_WINDOW
+            if sys.platform == 'win32':
+                creation_flags |= getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0x00000200)
+
+            proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=creation_flags, encoding='utf-8', errors='replace')
+            try:
+                stdout, stderr = proc.communicate(timeout=300)
+                returncode = proc.returncode
+            except subprocess.TimeoutExpired:
+                if sys.platform == 'win32':
+                    if proc.poll() is None:
+                        subprocess.run(['taskkill', '/T', '/F', '/PID', str(proc.pid)], creationflags=CREATE_NO_WINDOW)
+                else:
+                    proc.kill()
+                proc.communicate()
+                return {'success': False, 'error': 'extraction: yt-dlp timeout'}
+            except Exception:
+                if sys.platform == 'win32':
+                    if proc.poll() is None:
+                        subprocess.run(['taskkill', '/T', '/F', '/PID', str(proc.pid)], creationflags=CREATE_NO_WINDOW)
+                else:
+                    proc.kill()
+                raise
 
             result_path = tmppath
             if not os.path.exists(result_path):
@@ -627,10 +649,10 @@ class Bridge:
                 if files:
                     result_path = str(files[0])
 
-            if proc.returncode != 0 or not os.path.exists(result_path):
-                err_detail = (proc.stderr or '').strip()
+            if returncode != 0 or not os.path.exists(result_path):
+                err_detail = (stderr or '').strip()
                 error_type = 'rate_limit' if re.search(r'403|forbidden|rate.?limit', err_detail, re.I) else 'extraction'
-                return {'success': False, 'error': f'{error_type}: yt-dlp error {proc.returncode}: {err_detail}'}
+                return {'success': False, 'error': f'{error_type}: yt-dlp error {returncode}: {err_detail}'}
 
             if os.path.getsize(result_path) < 16 * 1024:
                 return {'success': False, 'error': 'conversion: output file is too small'}
@@ -787,7 +809,7 @@ class Bridge:
         try:
             import os
             root = Path(settings.get('download_folder', str(Path.home() / 'Music' / 'MHL Music'))).resolve()
-            safe_rel_path = file_path.lstrip('\\/')
+            safe_rel_path = file_path.lstrip('\/'); if ':' in safe_rel_path: return {'success': False, 'error': 'Invalid path (ADS blocked)'}
             target_path = (root / safe_rel_path).resolve()
 
             if not str(target_path).startswith(str(root)):
