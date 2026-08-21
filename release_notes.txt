@@ -1,8 +1,18 @@
-MHL Music 1.5.0 Beta 3 (Memoria Infinita)
+MHL Music 1.5.0 Beta 5 (Operación Blindaje)
 
-¡Llegamos a la Fase 2! Históricamente, la aplicación limitaba tu historial a 100 canciones para evitar que la memoria del navegador colapsara. Eso se acabó. En esta Beta 3, hemos reprogramado el motor de base de datos interno desde cero.
+Esta prerelease es una actualización masiva bajo el capó. Nuestros auditores (el temible "Red Team") destruyeron la aplicación para encontrar cada punto débil, y hemos reconstruido una base de código a prueba de balas. ¡Prepárate para la versión más estable, rápida y segura de MHL Music hasta la fecha!
 
-🚀 **Poder Ilimitado**
-*   **Base de Datos Asíncrona (IndexedDB):** Migramos por completo el sistema de almacenamiento. Ahora la aplicación usa una base de datos de alto rendimiento capaz de almacenar cientos de miles de registros.
-*   **Adiós al límite de 100 canciones:** Ya puedes descargar toda tu biblioteca. El límite artificial ha sido completamente eliminado del código.
-*   **Auto-Migración Inteligente:** Tus canciones y ajustes de la Beta 2 no se perderán. La aplicación moverá automáticamente tus datos a la nueva base de datos ultrarrápida la primera vez que la abras.
+🚀 **Rendimiento Extremo**
+* **Adiós a los congelamientos de pantalla:** Aislando el reproductor de la interfaz de usuario, eliminamos cientos de re-renders basura que asfixiaban la tarjeta gráfica. Ahora todo fluye a 60 FPS, incluso en teléfonos Android de gama baja.
+* **Exterminio de Zombies:** Si una descarga falla en Windows, a veces quedaban procesos ocultos consumiendo batería y memoria de por vida. Ahora ejecutamos una orden de limpieza estricta que libera tu CPU y RAM al instante.
+
+🛡️ **Mejoras de Seguridad**
+* **Blindaje del Sistema de Archivos:** Reforzamos el motor de descargas en PC para impedir que un track malicioso intente guardarse fuera de tu carpeta de música. Hemos cerrado puertas de Directory Traversal y flujos ocultos de Windows (ADS) al 100%.
+
+🌐 **Red y Conectividad**
+* **Multi-hilo Dinámico en Android:** Antes, si perdías el WiFi a mitad de una descarga, toda la app se quedaba congelada esperando. Hemos inyectado un motor concurrente que maneja múltiples descargas a la vez sin trabar tus búsquedas.
+
+🛠 **Correcciones y Estabilidad**
+* **Cola de Descargas Inmortal:** Reparamos un "deadlock" que trababa la cola de descargas si dos canciones terminaban a la vez o si YouTube te ponía en lista de espera. Ahora tu cola avanza sin importar qué.
+* **Resurrección Segura de Datos:** Solucionamos un error fatal donde el historial podía borrarse si cerrabas la app demasiado rápido. Además, tu historial está a salvo incluso si el disco de tu teléfono se llena (ahora te avisaremos).
+* **Inmunidad a Fallos Externos:** Si la API de Deezer sufre un error y nos envía datos corruptos, la app ya no colapsará en una Pantalla Blanca de la Muerte (WSOD).
