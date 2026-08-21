@@ -11,56 +11,79 @@ import { isUiLanguageMode, isLyricsTargetLanguage, Lang } from '@/lib/language';
 
 const idbStorage: StateStorage = {
   getItem: async (name: string): Promise<string | null> => {
-    const value = await get(name);
-    if (!value) {
-      // Migración automática de LocalStorage a IndexedDB en el primer arranque
-      const lsValue = localStorage.getItem(name);
-      if (lsValue) {
-        await idbSet(name, lsValue);
-        localStorage.removeItem(name);
-        return lsValue;
+    try {
+      const value = await get(name);
+      if (!value) {
+        // Migración automática de LocalStorage a IndexedDB
+        const lsValue = localStorage.getItem(name);
+        if (lsValue) {
+          await idbSet(name, lsValue);
+          return lsValue; // No borramos localstorage aún, como fallback seguro
+        }
+        return null;
       }
-      return null;
+      return value || null;
+    } catch (e) {
+      console.warn('IDB get falló', e);
+      return localStorage.getItem(name);
     }
-    return value || null;
   },
   setItem: async (name: string, value: string): Promise<void> => {
-    await idbSet(name, value);
+    try {
+      await idbSet(name, value);
+    } catch (e) {
+      console.error('IDB set falló', e);
+      import('sonner').then(({ toast }) => {
+        toast.error('No hay espacio en disco (o IDB corrupto). El historial no se guardará.', { duration: 10000 });
+      }).catch(() => {});
+    }
   },
   removeItem: async (name: string): Promise<void> => {
-    await del(name);
+    try {
+      await del(name);
+    } catch (e) {
+      console.warn('IDB del falló', e);
+    }
   },
 };
 
 export const useMusicStore = create<MusicStore>()(
   persist(
     (set, get, api) => {
-      audioEngine.onTimeUpdate = (time) => set({ progress: time });
+      audioEngine.onTimeUpdate = (time) => {
+        if (get()._hasHydrated) set({ progress: time });
+      };
 
       audioEngine.onCanPlay = () => {
-        set({
+        if (get()._hasHydrated) set({
           isLoading: false,
           duration: audioEngine.duration || get().currentTrack?.duration || 0,
         });
       };
 
       audioEngine.onLoadedMetadata = () => {
-        set({
+        if (get()._hasHydrated) set({
           duration: audioEngine.duration || get().currentTrack?.duration || 0,
         });
       };
 
       audioEngine.onWaiting = () => {
-        if (get().currentTrack) set({ isLoading: true });
+        if (get()._hasHydrated && get().currentTrack) set({ isLoading: true });
       };
 
       audioEngine.onStalled = () => {
-        if (get().isPlaying) set({ isLoading: true });
+        if (get()._hasHydrated && get().isPlaying) set({ isLoading: true });
       };
 
-      audioEngine.onPlaying = () => set({ isPlaying: true, isLoading: false });
-      audioEngine.onPause = () => set({ isPlaying: false, isLoading: false });
-      audioEngine.onEnded = () => set({ isPlaying: false, progress: 0 });
+      audioEngine.onPlaying = () => {
+        if (get()._hasHydrated) set({ isPlaying: true, isLoading: false });
+      };
+      audioEngine.onPause = () => {
+        if (get()._hasHydrated) set({ isPlaying: false, isLoading: false });
+      };
+      audioEngine.onEnded = () => {
+        if (get()._hasHydrated) set({ isPlaying: false, progress: 0 });
+      };
 
       return {
         ...createPlayerSlice(set, get, api),
@@ -72,6 +95,9 @@ export const useMusicStore = create<MusicStore>()(
     {
       name: 'mhl-store',
       storage: createJSONStorage(() => idbStorage),
+      onRehydrateStorage: () => (state) => {
+        if (state) state.setHasHydrated(true);
+      },
       partialize: (state) => ({
         downloads: state.downloads.filter((d) => d.status === 'completed' || d.status === 'error'),
         volume: state.volume,
@@ -94,7 +120,7 @@ export const useMusicStore = create<MusicStore>()(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       merge: (persisted: any, current) => ({
         ...current,
-        downloads: persisted?.downloads || [],
+        downloads: Array.isArray(persisted?.downloads) ? persisted.downloads : [],
         volume: persisted?.volume ?? 0.8,
         downloadFolderName: persisted?.downloadFolderName || '',
         uiLanguageMode: isUiLanguageMode(persisted?.uiLanguageMode)

@@ -59,6 +59,8 @@ export interface DownloadSlice {
 }
 
 export interface SettingsSlice {
+  _hasHydrated: boolean;
+  setHasHydrated: (state: boolean) => void;
   uiLanguageMode: UiLanguageMode;
   preferredPlayerPackage: string | null;
   lyricOriginal: boolean;

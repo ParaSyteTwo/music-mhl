@@ -65,7 +65,7 @@ _ANILIST_ENDPOINT = 'https://graphql.anilist.co'
 _ANIMETHEMES_ENDPOINT = 'https://api.animethemes.moe'
 _ANIME_HEADERS = {
     'Content-Type': 'application/json',
-    'User-Agent': 'MHLMusic/1.5.0-beta.3',
+    'User-Agent': 'MHLMusic/1.5.0-beta.4',
 }
 _ANIME_TIMEOUT = 10
 
@@ -408,14 +408,21 @@ class Bridge:
     ) -> dict:
         """Escribe M4A a disco e inyecta metadata via Mutagen."""
         try:
-            os.makedirs(os.path.dirname(os.path.abspath(file_path)), exist_ok=True)
+            root = Path(settings.get('download_folder', str(Path.home() / 'Music' / 'MHL Music'))).resolve()
+            safe_rel_path = file_path.lstrip('\\/')
+            target_path = (root / safe_rel_path).resolve()
+            
+            if not str(target_path).startswith(str(root)):
+                return {'success': False, 'error': 'Directory traversal detected'}
+
+            os.makedirs(os.path.dirname(target_path), exist_ok=True)
             audio_bytes = base64.b64decode(audio_b64)
-            with open(file_path, 'wb') as f:
+            with open(target_path, 'wb') as f:
                 f.write(audio_bytes)
             
             from mutagen.mp4 import MP4, MP4Cover
             
-            audio = MP4(file_path)
+            audio = MP4(target_path)
             if title: audio["\xa9nam"] = title
             if artist: audio["\xa9ART"] = artist
             if album: audio["\xa9alb"] = album
@@ -779,8 +786,21 @@ class Bridge:
         """Abre un archivo (o carpeta) usando la aplicación por defecto del sistema."""
         try:
             import os
+            root = Path(settings.get('download_folder', str(Path.home() / 'Music' / 'MHL Music'))).resolve()
+            safe_rel_path = file_path.lstrip('\\/')
+            target_path = (root / safe_rel_path).resolve()
+
+            if not str(target_path).startswith(str(root)):
+                return {'success': False, 'error': 'Directory traversal detected'}
+            
+            if not target_path.exists():
+                return {'success': False, 'error': 'File not found'}
+                
+            if target_path.is_file() and target_path.suffix.lower() not in ['.m4a', '.mp3', '.ogg', '.flac', '.wav']:
+                return {'success': False, 'error': 'Invalid file type'}
+
             # Solo para Windows
-            os.startfile(file_path)
+            os.startfile(str(target_path))
             return {"success": True}
         except Exception as e:
             return {"success": False, "error": str(e)}

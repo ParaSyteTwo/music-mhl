@@ -350,7 +350,7 @@ export const createDownloadSlice: StateCreator<
           const existing = get().downloads.find((d) => d.track.id === track.id);
           if (existing && (existing.status === 'downloading' || existing.status === 'queued')) return;
 
-          const id = `d${Date.now()}`;
+          const id = crypto.randomUUID();
           set((s) => {
             const newDownloads = [...s.downloads, {
               id,
@@ -372,7 +372,7 @@ export const createDownloadSlice: StateCreator<
           const existing = get().downloads.find((d) => d.track.id === track.id);
           if (existing && (existing.status === 'downloading' || existing.status === 'queued')) return;
 
-          const id = `d${Date.now()}`;
+          const id = crypto.randomUUID();
           set((s) => {
             const newDownloads = [...s.downloads, {
               id,

@@ -1,3 +1,4 @@
+import { useShallow } from 'zustand/react/shallow';
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Download, Play, Pause, Search, Loader2, Music, CheckCircle, X, ArrowLeft, Tv, Zap, RefreshCw, Sparkles } from 'lucide-react';
 import { useMusicStore } from '@/store/musicStore';
@@ -77,7 +78,28 @@ export default function SearchPage() {
     cellularResolutionPolicy,
     editionPreference,
     autoDownload,
-  } = useMusicStore();
+  } = useMusicStore(useShallow((s) => ({
+    searchQuery: s.searchQuery,
+    searchResults: s.searchResults,
+    isSearching: s.isSearching,
+    performSearch: s.performSearch,
+    loadMoreResults: s.loadMoreResults,
+    hasMoreResults: s.hasMoreResults,
+    isLoadingMore: s.isLoadingMore,
+    playTrack: s.playTrack,
+    currentTrack: s.currentTrack,
+    isPlaying: s.isPlaying,
+    startDownloadWithVideoId: s.startDownloadWithVideoId,
+    startDownloadWithSourceUrl: s.startDownloadWithSourceUrl,
+    downloads: s.downloads,
+    mostDownloadedArtists: s.mostDownloadedArtists,
+    animeSearchEnabled: s.animeSearchEnabled,
+    autoCandidateResolution: s.autoCandidateResolution,
+    resolutionProfile: s.resolutionProfile,
+    cellularResolutionPolicy: s.cellularResolutionPolicy,
+    editionPreference: s.editionPreference,
+    autoDownload: s.autoDownload,
+  })));
 
   const [query, setQuery] = useState(searchQuery);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -708,7 +730,7 @@ export default function SearchPage() {
 
       <AnimatePresence mode="wait">
         {!animeMode && searchResults.length > 0 ? (
-          <>
+          <motion.div key="results-container" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <motion.div
               key="results-grid"
               initial={{ opacity: 0 }}
@@ -918,7 +940,7 @@ export default function SearchPage() {
                 <p className="text-xs text-[#555]">{t('noMoreResults')}</p>
               )}
             </div>
-          </>
+          </motion.div>
         ) : !isSearching && query.trim() ? (
           <motion.p
             key="no-results"

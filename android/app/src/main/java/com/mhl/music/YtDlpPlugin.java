@@ -48,7 +48,7 @@ public class YtDlpPlugin extends Plugin {
     private static final Pattern SPEED_PATTERN =
         Pattern.compile("at\\s+([\\d.]+)\\s*(KiB|MiB|GiB|KB|MB|GB)/s");
     private boolean isInitialized = false;
-    private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private final ExecutorService executor = Executors.newCachedThreadPool();
 
     // (Removed SAF/picker code - using MediaStore-only storage)
 

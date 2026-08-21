@@ -1,3 +1,4 @@
+import { useShallow } from 'zustand/react/shallow';
 import { Play, Pause, Volume2, VolumeX, Loader2 } from 'lucide-react';
 import { useMusicStore } from '@/store/musicStore';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -13,7 +14,7 @@ function formatTime(seconds: number): string {
 
 export function BottomPlayer() {
   const { t } = useI18n();
-  const { currentTrack, isPlaying, isLoading, volume, progress, duration, togglePlay, setVolume, seekTo, dominantColor } = useMusicStore();
+  const { currentTrack, isPlaying, isLoading, volume, progress, duration, togglePlay, setVolume, seekTo, dominantColor } = useMusicStore(useShallow(s => ({ currentTrack: s.currentTrack, isPlaying: s.isPlaying, isLoading: s.isLoading, volume: s.volume, progress: s.progress, duration: s.duration, togglePlay: s.togglePlay, setVolume: s.setVolume, seekTo: s.seekTo, dominantColor: s.dominantColor })));
   const [hoverProgress, setHoverProgress] = useState(false);
 
   const progressPercent = duration > 0 ? (progress / duration) * 100 : 0;
@@ -91,7 +92,7 @@ export function BottomPlayer() {
         className="fixed left-0 right-0 border-t border-white/5 z-40 flex items-center px-4 sm:px-6 gap-4"
         style={{
           bottom: bottomStyle,
-          backdropFilter: 'blur(40px) saturate(200%)',
+          backdropFilter: 'blur(40px) saturate(200%)', transform: 'translateZ(0)', willChange: 'transform, backdrop-filter',
           WebkitBackdropFilter: 'blur(40px) saturate(200%)',
           height: 'var(--player-height)',
           background: dominantColor

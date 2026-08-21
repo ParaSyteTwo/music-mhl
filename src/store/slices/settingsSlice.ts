@@ -7,6 +7,8 @@ export const createSettingsSlice: StateCreator<
   [],
   SettingsSlice
 > = (set) => ({
+  _hasHydrated: false,
+  setHasHydrated: (state) => set({ _hasHydrated: state }),
   uiLanguageMode: 'system',
   setUiLanguageMode: (mode) => set({ uiLanguageMode: mode }),
 
