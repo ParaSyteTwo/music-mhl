@@ -473,49 +473,49 @@ export default function SearchPage() {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 12 }}
+      initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-      className="px-4 sm:px-8 py-4 sm:py-8 max-w-6xl mx-auto"
+      transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+      className="px-3.5 sm:px-8 pt-1 sm:pt-4 pb-8 max-w-5xl mx-auto"
     >
-      <section className={`home-hero ${showEmpty ? 'home-hero-expanded' : ''}`}>
+      <section className={`home-hero ${showEmpty ? 'home-hero-expanded' : ''} px-4 py-5 sm:p-7`}>
         <div className="home-hero-orb home-hero-orb-one" aria-hidden="true" />
         <div className="home-hero-orb home-hero-orb-two" aria-hidden="true" />
         <div className="relative z-10 text-center">
-          <div className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.035] px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.22em] text-[#A6C955]">
+          <div className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.035] px-2.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.2em] text-[#A6C955]">
             <Sparkles className="h-3 w-3" />
             {t('discoverEyebrow')}
           </div>
-          <h1 className="mt-3 text-2xl sm:text-4xl md:text-5xl font-extrabold tracking-[-0.04em] font-[family-name:Syne] text-[#F5F5F0] text-balance">
+          <h1 className="mt-2 text-xl sm:text-3xl md:text-4xl font-extrabold tracking-[-0.03em] font-[family-name:Syne] text-[#F5F5F0] text-balance">
             {t('heroTitle')}
           </h1>
-          <p className="mx-auto mt-2 max-w-lg text-xs sm:text-sm text-[#8E8E88] text-balance">
+          <p className="mx-auto mt-1 max-w-md text-xs sm:text-sm text-[#9E9E98] text-balance">
             {t('heroSubtitle')}
           </p>
         </div>
 
-        <div className="home-search-shell relative z-10 mt-5 sm:mt-7">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-[#85857E]" />
+        <div className="home-search-shell relative z-10 mt-4 sm:mt-6">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#85857E]" />
           <input
             ref={inputRef}
             type="text"
-            placeholder={t('searchPlaceholder') || 'PON URL o NOMBRE DE CANCION'}
+            placeholder={t('searchPlaceholder')}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
             onFocus={() => setInputFocused(true)}
             onBlur={() => setTimeout(() => setInputFocused(false), 200)}
-            className="w-full pl-11 pr-11 py-3.5 sm:py-4 rounded-2xl bg-transparent text-sm sm:text-[15px] text-[#F5F5F0] placeholder:text-[#55554F] focus:outline-none"
+            className="w-full pl-10 pr-10 py-3 sm:py-3.5 rounded-2xl bg-transparent text-xs sm:text-sm text-[#F5F5F0] placeholder:text-[#6E6E68] focus:outline-none"
             autoComplete="off"
             autoCorrect="off"
             spellCheck="false"
           />
           {isSearching ? (
-            <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#C8F04B] animate-spin" />
+            <Loader2 className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#C8F04B] animate-spin" />
           ) : query ? (
             <button
               onMouseDown={(e) => { e.preventDefault(); setQuery(''); performSearch(''); }}
-              className="absolute right-3.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-white/[0.08] hover:bg-white/[0.14] flex items-center justify-center transition-colors"
+              className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-white/[0.08] hover:bg-white/[0.14] flex items-center justify-center transition-colors"
               aria-label={t('clearSearch')}
             >
               <X className="w-3 h-3 text-[#A0A09A]" />
@@ -525,13 +525,13 @@ export default function SearchPage() {
       </section>
 
       {inputFocused && !query.trim() && recent.length > 0 && (
-        <div className="mb-5 text-center sm:text-left">
-          <p className="text-[10px] uppercase tracking-[0.2em] font-semibold text-[#666660] mb-2">{t('recent')}</p>
-          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+        <div className="mb-4 text-center sm:text-left">
+          <p className="text-[10px] uppercase tracking-[0.2em] font-semibold text-[#8E8E88] mb-2">{t('recent')}</p>
+          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-1.5">
             {recent.map((term) => (
               <button
                 key={term}
-                className="group flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium border border-white/[0.08] bg-white/[0.02] text-[#A0A098] hover:text-[#C8F04B] hover:border-[#C8F04B]/35 hover:bg-[#C8F04B]/5 transition-all shadow-sm"
+                className="group flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium border border-white/[0.08] bg-white/[0.02] text-[#A0A098] hover:text-[#C8F04B] hover:border-[#C8F04B]/35 hover:bg-[#C8F04B]/5 transition-all shadow-sm"
                 onClick={() => handleSuggestionClick(term)}
               >
                 <span>{term}</span>
@@ -548,27 +548,27 @@ export default function SearchPage() {
       )}
 
       {showEmpty && (
-        <section className="artist-discovery mb-8">
-          <div className="flex flex-col sm:flex-row items-center sm:items-end justify-between gap-3 mb-5 px-1 text-center sm:text-left">
-            <div>
-              <div className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.22em] text-[#A6C955] font-semibold">
+        <section className="artist-discovery mb-6">
+          <div className="flex items-center justify-between gap-2 mb-3.5 px-0.5">
+            <div className="text-left">
+              <div className="inline-flex items-center gap-1.5 text-[9.5px] uppercase tracking-[0.2em] text-[#A6C955] font-semibold">
                 <Sparkles className="w-3 h-3" />
                 {t('discoverArtists')}
               </div>
-              <p className="mt-1 text-xs text-[#8E8E88]">
+              <p className="mt-0.5 text-[11px] text-[#8E8E88]">
                 {t('artistPoolHint', { count: GLOBAL_ARTISTS_POOL.length })}
               </p>
             </div>
             <button
               type="button"
               onClick={rotateArtistSuggestions}
-              className="group inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.03] px-3.5 py-1.5 text-xs font-medium text-[#C8C8C0] hover:border-[#C8F04B]/30 hover:bg-[#C8F04B]/10 hover:text-[#C8F04B] transition-all shadow-sm active:scale-95 flex-shrink-0"
+              className="group inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-[11px] font-medium text-[#C8C8C0] hover:border-[#C8F04B]/30 hover:bg-[#C8F04B]/10 hover:text-[#C8F04B] transition-all shadow-sm active:scale-95 flex-shrink-0"
             >
-              <RefreshCw className="w-3.5 h-3.5 transition-transform duration-500 group-hover:rotate-180 text-[#A6C955]" />
-              {t('refreshArtists')}
+              <RefreshCw className="w-3 h-3 transition-transform duration-500 group-hover:rotate-180 text-[#A6C955]" />
+              <span>{t('refreshArtists')}</span>
             </button>
           </div>
-          <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3 sm:gap-3.5">
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 sm:gap-2.5">
             {suggestedArtists.map((artist) => {
               const genre = artistGenre(artist.name);
               const genreLabel = genre ? t(`genre_${genre}`) : null;
@@ -576,26 +576,26 @@ export default function SearchPage() {
                 <motion.button
                   key={artist.name}
                   type="button"
-                  whileHover={{ y: -3, scale: 1.02 }}
-                  whileTap={{ scale: 0.97 }}
-                  transition={{ duration: 0.18, ease: 'easeOut' }}
+                  whileHover={{ y: -2, scale: 1.02 }}
+                  whileTap={{ scale: 0.96 }}
+                  transition={{ duration: 0.15 }}
                   onClick={() => handleSuggestionClick(artist.name)}
-                  className="artist-showcase-card group relative flex flex-col items-center justify-center p-3 sm:p-3.5 rounded-2xl bg-white/[0.025] hover:bg-white/[0.055] border border-white/[0.06] text-center overflow-hidden"
+                  className="artist-showcase-card group relative flex flex-col items-center justify-center p-2 sm:p-2.5 rounded-2xl bg-white/[0.025] hover:bg-white/[0.055] border border-white/[0.06] text-center overflow-hidden min-h-[92px]"
                 >
                   <div
-                    className="relative mb-2.5 w-14 h-14 sm:w-16 sm:h-16 flex items-center justify-center rounded-full text-sm sm:text-base font-extrabold text-[#080808] transition-transform duration-300 group-hover:scale-105"
+                    className="relative mb-1.5 w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center rounded-full text-xs sm:text-sm font-black text-[#080808] transition-transform duration-200 group-hover:scale-105 shadow-md flex-shrink-0"
                     style={{
                       background: `linear-gradient(135deg, ${artist.primary}, ${artist.secondary})`,
-                      boxShadow: `0 8px 24px ${artist.glow}`,
+                      boxShadow: `0 4px 14px ${artist.glow}`,
                     }}
                   >
                     {artistMonogram(artist.name)}
                   </div>
-                  <span className="text-xs sm:text-[13px] font-semibold text-[#F5F5F0] group-hover:text-[#C8F04B] transition-colors truncate max-w-full px-1">
+                  <span className="text-[11px] sm:text-xs font-semibold text-[#F5F5F0] group-hover:text-[#C8F04B] transition-colors truncate max-w-full px-0.5 leading-tight">
                     {artist.name}
                   </span>
                   {genreLabel && (
-                    <span className="mt-1 text-[9px] font-medium tracking-wider uppercase px-2 py-0.5 rounded-full bg-white/[0.04] text-[#8E8E88] group-hover:text-[#D8D8D0] group-hover:bg-white/[0.08] transition-colors truncate max-w-full">
+                    <span className="mt-1 text-[8.5px] font-medium tracking-wide uppercase px-1.5 py-0.5 rounded-md bg-white/[0.04] text-[#8E8E88] group-hover:text-[#D8D8D0] group-hover:bg-white/[0.08] transition-colors truncate max-w-full">
                       {genreLabel}
                     </span>
                   )}
@@ -962,27 +962,10 @@ export default function SearchPage() {
             key="no-results"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="text-center text-sm text-[#666660] py-12"
+            className="text-center text-sm text-[#9E9E98] py-12"
           >
             {t('noResults')}
           </motion.p>
-        ) : showEmpty ? (
-          <motion.div
-            key="empty"
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.4 }}
-            className="text-center py-16 sm:py-24 space-y-4"
-          >
-            <motion.div
-              animate={{ y: [0, -15, 0] }}
-              transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
-              className="inline-block"
-            >
-              <Music className="w-20 h-20 text-[#333] mx-auto opacity-50 drop-shadow-2xl" />
-            </motion.div>
-            <p className="text-sm text-[#555] font-medium tracking-wide">{t('emptySearch')}</p>
-          </motion.div>
         ) : null}
       </AnimatePresence>
 

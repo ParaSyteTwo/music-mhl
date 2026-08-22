@@ -1,24 +1,26 @@
-MHL Music 1.5.0 Beta 8 (Evolución Visual & UI/UX)
+MHL Music 1.5.0 (Evolución Visual & Experiencia Definitiva)
 
-MHL Music 1.5.0 Beta 8 redefine por completo la experiencia visual, estética y de rendimiento de la aplicación. Esta actualización transforma la pantalla principal con un diseño centrado, moderno y simétrico, incorporando el nuevo descubrimiento de artistas y elevando la calidad de cada elemento con una exhaustiva auditoría multi-agente.
+MHL Music 1.5.0 es el lanzamiento oficial y definitivo que redefine la experiencia visual, estética y de rendimiento en Desktop y Android. Esta versión consolida una renovación integral de la pantalla principal con cuadrícula compacta de artistas, aceleración total por hardware, switches táctiles de alta gama y un diseño inmersivo de borde a borde.
 
 ✨ **Nuevas Funciones & Estética**
 
-- **Cuadrícula Centrada de Artistas:** Explora a tus artistas favoritos en una cuadrícula responsiva y simétrica con avatares vibrantes, halos de luz ambiental (glow) y micro-etiquetas de género musical.
-- **Hero de Búsqueda Modernizado:** Nuevo encabezado inspirador enfocado en descubrir música y compatibilidad con enlaces directos de YouTube y Spotify.
-- **Switches Táctiles de Alta Gama:** Nuevos toggles redondeados y animados en Ajustes con acento Acid Lime.
-- **Popups y Alertas Frosted Glass:** Notificaciones emergentes con alto contraste, bordes luminosos y desenfoque ultra nítido.
+- **Cuadrícula Compacta de Artistas:** Descubre y explora música con una cuadrícula simétrica de 3 en 3 en móviles con avatares vibrantes, halo ambiental (*glow*) y micro-etiquetas de género.
+- **Hero de Búsqueda Rediseñado:** Encabezado espacioso y pulido con márgenes seguros para la barra de estado de Android y soporte para enlaces directos de YouTube y Spotify.
+- **Buscador Sutil y Moderno:** Placeholder minimalista, accesible y limpio sin textos toscos en mayúsculas.
+- **Switches Táctiles de Alta Gama:** Toggles animados y elegantes en Ajustes con acento Acid Lime.
+- **Popups y Notificaciones Frosted Glass:** Notificaciones emergentes con alto contraste, bordes luminosos y desenfoque ultra nítido.
 
 🚀 **Rendimiento Extremo & Fluidez**
 
-- **Aceleración GPU en el Reproductor:** Barra de progreso optimizada por hardware (scaleX) que elimina el lag y ahorra batería en Android.
-- **Hitbox Táctil Ampliada:** Desplazamiento y arrastre en la barra de reproducción mucho más cómodo y preciso con el pulgar.
-- **Aislamiento Táctil:** Eliminación de estados hover "pegados" en pantallas táctiles de dispositivos móviles.
+- **Aceleración GPU en el Reproductor:** Barra de progreso optimizada por hardware (`scaleX`) que erradica las caídas de fotogramas y ahorra batería.
+- **Hitbox Táctil Ampliada:** Desplazamiento y arrastre de la reproducción ultrasuave con el pulgar.
+- **Aislamiento Táctil:** Eliminación definitiva de estados hover pegados o fantasmas en pantallas móviles.
 
 🛠 **Correcciones y Estabilidad**
 
-- **Blindaje contra Errores de Red:** Protección en la vista de descargas con limitación de texto para evitar roturas visuales ante fallos de conexión.
-- **Eliminación del Header Redundante:** Interfaz inmersiva de borde a borde en móviles sin barras superiores innecesarias.
+- **Safe Area Superior:** Margen superior dinámico que evita cualquier solapamiento con el reloj y la barra de estado de Android.
+- **Limpieza Visual de Estados Vacíos:** Eliminación de iconos y bloques redundantes para una experiencia limpia y fluida.
+- **Blindaje contra Errores de Red:** Protección en la vista de descargas con limitación de texto para prevenir roturas visuales.
 - **Paridad Lingüística Completa:** 100% de los textos, etiquetas y géneros traducidos con total naturalidad en Español e Inglés.
 
 
