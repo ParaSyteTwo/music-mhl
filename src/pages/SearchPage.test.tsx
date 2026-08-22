@@ -12,6 +12,7 @@ const storeState = {
   playTrack: vi.fn(),
   currentTrack: null,
   isPlaying: false,
+  startDownload: vi.fn(),
   startDownloadWithVideoId: vi.fn(),
   startDownloadWithSourceUrl: vi.fn(),
   downloads: [],

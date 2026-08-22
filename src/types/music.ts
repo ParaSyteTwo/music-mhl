@@ -12,6 +12,7 @@ export interface Track {
   preview?: string;
   deezerId?: number;
   youtubeId?: string;
+  sourceUrl?: string;
   isrc?: string;
   edition?: TrackEdition;
 }

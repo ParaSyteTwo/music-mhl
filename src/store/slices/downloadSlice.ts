@@ -381,6 +381,15 @@ export const createDownloadSlice: StateCreator<
           const existing = get().downloads.find((d) => d.track.id === track.id);
           if (existing && (existing.status === 'downloading' || existing.status === 'queued')) return;
 
+          if (track.sourceUrl) {
+            get().startDownloadWithSourceUrl(track, track.sourceUrl);
+            return;
+          }
+          if (track.youtubeId) {
+            get().startDownloadWithVideoId(track, track.youtubeId);
+            return;
+          }
+
           const previous = get().downloads.find((download) =>
             download.track.id === track.id && Boolean(download.videoIdOverride));
           if (previous?.videoIdOverride) get().startDownloadWithVideoId(track, previous.videoIdOverride);

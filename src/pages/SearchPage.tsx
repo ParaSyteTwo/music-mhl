@@ -18,6 +18,7 @@ import { toast } from 'sonner';
 import { Capacitor } from '@capacitor/core';
 import { canDownloadWithOneTap } from '@/lib/download/candidateResolver';
 import { CandidateScheduler } from '@/lib/download/candidateScheduler';
+import { isDirectMediaUrl, resolveTrackFromUrl } from '@/lib/music/urlResolver';
 
 function formatDuration(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -68,6 +69,7 @@ export default function SearchPage() {
     playTrack,
     currentTrack,
     isPlaying,
+    startDownload,
     startDownloadWithVideoId,
     startDownloadWithSourceUrl,
     downloads,
@@ -89,6 +91,7 @@ export default function SearchPage() {
     playTrack: s.playTrack,
     currentTrack: s.currentTrack,
     isPlaying: s.isPlaying,
+    startDownload: s.startDownload,
     startDownloadWithVideoId: s.startDownloadWithVideoId,
     startDownloadWithSourceUrl: s.startDownloadWithSourceUrl,
     downloads: s.downloads,
@@ -275,23 +278,39 @@ export default function SearchPage() {
       || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   }, []);
 
+  const handleDirectUrl = useCallback(async (rawUrl: string) => {
+    const trimmed = rawUrl.trim();
+    if (!trimmed) return;
+    setIsSearching(true);
+    toast.loading(t('resolvingUrl'), { id: 'url-resolve' });
+    try {
+      const resolvedTrack = await resolveTrackFromUrl(trimmed);
+      if (resolvedTrack) {
+        toast.success(
+          t('urlResolved', { title: resolvedTrack.title, artist: resolvedTrack.artist }),
+          { id: 'url-resolve' }
+        );
+        setSearchResults([resolvedTrack]);
+        setSearchQuery(resolvedTrack.title);
+        if (autoDownload) {
+          startDownload(resolvedTrack);
+        }
+      } else {
+        toast.error(t('noResults'), { id: 'url-resolve' });
+      }
+    } catch {
+      toast.error(t('noResults'), { id: 'url-resolve' });
+    } finally {
+      setIsSearching(false);
+    }
+  }, [autoDownload, startDownload, t]);
+
   const handleSearch = () => {
     const trimmed = query.trim();
     if (!trimmed) return;
     
-    const isUrl = /^https?:\/\/(www\.)?(youtube\.com|youtu\.be|music\.youtube\.com|soundcloud\.com|open\.spotify\.com)\/.+/.test(trimmed);
-    if (isUrl) {
-      toast(t('downloadStarting') || 'Iniciando descarga directa...');
-      const dummyTrack: Track = {
-        id: trimmed,
-        title: 'Enlace Directo',
-        artist: 'YouTube',
-        album: 'MHL Music',
-        cover: '',
-        duration: 0,
-      };
-      startDownloadWithSourceUrl(dummyTrack, trimmed);
-      setQuery('');
+    if (isDirectMediaUrl(trimmed)) {
+      handleDirectUrl(trimmed);
       return;
     }
     
@@ -448,26 +467,15 @@ export default function SearchPage() {
 
     if (trimmed === searchQuery) return;
     const timeout = window.setTimeout(() => {
-      const isUrl = /^https?:\/\/(www\.)?(youtube\.com|youtu\.be|music\.youtube\.com|soundcloud\.com|open\.spotify\.com)\/.+/.test(trimmed);
-      if (isUrl) {
-        toast(t('downloadStarting') || 'Iniciando descarga directa...');
-        const dummyTrack: Track = {
-          id: trimmed,
-          title: 'Enlace Directo',
-          artist: 'YouTube',
-          album: 'MHL Music',
-          cover: '',
-          duration: 0,
-        };
-        startDownloadWithSourceUrl(dummyTrack, trimmed);
-        setQuery('');
+      if (isDirectMediaUrl(trimmed)) {
+        handleDirectUrl(trimmed);
         return;
       }
       performSearch(trimmed);
       refreshRecent();
-    }, 200);
+    }, 300);
     return () => window.clearTimeout(timeout);
-  }, [query, searchQuery, performSearch, refreshRecent, animeSearchEnabled, animeMode, t, startDownloadWithSourceUrl]);
+  }, [query, searchQuery, performSearch, refreshRecent, animeSearchEnabled, animeMode, handleDirectUrl]);
 
   const showEmpty = !query.trim() && searchResults.length === 0 && !isSearching;
 
