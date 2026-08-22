@@ -1,14 +1,25 @@
-MHL Music 1.5.0 Beta 7 (Etiquetas Perfectas)
+MHL Music 1.5.0 Beta 8 (Evolución Visual & UI/UX)
 
-MHL Music 1.5.0 Beta 7 perfecciona la experiencia de descarga de música con el soporte completo de metadatos enriquecidos en archivos M4A. Ahora todas tus pistas descargadas integran automáticamente cada detalle para que tus reproductores y editores de etiquetas luzcan impecables.
+MHL Music 1.5.0 Beta 8 redefine por completo la experiencia visual, estética y de rendimiento de la aplicación. Esta actualización transforma la pantalla principal con un diseño centrado, moderno y simétrico, incorporando el nuevo descubrimiento de artistas y elevando la calidad de cada elemento con una exhaustiva auditoría multi-agente.
 
-✨ **Nuevas Funciones**
+✨ **Nuevas Funciones & Estética**
 
-- **Etiquetado M4A Completo e Impecable:** Ahora las canciones descargadas incluyen automáticamente Artista del álbum, Compositor, Género musical, Año de lanzamiento, Número de pista (con total de pistas) y Número de disco.
-- **Sincronización Total con MediaStore:** En Android, la base de datos multimedia del sistema y reproductores externos reconocen instantáneamente todos los campos sin necesidad de re-escanear.
+- **Cuadrícula Centrada de Artistas:** Explora a tus artistas favoritos en una cuadrícula responsiva y simétrica con avatares vibrantes, halos de luz ambiental (glow) y micro-etiquetas de género musical.
+- **Hero de Búsqueda Modernizado:** Nuevo encabezado inspirador enfocado en descubrir música y compatibilidad con enlaces directos de YouTube y Spotify.
+- **Switches Táctiles de Alta Gama:** Nuevos toggles redondeados y animados en Ajustes con acento Acid Lime.
+- **Popups y Alertas Frosted Glass:** Notificaciones emergentes con alto contraste, bordes luminosos y desenfoque ultra nítido.
+
+🚀 **Rendimiento Extremo & Fluidez**
+
+- **Aceleración GPU en el Reproductor:** Barra de progreso optimizada por hardware (scaleX) que elimina el lag y ahorra batería en Android.
+- **Hitbox Táctil Ampliada:** Desplazamiento y arrastre en la barra de reproducción mucho más cómodo y preciso con el pulgar.
+- **Aislamiento Táctil:** Eliminación de estados hover "pegados" en pantallas táctiles de dispositivos móviles.
 
 🛠 **Correcciones y Estabilidad**
 
-- **Inyección Atómica de Metadatos:** Motores de etiquetado nativo (`jaudiotagger` en Android y `mutagen` en Windows Desktop) optimizados para inyectar cada átomo MP4 y campo ID3 sin campos vacíos.
+- **Blindaje contra Errores de Red:** Protección en la vista de descargas con limitación de texto para evitar roturas visuales ante fallos de conexión.
+- **Eliminación del Header Redundante:** Interfaz inmersiva de borde a borde en móviles sin barras superiores innecesarias.
+- **Paridad Lingüística Completa:** 100% de los textos, etiquetas y géneros traducidos con total naturalidad en Español e Inglés.
+
 
 
