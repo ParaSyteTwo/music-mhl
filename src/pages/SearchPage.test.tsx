@@ -39,9 +39,13 @@ vi.mock('@/lib/api/animeApi', () => ({
 }));
 
 vi.mock('@/data/globalArtists', () => ({
-  GLOBAL_ARTISTS_POOL: [],
-  buildAffinityPool: () => [],
-  buildArtistVisuals: () => [],
+  GLOBAL_ARTISTS_POOL: ['Bad Bunny', 'Taylor Swift'],
+  buildAffinityPool: () => ['Bad Bunny', 'Taylor Swift'],
+  buildArtistVisuals: () => [
+    { name: 'Bad Bunny', primary: '#C8F04B', secondary: '#4BE0A8', glow: '#C8F04B35' },
+    { name: 'Taylor Swift', primary: '#FF7DB2', secondary: '#FF9E64', glow: '#FF7DB235' },
+  ],
+  artistGenre: (name: string) => (name === 'Bad Bunny' ? 'reggaeton' : 'pop'),
 }));
 
 import SearchPage from './SearchPage';
@@ -59,4 +63,13 @@ describe('SearchPage', () => {
     const { container } = render(<SearchPage />);
     expect(container).not.toBeEmptyDOMElement();
   });
+
+  it('renders modern artist discovery cards with genre badges when empty', () => {
+    const { getByText } = render(<SearchPage />);
+    expect(getByText('Bad Bunny')).toBeInTheDocument();
+    expect(getByText('Taylor Swift')).toBeInTheDocument();
+    expect(getByText('genre_reggaeton')).toBeInTheDocument();
+    expect(getByText('genre_pop')).toBeInTheDocument();
+  });
 });
+

@@ -27,22 +27,6 @@ export function AppLayout() {
 
       <AppUpdateNotice />
 
-      {/* Mobile top bar — only visible on mobile, shows app name + settings icon */}
-      <header
-        className="sm:hidden flex items-center justify-between px-4 bg-[rgba(8,8,8,0.9)] border-b border-[rgba(255,255,255,0.06)] flex-shrink-0 z-30"
-        style={{
-          backdropFilter: 'blur(12px)',
-          paddingTop: 'calc(var(--sat) + 10px)',
-          paddingBottom: '10px',
-          minHeight: 'calc(44px + var(--sat))',
-        }}
-      >
-        <span className="inline-flex items-center gap-2 text-sm font-semibold tracking-tight text-[#F5F5F0]">
-          <span className="h-2 w-2 rounded-[3px] bg-[#C8F04B] shadow-[0_0_14px_rgba(200,240,75,0.55)]" />
-          MHL Music
-        </span>
-      </header>
-
       {/* Desktop top nav */}
       <nav
         className="hidden sm:flex sticky top-0 z-30 items-center gap-6 px-8 bg-[rgba(8,8,8,0.9)] border-b border-[rgba(255,255,255,0.06)] flex-shrink-0"

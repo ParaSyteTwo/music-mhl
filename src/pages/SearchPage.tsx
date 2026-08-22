@@ -5,7 +5,7 @@ import { useMusicStore } from '@/store/musicStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getDownloadCandidates, type DownloadCandidate } from '@/lib/api/musicApi';
 import type { Track } from '@/types/music';
-import { GLOBAL_ARTISTS_POOL, buildAffinityPool, buildArtistVisuals } from '@/data/globalArtists';
+import { GLOBAL_ARTISTS_POOL, buildAffinityPool, buildArtistVisuals, artistGenre } from '@/data/globalArtists';
 import { useI18n } from '@/lib/useI18n';
 import { CandidatePicker } from '@/components/ui/CandidatePicker';
 import { AnimeCard } from '@/components/ui/AnimeCard';
@@ -486,11 +486,11 @@ export default function SearchPage() {
             <Sparkles className="h-3 w-3" />
             {t('discoverEyebrow')}
           </div>
-          <h1 className="mt-3 text-3xl sm:text-5xl font-extrabold tracking-[-0.045em] font-[family-name:Syne] text-[#F5F5F0]">
-            MHL <span className="home-title-accent">Music</span>
+          <h1 className="mt-3 text-2xl sm:text-4xl md:text-5xl font-extrabold tracking-[-0.04em] font-[family-name:Syne] text-[#F5F5F0] text-balance">
+            {t('heroTitle')}
           </h1>
-          <p className="mx-auto mt-1.5 max-w-lg text-xs sm:text-sm text-[#7C7C76]">
-            {t('appTagline')}
+          <p className="mx-auto mt-2 max-w-lg text-xs sm:text-sm text-[#8E8E88] text-balance">
+            {t('heroSubtitle')}
           </p>
         </div>
 
@@ -525,19 +525,19 @@ export default function SearchPage() {
       </section>
 
       {inputFocused && !query.trim() && recent.length > 0 && (
-        <div className="mb-4">
-          <p className="text-[10px] uppercase tracking-widest text-[#555] mb-2">{t('recent')}</p>
-          <div className="flex flex-wrap gap-2">
+        <div className="mb-5 text-center sm:text-left">
+          <p className="text-[10px] uppercase tracking-[0.2em] font-semibold text-[#666660] mb-2">{t('recent')}</p>
+          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
             {recent.map((term) => (
               <button
                 key={term}
-                className="group flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-[rgba(255,255,255,0.1)] text-[#999] hover:text-[#C8F04B] hover:border-[#C8F04B]/30 hover:bg-[rgba(200,240,75,0.05)] transition-all"
+                className="group flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium border border-white/[0.08] bg-white/[0.02] text-[#A0A098] hover:text-[#C8F04B] hover:border-[#C8F04B]/35 hover:bg-[#C8F04B]/5 transition-all shadow-sm"
                 onClick={() => handleSuggestionClick(term)}
               >
-                {term}
+                <span>{term}</span>
                 <span
                   onClick={(e) => { e.stopPropagation(); removeRecent(term); }}
-                  className="text-[#555] hover:text-red-400 transition-colors"
+                  className="text-[#666] hover:text-red-400 transition-colors p-0.5 rounded-full"
                 >
                   <X className="w-3 h-3" />
                 </span>
@@ -548,44 +548,60 @@ export default function SearchPage() {
       )}
 
       {showEmpty && (
-        <section className="artist-discovery mb-7">
-          <div className="flex items-end justify-between gap-4 mb-3.5 px-0.5">
-            <div className="min-w-0">
-              <p className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.2em] text-[#8FAE48]">
+        <section className="artist-discovery mb-8">
+          <div className="flex flex-col sm:flex-row items-center sm:items-end justify-between gap-3 mb-5 px-1 text-center sm:text-left">
+            <div>
+              <div className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.22em] text-[#A6C955] font-semibold">
                 <Sparkles className="w-3 h-3" />
                 {t('discoverArtists')}
-              </p>
-              <p className="mt-1 text-[11px] sm:text-xs text-[#62625D]">
+              </div>
+              <p className="mt-1 text-xs text-[#8E8E88]">
                 {t('artistPoolHint', { count: GLOBAL_ARTISTS_POOL.length })}
               </p>
             </div>
             <button
               type="button"
               onClick={rotateArtistSuggestions}
-              className="group inline-flex flex-shrink-0 items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.025] px-3 py-1.5 text-[10px] font-medium text-[#8B8B85] hover:border-white/[0.16] hover:text-[#F5F5F0] transition-all"
+              className="group inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.03] px-3.5 py-1.5 text-xs font-medium text-[#C8C8C0] hover:border-[#C8F04B]/30 hover:bg-[#C8F04B]/10 hover:text-[#C8F04B] transition-all shadow-sm active:scale-95 flex-shrink-0"
             >
-              <RefreshCw className="w-3 h-3 transition-transform duration-500 group-hover:rotate-180" />
+              <RefreshCw className="w-3.5 h-3.5 transition-transform duration-500 group-hover:rotate-180 text-[#A6C955]" />
               {t('refreshArtists')}
             </button>
           </div>
-          <div className="flex flex-wrap gap-2 sm:gap-2.5">
-            {suggestedArtists.map((artist) => (
-              <button
-                key={artist.name}
-                onClick={() => handleSuggestionClick(artist.name)}
-                className="group flex items-center gap-2 pr-3 pl-1.5 py-1.5 rounded-full bg-[rgba(255,255,255,0.02)] hover:bg-[rgba(255,255,255,0.06)] border border-[rgba(255,255,255,0.04)] hover:border-[rgba(255,255,255,0.12)] transition-colors"
-              >
-                <div
-                  className="w-6 h-6 flex items-center justify-center rounded-full text-[9px] font-bold text-[#080808]"
-                  style={{ background: `linear-gradient(135deg, ${artist.primary}, ${artist.secondary})` }}
+          <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3 sm:gap-3.5">
+            {suggestedArtists.map((artist) => {
+              const genre = artistGenre(artist.name);
+              const genreLabel = genre ? t(`genre_${genre}`) : null;
+              return (
+                <motion.button
+                  key={artist.name}
+                  type="button"
+                  whileHover={{ y: -3, scale: 1.02 }}
+                  whileTap={{ scale: 0.97 }}
+                  transition={{ duration: 0.18, ease: 'easeOut' }}
+                  onClick={() => handleSuggestionClick(artist.name)}
+                  className="artist-showcase-card group relative flex flex-col items-center justify-center p-3 sm:p-3.5 rounded-2xl bg-white/[0.025] hover:bg-white/[0.055] border border-white/[0.06] text-center overflow-hidden"
                 >
-                  {artistMonogram(artist.name)}
-                </div>
-                <span className="text-[11px] font-medium text-[#D0D0CA] truncate max-w-[120px]">
-                  {artist.name}
-                </span>
-              </button>
-            ))}
+                  <div
+                    className="relative mb-2.5 w-14 h-14 sm:w-16 sm:h-16 flex items-center justify-center rounded-full text-sm sm:text-base font-extrabold text-[#080808] transition-transform duration-300 group-hover:scale-105"
+                    style={{
+                      background: `linear-gradient(135deg, ${artist.primary}, ${artist.secondary})`,
+                      boxShadow: `0 8px 24px ${artist.glow}`,
+                    }}
+                  >
+                    {artistMonogram(artist.name)}
+                  </div>
+                  <span className="text-xs sm:text-[13px] font-semibold text-[#F5F5F0] group-hover:text-[#C8F04B] transition-colors truncate max-w-full px-1">
+                    {artist.name}
+                  </span>
+                  {genreLabel && (
+                    <span className="mt-1 text-[9px] font-medium tracking-wider uppercase px-2 py-0.5 rounded-full bg-white/[0.04] text-[#8E8E88] group-hover:text-[#D8D8D0] group-hover:bg-white/[0.08] transition-colors truncate max-w-full">
+                      {genreLabel}
+                    </span>
+                  )}
+                </motion.button>
+              );
+            })}
           </div>
         </section>
       )}

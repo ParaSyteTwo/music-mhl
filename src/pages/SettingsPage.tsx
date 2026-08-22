@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Settings, Folder, RefreshCw, CheckCircle2, FolderOpen, X, Music2 } from 'lucide-react';
+import { Settings, Folder, RefreshCw, CheckCircle2, FolderOpen, X, Music2, ChevronDown, ChevronRight } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useMusicStore } from '@/store/musicStore';
 import { useI18n } from '@/lib/useI18n';
@@ -11,6 +11,39 @@ import { useAppUpdateStore } from '@/store/appUpdateStore';
 import { getRemainingSafetyDays } from '@/lib/appUpdatePolicy';
 
 const isAndroid = Capacitor.getPlatform() === 'android';
+
+function ToggleSwitch({
+  checked,
+  onChange,
+  disabled,
+  label,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  disabled?: boolean;
+  label?: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-label={label}
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+        checked ? 'bg-[#C8F04B]' : 'bg-white/15'
+      } ${disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+    >
+      <span
+        aria-hidden="true"
+        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full shadow-lg ring-0 transition duration-200 ease-in-out ${
+          checked ? 'translate-x-5 bg-[#080808]' : 'translate-x-0 bg-[#C8C8C0]'
+        }`}
+      />
+    </button>
+  );
+}
 
 export default function SettingsPage() {
   const { t } = useI18n();
@@ -180,39 +213,37 @@ export default function SettingsPage() {
 
       {/* Búsqueda — toggle anime (off por default) */}
       <section className="mb-8">
-        <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">{t('animeToggleTitle')}</h2>
-        <div className="p-4 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)]">
-          <label className="flex items-start gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={animeSearchEnabled}
-              onChange={(e) => setAnimeSearchEnabled(e.target.checked)}
-              className="mt-0.5"
-            />
-            <div>
-              <p className="text-sm text-[#F5F5F0]">{t('animeToggleTitle')}</p>
-              <p className="text-xs text-[#666660] mt-0.5">{t('animeToggleDescription')}</p>
+        <h2 className="text-xs font-mono uppercase tracking-widest text-[#9E9E98] mb-3">{t('animeToggleTitle')}</h2>
+        <div className="p-4 rounded-2xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] hover:border-[rgba(255,255,255,0.1)] transition-colors">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-[#F5F5F0]">{t('animeToggleTitle')}</p>
+              <p className="text-xs text-[#9E9E98] mt-0.5">{t('animeToggleDescription')}</p>
             </div>
-          </label>
+            <ToggleSwitch
+              checked={animeSearchEnabled}
+              onChange={setAnimeSearchEnabled}
+              label={t('animeToggleTitle')}
+            />
+          </div>
         </div>
       </section>
 
       {/* Descarga automática */}
       <section className="mb-8">
-        <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">{t('autoDownload')}</h2>
-        <div className="p-4 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)]">
-          <label className="flex items-start gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={autoDownload}
-              onChange={(e) => setAutoDownload(e.target.checked)}
-              className="mt-0.5"
-            />
-            <div>
-              <p className="text-sm text-[#F5F5F0]">{t('autoDownload')}</p>
-              <p className="text-xs text-[#666660] mt-0.5">{t('autoDownloadDesc')}</p>
+        <h2 className="text-xs font-mono uppercase tracking-widest text-[#9E9E98] mb-3">{t('autoDownload')}</h2>
+        <div className="p-4 rounded-2xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] hover:border-[rgba(255,255,255,0.1)] transition-colors">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-[#F5F5F0]">{t('autoDownload')}</p>
+              <p className="text-xs text-[#9E9E98] mt-0.5">{t('autoDownloadDesc')}</p>
             </div>
-          </label>
+            <ToggleSwitch
+              checked={autoDownload}
+              onChange={setAutoDownload}
+              label={t('autoDownload')}
+            />
+          </div>
         </div>
       </section>
 
@@ -220,41 +251,53 @@ export default function SettingsPage() {
       <section className="mb-8">
         <button
           onClick={() => setShowAdvanced(!showAdvanced)}
-          className="flex items-center gap-2 text-xs font-mono uppercase tracking-widest text-[#8A8A8A] hover:text-[#C8F04B] transition-colors mb-3"
+          className="flex items-center gap-2 text-xs font-mono uppercase tracking-widest text-[#9E9E98] hover:text-[#C8F04B] transition-colors mb-3 group"
         >
-          {showAdvanced ? '▼' : '▶'} {t('advancedOptions')}
+          {showAdvanced ? (
+            <ChevronDown className="w-4 h-4 text-[#C8F04B]" />
+          ) : (
+            <ChevronRight className="w-4 h-4 text-[#9E9E98] group-hover:text-[#C8F04B]" />
+          )}
+          <span>{t('advancedOptions')}</span>
         </button>
         {showAdvanced && (
           <div className="space-y-8 animate-in slide-in-from-top-2 fade-in duration-200">
             <section>
-              <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">{t('candidateResolutionSettings')}</h2>
-              <div className="p-4 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] space-y-4">
-                <label className="flex items-start gap-3 cursor-pointer">
-                  <input type="checkbox" checked={autoCandidateResolution} onChange={(e) => setAutoCandidateResolution(e.target.checked)} className="mt-0.5" />
-                  <div><p className="text-sm text-[#F5F5F0]">{t('autoCandidateResolution')}</p><p className="text-xs text-[#666660]">{t('autoCandidateResolutionHelp')}</p></div>
-                </label>
-                <div className="grid grid-cols-2 gap-2">
+              <h2 className="text-xs font-mono uppercase tracking-widest text-[#9E9E98] mb-3">{t('candidateResolutionSettings')}</h2>
+              <div className="p-4 rounded-2xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] space-y-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-[#F5F5F0]">{t('autoCandidateResolution')}</p>
+                    <p className="text-xs text-[#9E9E98] mt-0.5">{t('autoCandidateResolutionHelp')}</p>
+                  </div>
+                  <ToggleSwitch
+                    checked={autoCandidateResolution}
+                    onChange={setAutoCandidateResolution}
+                    label={t('autoCandidateResolution')}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/[0.06]">
                   {(['adaptive', 'economy'] as const).map((profile) => (
-                    <button key={profile} type="button" onClick={() => setResolutionProfile(profile)} className={`px-3 py-2 rounded-lg text-xs font-semibold ${resolutionProfile === profile ? 'bg-[#C8F04B] text-[#18181A]' : 'bg-[rgba(255,255,255,0.04)] text-[#B0B0B0]'}`}>
+                    <button key={profile} type="button" onClick={() => setResolutionProfile(profile)} className={`px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${resolutionProfile === profile ? 'bg-[#C8F04B] text-[#18181A]' : 'bg-[rgba(255,255,255,0.04)] text-[#B0B0B0] hover:text-[#F5F5F0]'}`}>
                       {t(profile === 'adaptive' ? 'resolutionAdaptive' : 'resolutionEconomy')}
                     </button>
                   ))}
                 </div>
                 <div>
-                  <p className="text-xs text-[#777] mb-2">{t('cellularResolutionPolicy')}</p>
+                  <p className="text-xs text-[#9E9E98] mb-2">{t('cellularResolutionPolicy')}</p>
                   <div className="grid grid-cols-3 gap-2">
                     {(['off', 'light', 'full'] as const).map((policy) => (
-                      <button key={policy} type="button" onClick={() => setCellularResolutionPolicy(policy)} className={`px-2 py-2 rounded-lg text-xs ${cellularResolutionPolicy === policy ? 'bg-[#C8F04B] text-[#18181A]' : 'bg-[rgba(255,255,255,0.04)] text-[#B0B0B0]'}`}>
+                      <button key={policy} type="button" onClick={() => setCellularResolutionPolicy(policy)} className={`px-2 py-2 rounded-xl text-xs font-medium transition-colors ${cellularResolutionPolicy === policy ? 'bg-[#C8F04B] text-[#18181A]' : 'bg-[rgba(255,255,255,0.04)] text-[#B0B0B0] hover:text-[#F5F5F0]'}`}>
                         {t(`resolutionCellular${policy[0].toUpperCase()}${policy.slice(1)}`)}
                       </button>
                     ))}
                   </div>
                 </div>
                 <div>
-                  <p className="text-xs text-[#777] mb-2">{t('editionPreference')}</p>
+                  <p className="text-xs text-[#9E9E98] mb-2">{t('editionPreference')}</p>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     {(['catalog', 'explicit', 'clean', 'ask'] as const).map((preference) => (
-                      <button key={preference} type="button" onClick={() => setEditionPreference(preference)} className={`px-2 py-2 rounded-lg text-xs ${editionPreference === preference ? 'bg-[#C8F04B] text-[#18181A]' : 'bg-[rgba(255,255,255,0.04)] text-[#B0B0B0]'}`}>
+                      <button key={preference} type="button" onClick={() => setEditionPreference(preference)} className={`px-2 py-2 rounded-xl text-xs font-medium transition-colors ${editionPreference === preference ? 'bg-[#C8F04B] text-[#18181A]' : 'bg-[rgba(255,255,255,0.04)] text-[#B0B0B0] hover:text-[#F5F5F0]'}`}>
                         {t(`editionPreference${preference[0].toUpperCase()}${preference.slice(1)}`)}
                       </button>
                     ))}
@@ -264,36 +307,36 @@ export default function SettingsPage() {
             </section>
 
             <section>
-              <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">Detalle de Letras (Avanzado)</h2>
-              <div className="p-4 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] space-y-3">
-                <label className="flex items-start gap-3 cursor-pointer">
-                  <input type="checkbox" checked={lyricOriginal} onChange={e => setLyricOriginal(e.target.checked)} className="mt-0.5" />
-                  <div>
-                    <p className="text-sm text-[#F5F5F0]">{t('lyricsOriginal')}</p>
-                    <p className="text-xs text-[#666660] mt-0.5">{t('lyricsOriginalHelp')}</p>
+              <h2 className="text-xs font-mono uppercase tracking-widest text-[#9E9E98] mb-3">Detalle de Letras (Avanzado)</h2>
+              <div className="p-4 rounded-2xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] space-y-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-[#F5F5F0]">{t('lyricsOriginal')}</p>
+                    <p className="text-xs text-[#9E9E98] mt-0.5">{t('lyricsOriginalHelp')}</p>
                   </div>
-                </label>
-                <label className="flex items-start gap-3 cursor-pointer">
-                  <input type="checkbox" checked={lyricRomanization} onChange={e => setLyricRomanization(e.target.checked)} className="mt-0.5" />
-                  <div>
-                    <p className="text-sm text-[#F5F5F0]">{t('lyricsRomanization')}</p>
-                    <p className="text-xs text-[#666660] mt-0.5">{t('lyricsRomanizationHelp')}</p>
+                  <ToggleSwitch checked={lyricOriginal} onChange={setLyricOriginal} label={t('lyricsOriginal')} />
+                </div>
+                <div className="flex items-center justify-between gap-4 pt-2 border-t border-white/[0.06]">
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-[#F5F5F0]">{t('lyricsRomanization')}</p>
+                    <p className="text-xs text-[#9E9E98] mt-0.5">{t('lyricsRomanizationHelp')}</p>
                   </div>
-                </label>
-                <label className="flex items-start gap-3 cursor-pointer">
-                  <input type="checkbox" checked={lyricLatinOnly} onChange={e => setLyricLatinOnly(e.target.checked)} className="mt-0.5" />
-                  <div>
-                    <p className="text-sm text-[#F5F5F0]">{t('lyricsLatinOnly')}</p>
-                    <p className="text-xs text-[#666660] mt-0.5">{t('lyricsLatinOnlyHelp')}</p>
+                  <ToggleSwitch checked={lyricRomanization} onChange={setLyricRomanization} label={t('lyricsRomanization')} />
+                </div>
+                <div className="flex items-center justify-between gap-4 pt-2 border-t border-white/[0.06]">
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-[#F5F5F0]">{t('lyricsLatinOnly')}</p>
+                    <p className="text-xs text-[#9E9E98] mt-0.5">{t('lyricsLatinOnlyHelp')}</p>
                   </div>
-                </label>
-                <label className="flex items-start gap-3 cursor-pointer">
-                  <input type="checkbox" checked={lyricTranslation} onChange={e => setLyricTranslation(e.target.checked)} className="mt-0.5" />
-                  <div>
-                    <p className="text-sm text-[#F5F5F0]">{t('lyricsTranslation')}</p>
-                    <p className="text-xs text-[#666660] mt-0.5">{t('lyricsTranslationHelp')}</p>
+                  <ToggleSwitch checked={lyricLatinOnly} onChange={setLyricLatinOnly} label={t('lyricsLatinOnly')} />
+                </div>
+                <div className="flex items-center justify-between gap-4 pt-2 border-t border-white/[0.06]">
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-[#F5F5F0]">{t('lyricsTranslation')}</p>
+                    <p className="text-xs text-[#9E9E98] mt-0.5">{t('lyricsTranslationHelp')}</p>
                   </div>
-                </label>
+                  <ToggleSwitch checked={lyricTranslation} onChange={setLyricTranslation} label={t('lyricsTranslation')} />
+                </div>
               </div>
             </section>
 
