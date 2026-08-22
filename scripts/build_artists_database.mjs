@@ -1,0 +1,368 @@
+import fs from 'fs';
+import path from 'path';
+
+const GENRE_DATA = {
+  reggaeton: [
+    'Bad Bunny', 'Feid', 'Karol G', 'J Balvin', 'Daddy Yankee', 'Rauw Alejandro', 'Anuel AA', 'Myke Towers',
+    'Jhayco', 'Maluma', 'Ozuna', 'Nicky Jam', 'Sech', 'Arcángel', 'Don Omar', 'Farruko',
+    'Young Miko', 'Mora', 'Tego Calderón', 'Wisin & Yandel', 'Chencho Corleone', 'Eladio Carrión', 'Bryant Myers', 'De La Ghetto',
+    'Zion & Lennox', 'Lunay', 'Nio Garcia', 'Jowell & Randy', 'Natti Natasha', 'Becky G', 'Dalex', 'Lenny Tavárez',
+    'Justin Quiles', 'Guaynaa', 'Cris Mj', 'Polimá Westcoast', 'Yandel', 'Wisin', 'Alexis & Fido', 'Plan B',
+    'Tito El Bambino', 'Ivy Queen', 'Cosculluela', 'Kendo Kaponi', 'Darell', 'Miky Woodz', 'Noriel', 'Lary Over',
+    'Amenazzy', 'Lyanno', 'Alex Rose', 'Casper Mágico', 'Jay Wheeler', 'Luar La L', 'Saiko', 'Omar Montes',
+    'Rels B', 'JC Reyes', 'Morad', 'Beny Jr', 'RVFV', 'Maikel Delacalle', 'Tiago PZK', 'FMK',
+    'Rusherking', 'Khea', 'Lit Killah', 'Cazzu', 'Nicki Nicole', 'Emilia', 'Maria Becerra', 'Callejero Fino',
+    'L-Gante', 'Cris Mj', 'Jordan 23', 'Standly', 'Marcianeke', 'FloyyMenor', 'Jere Klein', 'Pablo Chill-E',
+    'Gino Mella', 'King Savagge', 'Galee Galee', 'El Jordan 23', 'Baby Rasta & Gringo', 'Trebol Clan', 'Khriz & Angel', 'Voltio',
+    'Héctor El Father', 'Magnate & Valentino', 'Tony Dize', 'Ken-Y', 'Rakim & Ken-Y', 'Franco El Gorila', 'Nova & Jory', 'Gotay El Autentiko',
+    'Pusho', 'Almighty', 'Anonimus', 'Juanka', 'Lyan', 'Brray', 'Juicy J', 'Jon Z',
+    'Ele A El Dominio', 'Lito Kirino', 'Messiah', 'Charly & Johayron', 'Bebeshito', 'Wampi', 'Wow Popy', 'Fixty Ordara & Ja Rulay'
+  ],
+  latin: [
+    'Shakira', 'Rosalía', 'C. Tangana', 'Quevedo', 'Bizarrap', 'Duki', 'Trueno', 'Paulo Londra',
+    'Nathy Peluso', 'Mon Laferte', 'Natalia Lafourcade', 'Juan Luis Guerra', 'Carlos Vives', 'Jorge Drexler', 'Bomba Estéreo', 'Zoé',
+    'Soda Stereo', 'Caifanes', 'Julieta Venegas', 'Luis Miguel', 'Ricky Martin', 'Enrique Iglesias', 'Camilo', 'Sebastian Yatra',
+    'Reik', 'Morat', 'Calle 13', 'Residente', 'Gustavo Cerati', 'Charly García', 'Andrés Calamaro', 'Los Prisioneros',
+    'Enanitos Verdes', 'Café Tacvba', 'Maná', 'Los Fabulosos Cadillacs', 'Aventura', 'Romeo Santos', 'Prince Royce', 'Marc Anthony',
+    'Celia Cruz', 'Héctor Lavoe', 'Rubén Blades', 'Willie Colón', 'Cheo Feliciano', 'Ismael Rivera', 'Gilberto Santa Rosa', 'Victor Manuelle',
+    'La India', 'Jerry Rivera', 'Frankie Ruiz', 'Eddie Santiago', 'Grupo Niche', 'Joe Arroyo', 'Guayacán Orquesta', 'El Gran Combo de Puerto Rico',
+    'Sonora Ponceña', 'Fania All Stars', 'Buena Vista Social Club', 'Compay Segundo', 'Ibrahim Ferrer', 'Silvio Rodríguez', 'Pablo Milanés', 'Joaquín Sabina',
+    'Joan Manuel Serrat', 'Alejandro Sanz', 'Miguel Bosé', 'Pablo Alborán', 'David Bisbal', 'Melendi', 'Estopa', 'Fito & Fitipaldis',
+    'Leiva', 'Vetusta Morla', 'Love of Lesbian', 'Izal', 'Lori Meyers', 'Sen Senra', 'Guitarricadelafuente', 'Rigoberta Bandini',
+    'Aitana', 'Lola Indigo', 'Belén Aguilera', 'Ana Mena', 'Bad Gyal', 'Ptazeta', 'La Zowi', 'Villano Antillano',
+    'Taichu', 'Saramalacara', 'Six Sex', 'Lara91k', 'BB Asul', 'Catriel y Paco Amoroso', 'Dillom', 'Milo J',
+    'YSY A', 'Neo Pistea', 'Bhavi', 'Seven Kayne', 'Lucho SSJ', 'Acru', 'Wos', 'Conociendo Rusia',
+    'Bandalos Chinos', 'Él Mató a un Policía Motorizado', 'Usted Señalemelo', 'Cuarteto de Nos', 'No Te Va Gustar', 'La Vela Puerca', 'Los Auténticos Decadentes', 'Los Pericos'
+  ],
+  regional: [
+    'Peso Pluma', 'Natanael Cano', 'Fuerza Regida', 'Junior H', 'Carín León', 'Christian Nodal', 'Grupo Frontera', 'Eslabon Armado',
+    'Tito Double P', 'Luis R Conriquez', 'Banda MS', 'Calibre 50', 'Los Ángeles Azules', 'Intocable', 'Jenni Rivera', 'Vicente Fernández',
+    'Los Tigres del Norte', 'La Arrolladora Banda El Limón', 'Joan Sebastian', 'Chalino Sánchez', 'Ariel Camacho', 'Virlán García', 'Lenin Ramírez', 'Julión Álvarez',
+    'Gerardo Ortiz', 'Edén Muñoz', 'Grupo Firme', 'Los Tucanes de Tijuana', 'Banda El Recodo', 'Bronco', 'Gabito Ballesteros', 'Chino Pacas',
+    'Xavi', 'Oscar Maydon', 'Calle 24', 'Herencia de Grandes', 'Marca MP', 'Marca Registrada', 'T3R Elemento', 'Los Plebes del Rancho de Ariel Camacho',
+    'Ulices Chaidez', 'Alta Consigna', 'Cornelio Vega y Su Dinastía', 'Crecer German', 'Javier Rosas', 'Alfredito Olivas', 'El Fantasma', 'Los Dos Carnales',
+    'Enigma Norteño', 'Codiciado', 'Grupo Arriesgado', 'La Adictiva', 'Banda Los Recoditos', 'Banda Carnaval', 'Banda Los Sebastianes', 'La Maquinaria Norteña',
+    'Los Rieleros del Norte', 'Conjunto Primavera', 'Duelo', 'Pesado', 'La Fiera de Ojinaga', 'Voz de Mando', 'Regulo Caro', 'Noel Torres',
+    'Remmy Valenzuela', 'Roberto Tapia', 'Larry Hernandez', 'El Komander', 'Saúl El Jaguar', 'Fidel Rueda', 'El Bebeto', 'Chayín Rubio'
+  ],
+  pop: [
+    'Taylor Swift', 'Dua Lipa', 'Billie Eilish', 'Ariana Grande', 'Harry Styles', 'Miley Cyrus', 'Olivia Rodrigo', 'Justin Bieber',
+    'Shawn Mendes', 'Selena Gomez', 'Ed Sheeran', 'Adele', 'Sabrina Carpenter', 'Charli XCX', 'Gracie Abrams', 'Tate McRae',
+    'Benson Boone', 'Chappell Roan', 'Katy Perry', 'Lady Gaga', 'Rihanna', 'Bruno Mars', 'Maroon 5', 'Coldplay',
+    'The Weeknd', 'Doja Cat', 'Charlie Puth', 'Camila Cabello', 'Halsey', 'Sam Smith', 'Demi Lovato', 'Meghan Trainor',
+    'P!nk', 'Kelly Clarkson', 'Sia', 'Avril Lavigne', 'Britney Spears', 'Madonna', 'Michael Jackson', 'Justin Timberlake',
+    'Christina Aguilera', 'Kylie Minogue', 'Robbie Williams', 'Gwen Stefani', 'Fergie', 'Nelly Furtado', 'Shakira', 'Carly Rae Jepsen',
+    'Lorde', 'Marina', 'Ellie Goulding', 'Jessie J', 'Rita Ora', 'Ava Max', 'Bebe Rexha', 'Zara Larsson',
+    'Tove Lo', 'Sigrid', 'Aurora', 'Troye Sivan', 'Conan Gray', 'Lauv', 'Jeremy Zucker', 'Alec Benjamin',
+    'Alexander 23', 'Ruel', 'Dean Lewis', 'Lewis Capaldi', 'James Arthur', 'Calum Scott', 'Tom Odell', 'George Ezra',
+    'One Direction', '5 Seconds of Summer', 'The Jonas Brothers', 'Backstreet Boys', 'NSYNC', 'Take That', 'Westlife', 'Boyzone',
+    'Little Mix', 'Fifth Harmony', 'Spice Girls', 'Destinys Child', 'The Pussycat Dolls', 'Girls Aloud', 'Sugababes', 'All Saints'
+  ],
+  hiphop: [
+    'Drake', 'Kendrick Lamar', 'Travis Scott', 'Post Malone', 'Kanye West', 'Lil Uzi Vert', 'Playboi Carti', 'Future',
+    'Metro Boomin', 'Tyler The Creator', 'J. Cole', 'Juice WRLD', 'Lil Nas X', 'Jack Harlow', 'Gunna', 'Lil Baby',
+    'Doechii', 'Megan Thee Stallion', 'Eminem', 'Nicki Minaj', 'Cardi B', '21 Savage', 'A$AP Rocky', 'Mac Miller',
+    'XXXTENTACION', 'Pop Smoke', 'Migos', 'Quavo', 'Offset', 'Takeoff', 'DaBaby', 'Polo G',
+    'Lil Tjay', 'NLE Choppa', 'Trippie Redd', 'Ski Mask The Slump God', 'JID', 'Denzel Curry', 'Snoop Dogg', 'Dr. Dre',
+    '50 Cent', 'Jay-Z', 'Lil Wayne', 'Nas', 'Tupac', 'The Notorious B.I.G.', 'Ice Cube', 'Eazy-E',
+    'LL Cool J', 'Run-D.M.C.', 'Public Enemy', 'Wu-Tang Clan', 'RZA', 'Method Man', 'Raekwon', 'Ghostface Killah',
+    'GZA', 'Redman', 'Busta Rhymes', 'DMX', 'Ja Rule', 'Fat Joe', 'Big Pun', 'Terror Squad',
+    'Outkast', 'Andre 3000', 'Big Boi', 'Ludacris', 'T.I.', 'Young Jeezy', 'Gucci Mane', 'Waka Flocka Flame',
+    'Rick Ross', 'Meek Mill', 'Wale', 'Big Sean', 'Kid Cudi', 'Lupe Fiasco', 'Common', 'Mos Def',
+    'Talib Kweli', 'Black Thought', 'The Roots', 'A Tribe Called Quest', 'Q-Tip', 'De La Soul', 'Phife Dawg', 'MF DOOM',
+    'Earl Sweatshirt', 'Vince Staples', 'Joey Bada$$', 'Action Bronson', 'Danny Brown', 'Freddie Gibbs', 'Pusha T', 'Clipse',
+    'ScHoolboy Q', 'Ab-Soul', 'Jay Rock', 'Isaiah Rashad', 'Cordae', 'Baby Keem', 'Central Cee', 'Dave',
+    'Stormzy', 'Skepta', 'AJ Tracey', 'Headie One', 'J Hus', 'Little Simz', 'Aitch', 'K-Trap'
+  ],
+  rnb: [
+    'The Weeknd', 'SZA', 'Beyoncé', 'Rihanna', 'Usher', 'Bruno Mars', 'H.E.R.', 'Jhené Aiko',
+    'Summer Walker', 'Giveon', 'Daniel Caesar', 'Brent Faiyaz', 'Victoria Monét', 'Frank Ocean', 'Steve Lacy', 'Tinashe',
+    'Coco Jones', 'Leon Bridges', 'Chris Brown', 'Trey Songz', 'Bryson Tiller', 'PartyNextDoor', 'Kehlani', 'Ella Mai',
+    'Khalid', 'Jorja Smith', 'Kali Uchis', 'Snoh Aalegra', 'Anderson .Paak', 'Miguel', 'John Legend', 'Alicia Keys',
+    'Mariah Carey', 'Boyz II Men', 'TLC', 'Aaliyah', 'Erykah Badu', 'Lauryn Hill', 'D\'Angelo', 'Maxwell',
+    'Anthony Hamilton', 'Musiq Soulchild', 'Bilal', 'Jill Scott', 'India.Arie', 'Angie Stone', 'Macy Gray', 'Solange',
+    'Chloe x Halle', 'Ari Lennox', 'SiR', 'Lucky Daye', 'Masego', 'Kiana Ledé', 'Mahalia', 'Cleo Sol',
+    'Raveena', 'Joyce Wrice', 'Samm Henshaw', 'Sampha', 'Syd', 'Ravyn Lenae', 'Amber Mark', 'UMI'
+  ],
+  rock: [
+    'Arctic Monkeys', 'Coldplay', 'Imagine Dragons', 'Twenty One Pilots', 'Gorillaz', 'Radiohead', 'The Strokes', 'Foo Fighters',
+    'Muse', 'Green Day', 'Red Hot Chili Peppers', 'Pearl Jam', 'Linkin Park', 'Paramore', 'Bring Me The Horizon', 'Maneskin',
+    'Kings of Leon', 'The Killers', 'My Chemical Romance', 'Fall Out Boy', 'Panic! At The Disco', 'Blink-182', 'Sum 41', 'The Offspring',
+    'Guns N Roses', 'Aerosmith', 'Bon Jovi', 'Def Leppard', 'Mötley Crüe', 'Kiss', 'Alice Cooper', 'AC/DC',
+    'Scorpions', 'The Who', 'The Kinks', 'The Clash', 'Ramones', 'Sex Pistols', 'U2', 'R.E.M.',
+    'The Cure', 'The Smiths', 'Depeche Mode', 'New Order', 'Oasis', 'Blur', 'Pulp', 'The Verve',
+    'Kasabian', 'Franz Ferdinand', 'Bloc Party', 'Foals', 'Royal Blood', 'Nothing But Thieves', 'Catfish and the Bottlemen', 'Sam Fender',
+    'Yungblud', 'Fontaines D.C.', 'Idles', 'The 1975', 'Inhaler', 'The Reytons', 'Wolf Alice', 'Beabadoobee'
+  ],
+  alternative: [
+    'Tame Impala', 'Lana Del Rey', 'Phoebe Bridgers', 'Mitski', 'Lorde', 'Hozier', 'Cigarettes After Sex', 'Beach House',
+    'Mac DeMarco', 'The 1975', 'Vampire Weekend', 'Florence + The Machine', 'Bon Iver', 'FKA twigs', 'St. Vincent', 'Clairo',
+    'Wallows', 'Japanese Breakfast', 'Boygenius', 'Julian Casablancas', 'The Neighbourhood', 'The Black Keys', 'The White Stripes', 'Cage The Elephant',
+    'Foster The People', 'MGMT', 'Empire of the Sun', 'Phantogram', 'Chvrches', 'Glass Animals', 'Alt-J', 'Modest Mouse',
+    'Death Cab for Cutie', 'The Shins', 'Interpol', 'Joy Division', 'Arcade Fire', 'Phoenix', 'Two Door Cinema Club', 'Passion Pit',
+    'The Postal Service', 'Sufjan Stevens', 'Iron & Wine', 'Fleet Foxes', 'Father John Misty', 'The National', 'Big Thief', 'Angel Olsen',
+    'Sharon Van Etten', 'Weyes Blood', 'Faye Webster', 'Soccer Mommy', 'Snail Mail', 'Alvvays', 'Men I Trust', 'Crumb'
+  ],
+  metal: [
+    'Metallica', 'System Of A Down', 'Slipknot', 'Deftones', 'Iron Maiden', 'Black Sabbath', 'Megadeth', 'Judas Priest',
+    'Rammstein', 'Korn', 'Avenged Sevenfold', 'Tool', 'Pantera', 'Ghost', 'Sleep Token', 'Spiritbox',
+    'Gojira', 'Architects', 'Slayer', 'Anthrax', 'Motorhead', 'Dio', 'Ozzy Osbourne', 'Marilyn Manson',
+    'Rob Zombie', 'Nine Inch Nails', 'Disturbed', 'Godsmack', 'Mudvayne', 'Static-X', 'Fear Factory', 'Meshuggah',
+    'Opeth', 'Mastodon', 'Trivium', 'Killswitch Engage', 'Bullet For My Valentine', 'As I Lay Dying', 'Parkway Drive', 'Lamb of God',
+    'Sepultura', 'Soulfly', 'In Flames', 'Dark Tranquillity', 'Children of Bodom', 'Nightwish', 'Epica', 'Within Temptation',
+    'Lacuna Coil', 'Evanescence', 'Flyleaf', 'Halestorm', 'In This Moment', 'Jinjer', 'Babymetal', 'Electric Callboy',
+    'Bad Omens', 'Motionless In White', 'Ice Nine Kills', 'Falling In Reverse', 'Pierce The Veil', 'Sleeping With Sirens', 'Asking Alexandria', 'Attack Attack!'
+  ],
+  electronic: [
+    'Daft Punk', 'David Guetta', 'Calvin Harris', 'Tiësto', 'Martin Garrix', 'Skrillex', 'deadmau5', 'Avicii',
+    'Zedd', 'Diplo', 'The Chainsmokers', 'Kygo', 'Alan Walker', 'Illenium', 'Fred again..', 'Flume',
+    'ODESZA', 'Disclosure', 'Marshmello', 'DJ Snake', 'Major Lazer', 'Afrojack', 'Alesso', 'Armin van Buuren',
+    'Hardwell', 'Steve Aoki', 'Kaskade', 'Galantis', 'The Chemical Brothers', 'Justice', 'Pendulum', 'The Prodigy',
+    'Fatboy Slim', 'Swedish House Mafia', 'Peggy Gou', 'BICEP', 'Four Tet', 'Aphex Twin', 'Fisher', 'Dom Dolla',
+    'John Summit', 'Chris Lake', 'CamelPhat', 'MEDUZA', 'Gorgon City', 'Duke Dumont', 'Jax Jones', 'Oliver Heldens',
+    'Don Diablo', 'Nicky Romero', 'KSHMR', 'W&W', 'Blasterjaxx', 'Dimitri Vegas & Like Mike', 'Timmy Trumpet', 'Carnage',
+    'Subtronics', 'Excision', 'SVDDEN DEATH', 'Rezz', 'Zomboy', 'Virtual Riot', 'Slander', 'NGHTMRE'
+  ],
+  kpop: [
+    'BTS', 'BLACKPINK', 'Stray Kids', 'NewJeans', 'IVE', 'NCT 127', 'EXO', 'TWICE',
+    'ITZY', 'aespa', 'Red Velvet', 'SHINee', 'SEVENTEEN', 'ENHYPEN', 'TXT', 'ATEEZ',
+    'LE SSERAFIM', 'NMIXX', '(G)I-DLE', 'ILLIT', 'BABYMONSTER', 'RIIZE', 'Kiss of Life', 'STAYC',
+    'NCT DREAM', 'WayV', 'MAMAMOO', 'Oh My Girl', 'WJSN', 'LOONA', 'Dreamcatcher', 'Monsta X',
+    'GOT7', 'iKON', 'WINNER', 'TREASURE', 'BOYNEXTDOOR', 'TWS', 'IU', 'Taeyeon',
+    'Sunmi', 'Chungha', 'Somi', 'Zico', 'Jay Park', 'Agust D', 'RM', 'J-Hope',
+    'Jimin', 'V', 'Jung Kook', 'Jin', 'JISOO', 'JENNIE', 'ROSÉ', 'LISA',
+    'G-Dragon', 'BIGBANG', '2NE1', 'Super Junior', 'Girls Generation', 'TVXQ!', 'Wonder Girls', 'KARA'
+  ],
+  jpop: [
+    'Ado', 'YOASOBI', 'LiSA', 'Kenshi Yonezu', 'Tatsuya Kitani', 'Eve', 'Creepy Nuts', 'King Gnu',
+    'Official HIGE DANdism', 'Mrs. GREEN APPLE', 'Fujii Kaze', 'Atarashii Gakko!', 'Aimyon', 'Vaundy', 'milet', 'ReoNa',
+    'Hikaru Utada', 'Perfume', 'RADWIMPS', 'ONE OK ROCK', 'BABYMETAL', 'L’Arc-en-Ciel', 'Asian Kung-Fu Generation', 'TK from Ling tosite sigure',
+    'Yorushika', 'ZUTOMAYO', 'KANA-BOON', 'Aimer', 'UVERworld', 'SPYAIR', 'FLOW', 'Miyavi',
+    'GReeeeN', 'Back Number', 'BUMP OF CHICKEN', 'Hoshino Gen', 'Ayumi Hamasaki', 'Namie Amuro', 'Koda Kumi', 'Kyary Pamyu Pamyu',
+    'Wednesday Campanella', 'Daoko', 'Reol', 'Chiai Fujikawa', 'Minami', 'Sayuri', 'Mika Nakashima', 'Yui',
+    'LiSA', 'ClariS', 'EGOIST', 'Supercell', 'SawanoHiroyuki[nZk]', 'Myth & Roid', 'Granrodeo', 'JAM Project'
+  ],
+  classic: [
+    'The Beatles', 'Queen', 'Pink Floyd', 'Led Zeppelin', 'Nirvana', 'Michael Jackson', 'Prince', 'Whitney Houston',
+    'Stevie Wonder', 'The Rolling Stones', 'David Bowie', 'Fleetwood Mac', 'Eagles', 'Elton John', 'Bob Dylan', 'Bruce Springsteen',
+    'Elvis Presley', 'Frank Sinatra', 'Aretha Franklin', 'Ray Charles', 'James Brown', 'Marvin Gaye', 'Chuck Berry', 'Little Richard',
+    'Buddy Holly', 'Johnny Cash', 'Hank Williams', 'Patsy Cline', 'Willie Nelson', 'Dolly Parton', 'Kenny Rogers', 'John Denver',
+    'Simon & Garfunkel', 'The Beach Boys', 'The Doors', 'Jimi Hendrix', 'Janis Joplin', 'Creedence Clearwater Revival', 'The Mamas & The Papas', 'The Byrds',
+    'The Monkees', 'The Animals', 'Jefferson Airplane', 'Crosby, Stills, Nash & Young', 'Neil Young', 'Joni Mitchell', 'Carole King', 'James Taylor'
+  ],
+  jazz_soul: [
+    'Miles Davis', 'John Coltrane', 'Nina Simone', 'Ella Fitzgerald', 'Louis Armstrong', 'Duke Ellington', 'Charlie Parker', 'Billie Holiday',
+    'Thelonious Monk', 'Dave Brubeck', 'Herbie Hancock', 'Charles Mingus', 'Chet Baker', 'Stan Getz', 'Nat King Cole', 'Sam Cooke',
+    'Otis Redding', 'Al Green', 'Curtis Mayfield', 'Isaac Hayes', 'Sade', 'Amy Winehouse', 'Norah Jones', 'Diana Krall',
+    'Michael Bublé', 'Gregory Porter', 'Kamasi Washington', 'Thundercat', 'Hiatus Kaiyote', 'Badbadnotgood', 'Esperanza Spalding', 'Robert Glasper',
+    'Snarky Puppy', 'Roy Hargrove', 'Christian McBride', 'Brad Mehldau', 'Bill Evans', 'Wynton Marsalis', 'Sarah Vaughan', 'Dinah Washington'
+  ],
+  afrobeats: [
+    'Burna Boy', 'Wizkid', 'Davido', 'Rema', 'Asake', 'Tems', 'Ayra Starr', 'Omah Lay',
+    'Fireboy DML', 'Ckay', 'Olamide', 'Tiwa Savage', 'Mr Eazi', 'Tekno', 'P-Square', 'Flavour',
+    'Phyno', 'Yemi Alade', 'Sarkodie', 'Stonebwoy', 'Shatta Wale', 'Fela Kuti', 'King Sunny Ade', "Youssou N'Dour",
+    'Angelique Kidjo', 'Kizz Daniel', 'Joeboy', 'Adekunle Gold', 'Victony', 'BNXN', 'Ruger', 'Shallipopi',
+    'Odumodublvck', 'Zlatan', 'Naira Marley', 'Bella Shmurda', 'Seyi Vibez', 'Young Jonn', 'Chike', 'Diamond Platnumz'
+  ],
+  brazilian: [
+    'Anitta', 'Pabllo Vittar', 'Luísa Sonza', 'Ludmilla', 'Ivete Sangalo', 'Marília Mendonça', 'Gusttavo Lima', 'Jorge & Mateus',
+    'Henrique & Juliano', 'Wesley Safadão', 'Alok', 'Vintage Culture', 'MC Kevin o Chris', 'MC Hariel', 'MC Ryan SP', 'Matuê',
+    'L7NNON', 'Filipe Ret', 'Caetano Veloso', 'Gilberto Gil', 'João Gilberto', 'Tom Jobim', 'Elis Regina', 'Gal Costa',
+    'Jorge Ben Jor', 'Tim Maia', 'Djavan', 'Chico Buarque', 'Milton Nascimento', 'Seu Jorge', 'Criolo', 'Emicida',
+    'Baco Exu do Blues', 'Gloria Groove', 'Duda Beat', 'Marina Sena', 'Jão', 'IZA', 'Pedro Sampaio', 'Dennis DJ'
+  ],
+  country: [
+    'Morgan Wallen', 'Luke Combs', 'Zach Bryan', 'Chris Stapleton', 'Carrie Underwood', 'Kane Brown', 'Kacey Musgraves', 'Thomas Rhett',
+    'Blake Shelton', 'Keith Urban', 'Tim McGraw', 'Kenny Chesney', 'Jason Aldean', 'Luke Bryan', 'Florida Georgia Line', 'Dan + Shay',
+    'Maren Morris', 'Carly Pearce', 'Lainey Wilson', 'Bailey Zimmerman', 'Jelly Roll', 'Cody Johnson', 'Jon Pardi', 'Cole Swindell',
+    'Eric Church', 'Miranda Lambert', 'Dierks Bentley', 'Brad Paisley', 'George Strait', 'Alan Jackson', 'Garth Brooks', 'Brooks & Dunn'
+  ],
+  classical: [
+    'Ludwig van Beethoven', 'Wolfgang Amadeus Mozart', 'Johann Sebastian Bach', 'Frédéric Chopin', 'Pyotr Ilyich Tchaikovsky',
+    'Antonio Vivaldi', 'Johannes Brahms', 'Franz Schubert', 'Claude Debussy', 'George Frideric Handel', 'Giuseppe Verdi', 'Giacomo Puccini',
+    'Richard Wagner', 'Sergei Rachmaninoff', 'Franz Liszt', 'Felix Mendelssohn', 'Antonín Dvořák', 'Maurice Ravel', 'Igor Stravinsky',
+    'Gustav Mahler', 'Ennio Morricone', 'Hans Zimmer', 'John Williams', 'Ludovico Einaudi', 'Max Richter', 'Yiruma', 'Ólafur Arnalds'
+  ],
+  arabic: [
+    'Amr Diab', 'Nancy Ajram', 'Elissa', 'Sherine', 'Tamer Hosny', 'Wael Kfoury', 'Majid Al Mohandis', 'Assala Nasri',
+    'Myriam Fares', 'Haifa Wehbe', 'Najwa Karam', 'Ragheb Alama', 'Kadim Al Sahir', 'Hussain Al Jassmi', 'Abdul Majeed Abdullah', 'Rashed Al Majed',
+    'Saad Lamjarred', 'Zouhair Bahaoui', 'Balti', 'Soolking', 'Hamza Namira', 'Mohamed Ramadan', 'Wegz', 'Marwan Pablo',
+    'Marwan Moussa', 'Afroto', 'Cairokee', 'Fairuz', 'Umm Kulthum', 'Abdel Halim Hafez', 'Warda', 'Sabah'
+  ],
+  south_asian: [
+    'A.R. Rahman', 'Arijit Singh', 'Shreya Ghoshal', 'Atif Aslam', 'Neha Kakkar', 'Badshah', 'Diljit Dosanjh', 'Guru Randhawa',
+    'Sidhu Moose Wala', 'AP Dhillon', 'Kishore Kumar', 'Lata Mangeshkar', 'Asha Bhosle', 'Mohammed Rafi', 'Udit Narayan', 'Kumar Sanu',
+    'Sonu Nigam', 'Shaan', 'KK', 'Pritam', 'Vishal-Shekhar', 'Shankar-Ehsaan-Loy', 'Anirudh Ravichander', 'Yuvan Shankar Raja',
+    'Harris Jayaraj', 'Santhosh Narayanan', 'G.V. Prakash Kumar', 'Karan Aujla', 'Shubh', 'King', 'MC Stan', 'DIVINE', 'Naezy', 'Raftaar'
+  ]
+};
+
+// Generar código TS
+const code = `export type ArtistGenre =
+${Object.keys(GENRE_DATA).map(g => `  | '${g}'`).join('\n')};
+
+export const GENRE_GROUPS: Record<ArtistGenre, string[]> = ${JSON.stringify(GENRE_DATA, null, 2)};
+
+function normalizeArtistKey(name: string): string {
+  return name.trim().toLocaleLowerCase().normalize('NFKD').replace(/\\p{M}/gu, '');
+}
+
+export const GLOBAL_ARTISTS_POOL: string[] = [
+  ...new Map(
+    Object.values(GENRE_GROUPS)
+      .flat()
+      .map((artist) => [normalizeArtistKey(artist), artist] as const),
+  ).values(),
+];
+
+const ARTIST_GENRES = new Map<string, ArtistGenre>();
+for (const [genre, artists] of Object.entries(GENRE_GROUPS) as [ArtistGenre, string[]][]) {
+  for (const artist of artists) ARTIST_GENRES.set(normalizeArtistKey(artist), genre);
+}
+
+function artistHash(name: string): number {
+  let hash = 2166136261;
+  for (let index = 0; index < name.length; index++) {
+    hash ^= name.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+export function artistGenre(name: string): ArtistGenre | null {
+  return ARTIST_GENRES.get(normalizeArtistKey(name)) ?? null;
+}
+
+const LAUNCH_SEED = Math.floor(Math.random() * 0x7fffffff);
+
+function seededShuffle<T>(values: T[], salt: number): T[] {
+  return values
+    .map((value, index) => ({
+      value,
+      order: artistHash(\`\${LAUNCH_SEED}:\${salt}:\${index}:\${String(value)}\`),
+    }))
+    .sort((left, right) => left.order - right.order)
+    .map(({ value }) => value);
+}
+
+type AffinityPoolOptions = {
+  rotation?: number;
+  exclude?: string[];
+};
+
+export function buildAffinityPool(
+  mostDownloaded: string[],
+  count = 6,
+  options: AffinityPoolOptions = {},
+): string[] {
+  const safeCount = Math.max(0, Math.min(count, GLOBAL_ARTISTS_POOL.length));
+  const excluded = new Set(
+    [...mostDownloaded, ...(options.exclude ?? [])].map(normalizeArtistKey),
+  );
+
+  // 1. Calcular afinidad por género basada en las descargas del usuario
+  const genreTally = new Map<ArtistGenre, number>();
+  for (const artist of mostDownloaded) {
+    const g = artistGenre(artist);
+    if (g) {
+      genreTally.set(g, (genreTally.get(g) ?? 0) + 1);
+    }
+  }
+
+  // Ordenar géneros favoritos del usuario por frecuencia de descarga
+  const favoriteGenres = [...genreTally.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([g]) => g);
+
+  const allGenres = Object.keys(GENRE_GROUPS) as ArtistGenre[];
+  const rotation = options.rotation ?? 0;
+  const selected: string[] = [];
+  const seen = new Set<string>([...excluded]);
+
+  // Si el usuario tiene descargas, dedicar hasta el 65% de los espacios a sus géneros favoritos
+  if (favoriteGenres.length > 0) {
+    const affinityTarget = Math.min(safeCount, Math.ceil(safeCount * 0.65));
+    for (const genre of favoriteGenres) {
+      if (selected.length >= affinityTarget) break;
+      const genreArtists = seededShuffle(GENRE_GROUPS[genre] || [], rotation * 23 + 7);
+      for (const artist of genreArtists) {
+        const key = normalizeArtistKey(artist);
+        if (!seen.has(key)) {
+          seen.add(key);
+          selected.push(artist);
+          if (selected.length >= affinityTarget) break;
+        }
+      }
+    }
+  }
+
+  // 2. Llenar el resto con exploración diversa de todos los géneros (sin repetir)
+  const shuffledGenres = seededShuffle(allGenres, rotation * 37 + 13);
+  for (const genre of shuffledGenres) {
+    if (selected.length >= safeCount) break;
+    const genreArtists = seededShuffle(GENRE_GROUPS[genre] || [], rotation * 41 + 19);
+    for (const artist of genreArtists) {
+      const key = normalizeArtistKey(artist);
+      if (!seen.has(key)) {
+        seen.add(key);
+        selected.push(artist);
+        break; // 1 por género para máxima variedad
+      }
+    }
+  }
+
+  // 3. Si aún faltan, recorrer todo el pool global barajado
+  if (selected.length < safeCount) {
+    const fullPool = seededShuffle(GLOBAL_ARTISTS_POOL, rotation * 53 + 31);
+    for (const artist of fullPool) {
+      if (selected.length >= safeCount) break;
+      const key = normalizeArtistKey(artist);
+      if (!seen.has(key)) {
+        seen.add(key);
+        selected.push(artist);
+      }
+    }
+  }
+
+  return selected;
+}
+
+const ARTIST_PALETTES = [
+  ['#C8F04B', '#4BE0A8'], ['#63E6FF', '#5B8CFF'], ['#B69CFF', '#F47DFF'],
+  ['#FF7DB2', '#FF9E64'], ['#FFD166', '#FF7A59'], ['#72F1B8', '#3CC8FF'],
+  ['#FF8A65', '#FFD54F'], ['#8BE9FD', '#BD93F9'], ['#A7F3D0', '#60A5FA'],
+  ['#F9A8D4', '#C4B5FD'], ['#FDE68A', '#F97316'], ['#67E8F9', '#34D399'],
+  ['#FB7185', '#A78BFA'], ['#D8B4FE', '#38BDF8'], ['#86EFAC', '#FDE047'],
+  ['#FCA5A5', '#FDBA74'], ['#93C5FD', '#A5B4FC'], ['#5EEAD4', '#A3E635'],
+  ['#F0ABFC', '#FB7185'], ['#FCD34D', '#BEF264'], ['#7DD3FC', '#818CF8'],
+  ['#6EE7B7', '#22D3EE'], ['#FDA4AF', '#F0ABFC'], ['#FDBA74', '#FDE68A'],
+] as const;
+
+export type ArtistVisual = {
+  name: string;
+  primary: string;
+  secondary: string;
+  glow: string;
+};
+
+export function buildArtistVisuals(names: string[]): ArtistVisual[] {
+  const usedSlots = new Set<number>();
+  return names.map((name) => {
+    let slot = artistHash(normalizeArtistKey(name)) % ARTIST_PALETTES.length;
+    if (usedSlots.size < ARTIST_PALETTES.length) {
+      while (usedSlots.has(slot)) slot = (slot + 7) % ARTIST_PALETTES.length;
+      usedSlots.add(slot);
+    }
+    const [primary, secondary] = ARTIST_PALETTES[slot];
+    return {
+      name,
+      primary,
+      secondary,
+      glow: \`\${primary}35\`,
+    };
+  });
+}
+`;
+
+fs.writeFileSync(path.resolve('src/data/globalArtists.ts'), code, 'utf-8');
+console.log('Successfully generated src/data/globalArtists.ts');

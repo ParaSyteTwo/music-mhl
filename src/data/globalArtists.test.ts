@@ -43,4 +43,14 @@ describe('global artist discovery pool', () => {
     expect(new Set(visuals.map((visual) => visual.secondary)).size).toBe(12);
     expect(buildArtistVisuals(artists)).toEqual(visuals);
   });
+
+  it('biases artist recommendations towards genres the user frequently downloads', () => {
+    const mostDownloaded = ['Bad Bunny', 'Feid', 'Karol G', 'Anuel AA'];
+    const recommendations = buildAffinityPool(mostDownloaded, 6, { rotation: 0 });
+    const reggaetonCount = recommendations.filter((name) => artistGenre(name) === 'reggaeton').length;
+
+    expect(reggaetonCount).toBeGreaterThanOrEqual(2);
+    expect(recommendations).toHaveLength(6);
+    expect(recommendations.some((name) => mostDownloaded.includes(name))).toBe(false);
+  });
 });

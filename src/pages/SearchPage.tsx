@@ -329,7 +329,7 @@ export default function SearchPage() {
   };
 
   const rotateArtistSuggestions = () => {
-    setArtistExclusions((current) => [...current, ...suggestedSearches].slice(-36));
+    setArtistExclusions((current) => [...current, ...suggestedSearches].slice(-300));
     setArtistRotation((current) => current + 1);
   };
 

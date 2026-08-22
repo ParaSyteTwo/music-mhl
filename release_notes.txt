@@ -4,6 +4,7 @@ MHL Music 1.5.0 es el lanzamiento oficial y definitivo que redefine la experienc
 
 ✨ **Nuevas Funciones & Estética**
 
+- **Catálogo Masivo de Artistas & Afinidad por Género:** Más de 1,500 artistas globales clasificados en 20 géneros musicales. El algoritmo inteligente analiza tus descargas previas y te recomienda automáticamente más artistas de tus géneros favoritos sin repetir recomendaciones recientes.
 - **Resolución Inteligente de Enlaces:** Pega cualquier enlace de YouTube, YouTube Music, Spotify o SoundCloud y la app identificará automáticamente la canción, artista y álbum oficial en Ultra HD con letras sincronizadas.
 - **Cuadrícula Compacta de Artistas:** Descubre y explora música con una cuadrícula simétrica de 3 en 3 en móviles con avatares vibrantes, halo ambiental (*glow*) y micro-etiquetas de género.
 - **Hero de Búsqueda Rediseñado:** Encabezado espacioso y pulido con márgenes seguros para la barra de estado de Android y soporte para enlaces directos de YouTube y Spotify.

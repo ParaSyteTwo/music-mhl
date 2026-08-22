@@ -250,6 +250,8 @@ const translations: Record<Lang, Record<string, string>> = {
     genre_brazilian: 'Brasileño',
     genre_arabic: 'Árabe',
     genre_south_asian: 'South Asian',
+    genre_country: 'Country',
+    genre_classical: 'Clásica',
   },
   en: {
     loading: 'Loading...',
@@ -490,6 +492,8 @@ const translations: Record<Lang, Record<string, string>> = {
     genre_brazilian: 'Brazilian',
     genre_arabic: 'Arabic',
     genre_south_asian: 'South Asian',
+    genre_country: 'Country',
+    genre_classical: 'Classical',
   },
 };
 
