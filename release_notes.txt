@@ -1,15 +1,14 @@
-MHL Music 1.5.0 Beta 6 (Estabilidad Definitiva)
+MHL Music 1.5.0 Beta 7 (Etiquetas Perfectas)
 
-MHL Music 1.5.0 Beta 6 llega para consolidar la mayor evolución de rendimiento y estabilidad de la app. Tras las refactorizaciones de las primeras betas, esta versión repara integralmente el motor de audio, el sistema de descargas y el backend de Desktop, eliminando pantallas en blanco y devolviendo una fluidez inmediata.
+MHL Music 1.5.0 Beta 7 perfecciona la experiencia de descarga de música con el soporte completo de metadatos enriquecidos en archivos M4A. Ahora todas tus pistas descargadas integran automáticamente cada detalle para que tus reproductores y editores de etiquetas luzcan impecables.
 
-🚀 **Rendimiento Extremo**
+✨ **Nuevas Funciones**
 
-- **Arranque Instantáneo sin WSOD:** Se eliminaron los cuellos de botella y bloqueos de pantalla en blanco durante el inicio de la app. Ahora la interfaz carga al instante sin retrasos ni intermediarios inestables.
-- **Micro-interacciones Fluidas:** Reproductor con diseño glassmorphism renovado, animaciones suaves con Framer Motion y renderizado altamente optimizado.
+- **Etiquetado M4A Completo e Impecable:** Ahora las canciones descargadas incluyen automáticamente Artista del álbum, Compositor, Género musical, Año de lanzamiento, Número de pista (con total de pistas) y Número de disco.
+- **Sincronización Total con MediaStore:** En Android, la base de datos multimedia del sistema y reproductores externos reconocen instantáneamente todos los campos sin necesidad de re-escanear.
 
 🛠 **Correcciones y Estabilidad**
 
-- **Motor de Descargas Blindado:** Corregidas todas las referencias e imports internos del gestor de descargas para garantizar que cada pista se descargue, etiquete y guarde sin interrupciones ni fallos silenciosos.
-- **Backend Desktop Totalmente Reparado:** Se solucionaron los fallos de inicialización y manejo de rutas en Windows para el backend de pywebview.
-- **Sincronización Total del Reproductor:** Conexión directa y precisa de todos los eventos del motor de audio (play, pause, buffering, duración y tiempo de reproducción).
+- **Inyección Atómica de Metadatos:** Motores de etiquetado nativo (`jaudiotagger` en Android y `mutagen` en Windows Desktop) optimizados para inyectar cada átomo MP4 y campo ID3 sin campos vacíos.
+
 

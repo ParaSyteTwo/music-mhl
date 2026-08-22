@@ -65,7 +65,7 @@ _ANILIST_ENDPOINT = 'https://graphql.anilist.co'
 _ANIMETHEMES_ENDPOINT = 'https://api.animethemes.moe'
 _ANIME_HEADERS = {
     'Content-Type': 'application/json',
-    'User-Agent': 'MHLMusic/1.5.0-beta.6',
+    'User-Agent': 'MHLMusic/1.5.0-beta.7',
 }
 _ANIME_TIMEOUT = 10
 
@@ -405,6 +405,14 @@ class Bridge:
         album: str,
         cover_url: str | None,
         lyrics: str | None,
+        album_artist: str | None = None,
+        composer: str | None = None,
+        genre: str | None = None,
+        year: str | int | None = None,
+        track_number: int | str | None = None,
+        track_total: int | str | None = None,
+        disc_number: int | str | None = None,
+        disc_total: int | str | None = None,
     ) -> dict:
         """Escribe M4A a disco e inyecta metadata via Mutagen."""
         try:
@@ -419,6 +427,21 @@ class Bridge:
             if title: audio["\xa9nam"] = title
             if artist: audio["\xa9ART"] = artist
             if album: audio["\xa9alb"] = album
+            if album_artist: audio["aART"] = album_artist
+            if composer: audio["\xa9wrt"] = composer
+            if genre: audio["\xa9gen"] = genre
+            if year: audio["\xa9day"] = str(year)
+            
+            trkn_num = int(track_number) if track_number not in (None, '') else 0
+            trkn_tot = int(track_total) if track_total not in (None, '') else 0
+            if trkn_num > 0 or trkn_tot > 0:
+                audio["trkn"] = [(trkn_num, trkn_tot)]
+                
+            disc_num = int(disc_number) if disc_number not in (None, '') else 0
+            disc_tot = int(disc_total) if disc_total not in (None, '') else 0
+            if disc_num > 0 or disc_tot > 0:
+                audio["disk"] = [(disc_num, disc_tot)]
+
             if lyrics: audio["\xa9lyr"] = lyrics
             
             if cover_url:

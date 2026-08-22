@@ -87,9 +87,19 @@ export const createDownloadSlice: StateCreator<
             ? resolveSystemLanguage(nativeContext?.locale ? [nativeContext.locale] : undefined)
             : lyricsTarget;
           const supplementalDataPromise = Promise.all([
-            track.deezerId
-              ? getDeezerTrackMeta(track.deezerId).catch(() => ({ genre: null, year: null, trackNumber: null }))
-              : Promise.resolve({ genre: null, year: null, trackNumber: null }),
+            getDeezerTrackMeta(
+              track.deezerId || track.id,
+              track,
+            ).catch(() => ({
+              albumArtist: track.artist,
+              composer: null,
+              genre: null,
+              year: null,
+              trackNumber: null,
+              trackTotal: null,
+              discNumber: 1,
+              discTotal: 1,
+            })),
             getLyrics(
               track.canonicalTitle?.trim() || track.title,
               track.artist,
@@ -127,7 +137,7 @@ export const createDownloadSlice: StateCreator<
               const api = (window as any).pywebview?.api;
               const settings = await api.get_settings();
               const outputDir = settings.download_folder || 'C:/Users/Paul/Music/MHL Music';
-              const [rawResult, [, lyricsResult]] = await Promise.all([
+              const [rawResult, [trackMeta, lyricsResult]] = await Promise.all([
                 api.get_raw_audio(
                   resolvedVideoId ?? null,
                   track.canonicalTitle?.trim() || track.title,
@@ -153,7 +163,15 @@ export const createDownloadSlice: StateCreator<
                 track.artist,
                 getPreferredAlbumName(track),
                 track.cover,
-                lyrics
+                lyrics,
+                trackMeta.albumArtist || track.artist,
+                trackMeta.composer || undefined,
+                trackMeta.genre || undefined,
+                trackMeta.year ? String(trackMeta.year) : undefined,
+                trackMeta.trackNumber || undefined,
+                trackMeta.trackTotal || undefined,
+                trackMeta.discNumber || undefined,
+                trackMeta.discTotal || undefined,
               );
               
               if (!writeResult?.success) {
@@ -201,7 +219,7 @@ export const createDownloadSlice: StateCreator<
                   : undefined,
               });
 
-              const [audioBuffer, [, lyricsResult]] = await Promise.all([
+              const [audioBuffer, [trackMeta, lyricsResult]] = await Promise.all([
                 downloadTrackAudio(track, (progress) => {
                   updateDl({ progress });
                 }, resolvedVideoId, sourceUrlOverride),
@@ -223,6 +241,14 @@ export const createDownloadSlice: StateCreator<
                   album: getPreferredAlbumName(track),
                   coverUrl: track.cover,
                   lyrics: lyrics || undefined,
+                  albumArtist: trackMeta.albumArtist || track.artist,
+                  composer: trackMeta.composer || undefined,
+                  genre: trackMeta.genre || undefined,
+                  year: trackMeta.year ? String(trackMeta.year) : undefined,
+                  trackNumber: trackMeta.trackNumber ? String(trackMeta.trackNumber) : undefined,
+                  trackTotal: trackMeta.trackTotal ? String(trackMeta.trackTotal) : undefined,
+                  discNumber: trackMeta.discNumber ? String(trackMeta.discNumber) : undefined,
+                  discTotal: trackMeta.discTotal ? String(trackMeta.discTotal) : undefined,
                 });
                 
                 updateDl({ progress: 95, mediaUri });
@@ -244,7 +270,15 @@ export const createDownloadSlice: StateCreator<
                     track.artist,
                     getPreferredAlbumName(track),
                     track.cover,
-                    lyrics
+                    lyrics,
+                    trackMeta.albumArtist || track.artist,
+                    trackMeta.composer || undefined,
+                    trackMeta.genre || undefined,
+                    trackMeta.year ? String(trackMeta.year) : undefined,
+                    trackMeta.trackNumber || undefined,
+                    trackMeta.trackTotal || undefined,
+                    trackMeta.discNumber || undefined,
+                    trackMeta.discTotal || undefined,
                   );
                   
                   if (!writeResult?.success) {

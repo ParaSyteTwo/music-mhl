@@ -29,29 +29,44 @@ interface PyWebViewWindow extends Window {
   }
 }
 
+interface RawDeezerContributor {
+  id?: number | string;
+  name?: string;
+  role?: string;
+}
+
 interface RawDeezerTrack {
-  id?: string | number
-  title?: string
-  title_short?: string
-  artist?: { name?: string }
+  id?: string | number;
+  title?: string;
+  title_short?: string;
+  artist?: { name?: string };
   album?: {
-    id?: string | number
-    title?: string
-    cover_big?: string
-    cover_medium?: string
-    cover_small?: string
-  }
-  duration?: number
-  preview?: string
-  isrc?: string
-  explicit_lyrics?: boolean
-  release_date?: string
-  track_position?: number
+    id?: string | number;
+    title?: string;
+    cover_big?: string;
+    cover_medium?: string;
+    cover_small?: string;
+    track_total?: number;
+    nb_tracks?: number;
+    artist?: { name?: string };
+  };
+  contributors?: RawDeezerContributor[];
+  duration?: number;
+  preview?: string;
+  isrc?: string;
+  explicit_lyrics?: boolean;
+  release_date?: string;
+  track_position?: number;
+  disk_number?: number;
 }
 
 interface RawDeezerAlbum {
-  id?: string | number
-  genres?: { data?: Array<{ name?: string }> }
+  id?: string | number;
+  title?: string;
+  genres?: { data?: Array<{ name?: string }> };
+  artist?: { name?: string };
+  nb_tracks?: number;
+  release_date?: string;
 }
 // Detección de pywebview: query param ?platform=pywebview (fiable desde frame 0)
 // o window.pywebview si ya está inyectado
@@ -215,42 +230,121 @@ export async function searchDeezer(query: string, offset = 0, limit = 25): Promi
   return request;
 }
 
-// ─── Full metadata for a track (genre, year, track number) ───
-export async function getDeezerTrackMeta(trackId: string | number): Promise<{ genre: string | null; year: number | null; trackNumber: number | null }> {
-  const idStr = String(trackId);
+export interface TrackMetadataDetails {
+  albumArtist: string | null;
+  composer: string | null;
+  genre: string | null;
+  year: number | null;
+  trackNumber: number | null;
+  trackTotal: number | null;
+  discNumber: number | null;
+  discTotal: number | null;
+}
+
+// ─── Full metadata for a track (album artist, composer, genre, year, track number/total, disc number/total) ───
+export async function getDeezerTrackMeta(
+  trackId: string | number,
+  fallbackTrack?: Track
+): Promise<TrackMetadataDetails> {
+  const idStr = String(trackId).trim();
+
+  // Caso 1: iTunes ID
   if (idStr.startsWith('itunes_')) {
     try {
       const realId = idStr.split('_')[1];
       const res = await fetch(`https://itunes.apple.com/lookup?id=${realId}`);
       if (!res.ok) throw new Error();
       const data = await res.json();
-      const t = data.results[0];
+      const t = data.results?.[0];
       if (!t) throw new Error();
       return {
+        albumArtist: t.collectionArtistName || t.artistName || fallbackTrack?.artist || null,
+        composer: t.composerName || null,
         genre: t.primaryGenreName || null,
         year: t.releaseDate ? parseInt(t.releaseDate.substring(0, 4), 10) : null,
         trackNumber: t.trackNumber || null,
+        trackTotal: t.trackCount || null,
+        discNumber: t.discNumber || 1,
+        discTotal: t.discCount || 1,
       };
     } catch {
-      return { genre: null, year: null, trackNumber: null };
+      return {
+        albumArtist: fallbackTrack?.artist || null,
+        composer: null,
+        genre: null,
+        year: null,
+        trackNumber: null,
+        trackTotal: null,
+        discNumber: 1,
+        discTotal: 1,
+      };
     }
   }
 
-  try {
-    const track = await callDeezerDirect<RawDeezerTrack>(`/track/${trackId}`);
-    const releaseDate: string | undefined = track.release_date;
-    const year = releaseDate ? parseInt(releaseDate.split('-')[0], 10) : null;
-    let genre: string | null = null;
-    if (track.album?.id) {
-      try {
-        const album = await callDeezerDirect<RawDeezerAlbum>(`/album/${track.album.id}`);
-        genre = album.genres?.data?.[0]?.name ?? null;
-      } catch { /* genre no crítico */ }
+  // Caso 2: Deezer track numeric ID o dz-ID
+  const numericId = idStr.replace(/^dz-/, '');
+  if (/^\d+$/.test(numericId)) {
+    try {
+      const track = await callDeezerDirect<RawDeezerTrack>(`/track/${numericId}`);
+      const releaseDate: string | undefined = track.release_date;
+      const year = releaseDate ? parseInt(releaseDate.split('-')[0], 10) : null;
+      let genre: string | null = null;
+      let albumArtist: string | null = track.album?.artist?.name || track.artist?.name || fallbackTrack?.artist || null;
+      let trackTotal: number | null = track.album?.track_total || track.album?.nb_tracks || null;
+
+      if (track.album?.id) {
+        try {
+          const album = await callDeezerDirect<RawDeezerAlbum>(`/album/${track.album.id}`);
+          genre = album.genres?.data?.[0]?.name ?? null;
+          if (!albumArtist && album.artist?.name) {
+            albumArtist = album.artist.name;
+          }
+          if (!trackTotal && album.nb_tracks) {
+            trackTotal = album.nb_tracks;
+          }
+        } catch { /* ignore non-critical */ }
+      }
+
+      let composer: string | null = null;
+      if (Array.isArray(track.contributors) && track.contributors.length > 0) {
+        const composers = track.contributors
+          .filter((c) => {
+            const role = (c.role || '').toLowerCase();
+            return role.includes('composer') || role.includes('author') || role.includes('music') || role.includes('writer');
+          })
+          .map((c) => c.name)
+          .filter(Boolean);
+        if (composers.length > 0) {
+          composer = Array.from(new Set(composers)).join(', ');
+        }
+      }
+
+      return {
+        albumArtist: albumArtist || fallbackTrack?.artist || null,
+        composer,
+        genre,
+        year,
+        trackNumber: track.track_position ?? null,
+        trackTotal,
+        discNumber: track.disk_number ?? 1,
+        discTotal: 1,
+      };
+    } catch {
+      // Deezer directo falló
     }
-    return { genre, year, trackNumber: track.track_position ?? null };
-  } catch {
-    return { genre: null, year: null, trackNumber: null };
   }
+
+  // Caso 3: Fallback si no hay ID numérico o falló
+  return {
+    albumArtist: fallbackTrack?.artist || null,
+    composer: null,
+    genre: null,
+    year: null,
+    trackNumber: null,
+    trackTotal: null,
+    discNumber: 1,
+    discTotal: 1,
+  };
 }
 
 export type DownloadErrorCode =

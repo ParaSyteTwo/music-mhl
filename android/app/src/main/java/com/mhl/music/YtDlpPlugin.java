@@ -499,6 +499,14 @@ public class YtDlpPlugin extends Plugin {
         String artist = call.getString("artist", "");
         String album = call.getString("album", "");
         String lyrics = call.getString("lyrics", "");
+        String albumArtist = call.getString("albumArtist", "");
+        String composer = call.getString("composer", "");
+        String genre = call.getString("genre", "");
+        String year = call.getString("year", "");
+        String trackNumber = call.getString("trackNumber", "");
+        String trackTotal = call.getString("trackTotal", "");
+        String discNumber = call.getString("discNumber", "");
+        String discTotal = call.getString("discTotal", "");
 
         if (fileName == null || fileName.isEmpty() || base64Data == null || base64Data.isEmpty()) {
             call.reject("fileName and data are required");
@@ -537,10 +545,18 @@ public class YtDlpPlugin extends Plugin {
                         tag = new org.jaudiotagger.tag.mp4.Mp4Tag();
                         audioFile.setTag(tag);
                     }
-                    if (!title.isEmpty()) tag.setField(org.jaudiotagger.tag.FieldKey.TITLE, title);
-                    if (!artist.isEmpty()) tag.setField(org.jaudiotagger.tag.FieldKey.ARTIST, artist);
-                    if (!album.isEmpty()) tag.setField(org.jaudiotagger.tag.FieldKey.ALBUM, album);
-                    if (!lyrics.isEmpty()) tag.setField(org.jaudiotagger.tag.FieldKey.LYRICS, lyrics);
+                    if (title != null && !title.isEmpty()) tag.setField(org.jaudiotagger.tag.FieldKey.TITLE, title);
+                    if (artist != null && !artist.isEmpty()) tag.setField(org.jaudiotagger.tag.FieldKey.ARTIST, artist);
+                    if (album != null && !album.isEmpty()) tag.setField(org.jaudiotagger.tag.FieldKey.ALBUM, album);
+                    if (albumArtist != null && !albumArtist.isEmpty()) tag.setField(org.jaudiotagger.tag.FieldKey.ALBUM_ARTIST, albumArtist);
+                    if (composer != null && !composer.isEmpty()) tag.setField(org.jaudiotagger.tag.FieldKey.COMPOSER, composer);
+                    if (genre != null && !genre.isEmpty()) tag.setField(org.jaudiotagger.tag.FieldKey.GENRE, genre);
+                    if (year != null && !year.isEmpty()) tag.setField(org.jaudiotagger.tag.FieldKey.YEAR, year);
+                    if (trackNumber != null && !trackNumber.isEmpty()) tag.setField(org.jaudiotagger.tag.FieldKey.TRACK, trackNumber);
+                    if (trackTotal != null && !trackTotal.isEmpty()) tag.setField(org.jaudiotagger.tag.FieldKey.TRACK_TOTAL, trackTotal);
+                    if (discNumber != null && !discNumber.isEmpty()) tag.setField(org.jaudiotagger.tag.FieldKey.DISC_NO, discNumber);
+                    if (discTotal != null && !discTotal.isEmpty()) tag.setField(org.jaudiotagger.tag.FieldKey.DISC_TOTAL, discTotal);
+                    if (lyrics != null && !lyrics.isEmpty()) tag.setField(org.jaudiotagger.tag.FieldKey.LYRICS, lyrics);
 
                     if (tempCover != null && tempCover.length() > 0) {
                         org.jaudiotagger.tag.images.Artwork artwork = org.jaudiotagger.tag.images.ArtworkFactory.createArtworkFromFile(tempCover);
@@ -558,6 +574,22 @@ public class YtDlpPlugin extends Plugin {
                 values.put(MediaStore.Audio.Media.MIME_TYPE, "audio/mp4");
                 values.put(MediaStore.Audio.Media.RELATIVE_PATH, "Music/MHL Music");
                 values.put(MediaStore.Audio.Media.IS_PENDING, 1);
+                if (title != null && !title.isEmpty()) values.put(MediaStore.Audio.Media.TITLE, title);
+                if (artist != null && !artist.isEmpty()) values.put(MediaStore.Audio.Media.ARTIST, artist);
+                if (album != null && !album.isEmpty()) values.put(MediaStore.Audio.Media.ALBUM, album);
+                if (albumArtist != null && !albumArtist.isEmpty()) values.put(MediaStore.Audio.Media.ALBUM_ARTIST, albumArtist);
+                if (composer != null && !composer.isEmpty()) values.put(MediaStore.Audio.Media.COMPOSER, composer);
+                if (genre != null && !genre.isEmpty()) values.put(MediaStore.Audio.Media.GENRE, genre);
+                if (year != null && !year.isEmpty()) {
+                    try {
+                        values.put(MediaStore.Audio.Media.YEAR, Integer.parseInt(year));
+                    } catch (Exception ignored) {}
+                }
+                if (trackNumber != null && !trackNumber.isEmpty()) {
+                    try {
+                        values.put(MediaStore.Audio.Media.TRACK, Integer.parseInt(trackNumber));
+                    } catch (Exception ignored) {}
+                }
 
                 ContentResolver resolver = getContext().getContentResolver();
                 Uri itemUri = resolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values);

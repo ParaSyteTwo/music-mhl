@@ -22,6 +22,24 @@ export interface YtDlpProgressEvent {
   speed: string;     // e.g. "1.2 MB/s"
 }
 
+export interface TagAndSaveOptions {
+  fileName: string;
+  data: string;
+  coverUrl?: string;
+  title?: string;
+  artist?: string;
+  album?: string;
+  lyrics?: string;
+  albumArtist?: string;
+  composer?: string;
+  genre?: string;
+  year?: string;
+  trackNumber?: string;
+  trackTotal?: string;
+  discNumber?: string;
+  discTotal?: string;
+}
+
 interface YtDlpPluginInterface {
   initialize(): Promise<{ success: boolean }>;
   update(): Promise<{ success: boolean; status: string }>;
@@ -29,7 +47,7 @@ interface YtDlpPluginInterface {
   search(options: { query: string; limit?: number; source?: 'youtube_music' | 'youtube'; enrich?: boolean }): Promise<{ success: boolean; results: YtDlpSearchResult[] }>;
   downloadAudio(options: { videoId?: string; sourceUrl?: string; expectedDuration?: number }): Promise<{ success: boolean; data: string; size: number; fileName?: string }>;
   saveTaggedAudioToMusic(options: { fileName: string; data: string }): Promise<{ success: boolean; uri: string }>;
-  tagAndSaveM4A(options: { fileName: string; data: string; coverUrl?: string; title?: string; artist?: string; album?: string; lyrics?: string }): Promise<{ success: boolean; uri: string }>;
+  tagAndSaveM4A(options: TagAndSaveOptions): Promise<{ success: boolean; uri: string }>;
   addListener(eventName: 'downloadProgress', listenerFunc: (event: YtDlpProgressEvent) => void): Promise<PluginListenerHandle>;
   startForegroundService(options: { title?: string; text?: string }): Promise<void>;
   stopForegroundService(): Promise<void>;
@@ -139,7 +157,7 @@ export async function saveTaggedAudioToMusic(fileName: string, base64Data: strin
   return result.uri;
 }
 
-export async function tagAndSaveM4A(options: { fileName: string; data: string; coverUrl?: string; title?: string; artist?: string; album?: string; lyrics?: string }): Promise<string> {
+export async function tagAndSaveM4A(options: TagAndSaveOptions): Promise<string> {
   if (!Capacitor.isNativePlatform()) throw new Error('Not on native platform');
   if (!initialized) await initYtDlp();
   const operation = YtDlp.tagAndSaveM4A(options);
