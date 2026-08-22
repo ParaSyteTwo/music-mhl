@@ -1333,7 +1333,7 @@ type AffinityPoolOptions = {
 
 export function buildAffinityPool(
   mostDownloaded: string[],
-  count = 6,
+  count = 12,
   options: AffinityPoolOptions = {},
 ): string[] {
   const safeCount = Math.max(0, Math.min(count, GLOBAL_ARTISTS_POOL.length));

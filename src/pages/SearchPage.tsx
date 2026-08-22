@@ -262,7 +262,7 @@ export default function SearchPage() {
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
   const suggestedSearches = useMemo(
-    () => buildAffinityPool(mostDownloadedArtists, 6, {
+    () => buildAffinityPool(mostDownloadedArtists, 12, {
       rotation: artistRotation,
       exclude: artistExclusions,
     }),

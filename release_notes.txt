@@ -1,9 +1,10 @@
-MHL Music 1.5.1 Beta 1 (Smart Discovery & Full Engine)
+MHL Music 1.5.1 Beta 2 (4 Líneas de Artistas & Descubrimiento Inteligente)
 
-MHL Music 1.5.1 Beta 1 incorpora la base de datos masiva de más de 1.500 artistas mundiales clasificados en 20 géneros musicales, el nuevo motor de recomendación inteligente basado en descargas previas, resolución avanzada de enlaces multimedia y blindaje total de la interfaz.
+MHL Music 1.5.1 Beta 2 optimiza la distribución de la pantalla de inicio con 4 líneas completas de 3 artistas (12 artistas en total), llenando armónicamente el espacio visual en móviles sin saturar la interfaz.
 
 ✨ **Nuevas Funciones & Estética**
 
+- **4 Líneas de Artistas (12 en total):** Cuadrícula simétrica y equilibrada de 3 en 3 que aprovecha de forma natural la altura de pantalla en móviles.
 - **Catálogo Masivo de +1.500 Artistas:** Base de datos mundial exhaustiva con 20 géneros (Urbano, Pop, Rock, Metal, Regional Mexicano, K-Pop, J-Pop, Electrónica, Jazz, Afrobeats, etc.).
 - **Motor de Afinidad por Descargas:** El algoritmo aprende de tus canciones descargadas y te sugiere automáticamente más artistas de tus géneros favoritos.
 - **Rotación Cíclica Sin Repeticiones:** Historial dinámico de exclusiones de hasta 300 artistas para descubrir siempre música nueva.
