@@ -262,7 +262,7 @@ export default function SearchPage() {
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
   const suggestedSearches = useMemo(
-    () => buildAffinityPool(mostDownloadedArtists, 12, {
+    () => buildAffinityPool(mostDownloadedArtists, 6, {
       rotation: artistRotation,
       exclude: artistExclusions,
     }),
@@ -484,25 +484,21 @@ export default function SearchPage() {
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-      className="px-3.5 sm:px-8 pt-1 sm:pt-4 pb-8 max-w-5xl mx-auto"
+      className="px-3.5 sm:px-8 pt-0.5 sm:pt-4 pb-3 sm:pb-6 max-w-5xl mx-auto"
     >
-      <section className={`home-hero ${showEmpty ? 'home-hero-expanded' : ''} px-4 py-5 sm:p-7`}>
+      <section className={`home-hero ${showEmpty ? 'home-hero-expanded' : ''} px-4 py-4 sm:p-6`}>
         <div className="home-hero-orb home-hero-orb-one" aria-hidden="true" />
         <div className="home-hero-orb home-hero-orb-two" aria-hidden="true" />
         <div className="relative z-10 text-center">
-          <div className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.035] px-2.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.2em] text-[#A6C955]">
-            <Sparkles className="h-3 w-3" />
-            {t('discoverEyebrow')}
-          </div>
-          <h1 className="mt-2 text-xl sm:text-3xl md:text-4xl font-extrabold tracking-[-0.03em] font-[family-name:Syne] text-[#F5F5F0] text-balance">
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight text-[#F5F5F0]">
             {t('heroTitle')}
           </h1>
-          <p className="mx-auto mt-1 max-w-md text-xs sm:text-sm text-[#9E9E98] text-balance">
+          <p className="mx-auto mt-1 max-w-md text-xs sm:text-sm text-[#A0A09A]">
             {t('heroSubtitle')}
           </p>
         </div>
 
-        <div className="home-search-shell relative z-10 mt-4 sm:mt-6">
+        <div className="home-search-shell relative z-10 mt-3 sm:mt-5">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#85857E]" />
           <input
             ref={inputRef}
