@@ -58,8 +58,8 @@ export function AppLayout() {
       <main
         className="flex-1 overflow-y-auto relative z-10"
         style={{
-          paddingTop: 'calc(var(--sat, 0px) + 16px)',
-          paddingBottom: 'calc(var(--player-height) + var(--nav-height) + var(--sab) + 24px)',
+          paddingTop: 'calc(var(--sat, 0px) + 4px)',
+          paddingBottom: 'calc(var(--player-height) + var(--nav-height) + var(--sab) + 8px)',
           WebkitOverflowScrolling: 'touch',
         }}
       >

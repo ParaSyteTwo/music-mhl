@@ -492,19 +492,19 @@ export default function SearchPage() {
       transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
       className="px-3.5 sm:px-8 pt-0.5 sm:pt-4 pb-3 sm:pb-6 max-w-5xl mx-auto"
     >
-      <section className={`home-hero ${showEmpty ? 'home-hero-expanded' : ''} px-4 py-4 sm:p-6`}>
+      <section className={`home-hero ${showEmpty ? 'home-hero-expanded' : ''} px-3.5 py-2.5 sm:p-6 mb-2.5 sm:mb-4`}>
         <div className="home-hero-orb home-hero-orb-one" aria-hidden="true" />
         <div className="home-hero-orb home-hero-orb-two" aria-hidden="true" />
         <div className="relative z-10 text-center">
-          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight text-[#F5F5F0]">
+          <h1 className="text-base sm:text-2xl md:text-3xl font-bold tracking-tight text-[#F5F5F0]">
             {t('heroTitle')}
           </h1>
-          <p className="mx-auto mt-1 max-w-md text-xs sm:text-sm text-[#A0A09A]">
+          <p className="mx-auto mt-0.5 max-w-md text-[11px] sm:text-sm text-[#A0A09A]">
             {t('heroSubtitle')}
           </p>
         </div>
 
-        <div className="home-search-shell relative z-10 mt-3 sm:mt-5">
+        <div className="home-search-shell relative z-10 mt-2 sm:mt-5">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#85857E]" />
           <input
             ref={inputRef}
@@ -515,7 +515,7 @@ export default function SearchPage() {
             onKeyDown={handleKeyDown}
             onFocus={() => setInputFocused(true)}
             onBlur={() => setTimeout(() => setInputFocused(false), 200)}
-            className="w-full pl-10 pr-10 py-3 sm:py-3.5 rounded-2xl bg-transparent text-xs sm:text-sm text-[#F5F5F0] placeholder:text-[#6E6E68] focus:outline-none"
+            className="w-full pl-10 pr-10 py-2 sm:py-3.5 rounded-2xl bg-transparent text-xs sm:text-sm text-[#F5F5F0] placeholder:text-[#6E6E68] focus:outline-none"
             autoComplete="off"
             autoCorrect="off"
             spellCheck="false"
@@ -535,13 +535,13 @@ export default function SearchPage() {
       </section>
 
       {inputFocused && !query.trim() && recent.length > 0 && (
-        <div className="mb-4 text-center sm:text-left">
-          <p className="text-[10px] uppercase tracking-[0.2em] font-semibold text-[#8E8E88] mb-2">{t('recent')}</p>
+        <div className="mb-3 text-center sm:text-left">
+          <p className="text-[10px] uppercase tracking-[0.2em] font-semibold text-[#8E8E88] mb-1.5">{t('recent')}</p>
           <div className="flex flex-wrap items-center justify-center sm:justify-start gap-1.5">
             {recent.map((term) => (
               <button
                 key={term}
-                className="group flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium border border-white/[0.08] bg-white/[0.02] text-[#A0A098] hover:text-[#C8F04B] hover:border-[#C8F04B]/35 hover:bg-[#C8F04B]/5 transition-all shadow-sm"
+                className="group flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium border border-white/[0.08] bg-white/[0.02] text-[#A0A098] hover:text-[var(--accent-primary)] hover:border-[var(--accent-primary)]/35 hover:bg-[var(--accent-primary)]/5 transition-all shadow-sm"
                 onClick={() => handleSuggestionClick(term)}
               >
                 <span>{term}</span>
@@ -558,27 +558,27 @@ export default function SearchPage() {
       )}
 
       {showEmpty && (
-        <section className="artist-discovery mb-6">
-          <div className="flex items-center justify-between gap-2 mb-3.5 px-0.5">
+        <section className="artist-discovery mb-2 sm:mb-6">
+          <div className="flex items-center justify-between gap-2 mb-2 sm:mb-3 px-0.5">
             <div className="text-left">
-              <div className="inline-flex items-center gap-1.5 text-[9.5px] uppercase tracking-[0.2em] text-[#A6C955] font-semibold">
+              <div className="inline-flex items-center gap-1.5 text-[9px] sm:text-[9.5px] uppercase tracking-[0.2em] text-[#A6C955] font-semibold">
                 <Sparkles className="w-3 h-3" />
                 {t('discoverArtists')}
               </div>
-              <p className="mt-0.5 text-[11px] text-[#8E8E88]">
+              <p className="mt-0.5 text-[10px] sm:text-[11px] text-[#8E8E88]">
                 {t('artistPoolHint', { count: GLOBAL_ARTISTS_POOL.length })}
               </p>
             </div>
             <button
               type="button"
               onClick={rotateArtistSuggestions}
-              className="group inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-[11px] font-medium text-[#C8C8C0] hover:border-[#C8F04B]/30 hover:bg-[#C8F04B]/10 hover:text-[#C8F04B] transition-all shadow-sm active:scale-95 flex-shrink-0"
+              className="group inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-[10.5px] sm:text-[11px] font-medium text-[#C8C8C0] hover:border-[var(--accent-primary)]/30 hover:bg-[var(--accent-primary)]/10 hover:text-[var(--accent-primary)] transition-all shadow-sm active:scale-95 flex-shrink-0"
             >
               <RefreshCw className="w-3 h-3 transition-transform duration-500 group-hover:rotate-180 text-[#A6C955]" />
               <span>{t('refreshArtists')}</span>
             </button>
           </div>
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 sm:gap-2.5">
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-1.5 sm:gap-2.5">
             {suggestedArtists.map((artist) => {
               const genre = artistGenre(artist.name);
               const genreLabel = genre ? t(`genre_${genre}`) : null;
@@ -590,22 +590,22 @@ export default function SearchPage() {
                   whileTap={{ scale: 0.96 }}
                   transition={{ duration: 0.15 }}
                   onClick={() => handleSuggestionClick(artist.name)}
-                  className="artist-showcase-card group relative flex flex-col items-center justify-center p-2 sm:p-2.5 rounded-2xl bg-white/[0.025] hover:bg-white/[0.055] border border-white/[0.06] text-center overflow-hidden min-h-[92px]"
+                  className="artist-showcase-card group relative flex flex-col items-center justify-center p-1.5 sm:p-2.5 rounded-xl sm:rounded-2xl bg-white/[0.025] hover:bg-white/[0.055] border border-white/[0.06] text-center overflow-hidden min-h-[62px] sm:min-h-[88px]"
                 >
                   <div
-                    className="relative mb-1.5 w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center rounded-full text-xs sm:text-sm font-black text-[#080808] transition-transform duration-200 group-hover:scale-105 shadow-md flex-shrink-0"
+                    className="relative mb-1 w-7 h-7 sm:w-11 sm:h-11 flex items-center justify-center rounded-full text-[10px] sm:text-xs font-black text-[#080808] transition-transform duration-200 group-hover:scale-105 shadow-md flex-shrink-0"
                     style={{
                       background: `linear-gradient(135deg, ${artist.primary}, ${artist.secondary})`,
-                      boxShadow: `0 4px 14px ${artist.glow}`,
+                      boxShadow: `0 3px 10px ${artist.glow}`,
                     }}
                   >
                     {artistMonogram(artist.name)}
                   </div>
-                  <span className="text-[11px] sm:text-xs font-semibold text-[#F5F5F0] group-hover:text-[#C8F04B] transition-colors truncate max-w-full px-0.5 leading-tight">
+                  <span className="text-[10px] sm:text-xs font-semibold text-[#F5F5F0] group-hover:text-[var(--accent-primary)] transition-colors truncate max-w-full px-0.5 leading-tight">
                     {artist.name}
                   </span>
                   {genreLabel && (
-                    <span className="mt-1 text-[8.5px] font-medium tracking-wide uppercase px-1.5 py-0.5 rounded-md bg-white/[0.04] text-[#8E8E88] group-hover:text-[#D8D8D0] group-hover:bg-white/[0.08] transition-colors truncate max-w-full">
+                    <span className="mt-0.5 text-[7.5px] sm:text-[8.5px] font-medium tracking-wide uppercase px-1 sm:px-1.5 py-0.2 sm:py-0.5 rounded-md bg-white/[0.04] text-[#8E8E88] group-hover:text-[#D8D8D0] group-hover:bg-white/[0.08] transition-colors truncate max-w-full">
                       {genreLabel}
                     </span>
                   )}

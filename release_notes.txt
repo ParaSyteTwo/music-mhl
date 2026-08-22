@@ -1,11 +1,12 @@
-MHL Music 1.5.1 Beta 3 (Motor de 13 Temas & Nuevo Isotipo Oficial)
+MHL Music 1.5.1 Beta 4 (Ajuste Ergonómico Cero-Scroll & Temas Visuales)
 
-MHL Music 1.5.1 Beta 3 introduce el nuevo motor universal de personalización visual con 13 temas estéticos únicos, el nuevo icono oficial de alta definición sin texto, y mejoras en la fluidez de toda la aplicación.
+MHL Music 1.5.1 Beta 4 optimiza las dimensiones y espaciados de la pantalla de búsqueda para eliminar todo scroll vertical en móviles, manteniendo las 4 líneas completas de 3 artistas (12 en total) con ajuste ergonómico perfecto.
 
 ✨ **Novedades de la Versión**
 
-- **Nuevo Isotipo Oficial HD:** Auriculares de estudio y nota musical con acabados en profundidad 3D, sin texto y perfectamente centrados.
-- **Motor de 13 Temas Visuales:** Selector interactivo en Ajustes para personalizar la app con un toque:
+- **Pantalla de Búsqueda 100% Cero-Scroll:** Cuadrícula de 12 artistas adaptada con márgenes limpios para encajar en cualquier pantalla móvil sin desplazamientos verticales innecesarios.
+- **Motor de 13 Temas Visuales:** Personalización instantánea de colores, fondos y resplandor desde Ajustes.
+- **Nuevo Isotipo Oficial HD:** Auriculares de estudio en relieve 3D sin texto.
   1. ⚡ *Acid Cyberpunk* (Neón Lima Eléctrico)
   2. 🌌 *OLED Sapphire* (Azul Cobalto Láser)
   3. 🌸 *Vaporwave Sunset* (Degradado Retro Magenta & Naranja)
