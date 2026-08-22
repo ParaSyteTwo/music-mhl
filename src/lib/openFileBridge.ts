@@ -31,7 +31,10 @@ export async function openDownloadedFile(
     if (!fileName) return false;
     try {
       // Usamos el bridge en Desktop
-      const api = (window as any).pywebview?.api;
+      const pyWindow = window as unknown as {
+        pywebview?: { api?: { open_file?: (path: string) => Promise<{ success: boolean; error?: string }> } };
+      };
+      const api = pyWindow.pywebview?.api;
       if (api?.open_file) {
         await api.open_file(fileName);
         return true;

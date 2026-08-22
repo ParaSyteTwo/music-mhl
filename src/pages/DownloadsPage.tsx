@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useMusicStore } from '@/store/musicStore';
 import { CheckCircle, Loader2, XCircle, Music, Trash2, Clock, ExternalLink, Zap, RefreshCw } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { Capacitor } from '@capacitor/core';
 import { openDownloadedFile } from '@/lib/openFileBridge';
 import type { Download } from '@/types/music';
 import { useI18n } from '@/lib/useI18n';
@@ -135,7 +134,6 @@ function ActiveDownloadCard({ dl, t }: { dl: Download; t: (key: string) => strin
 export default function DownloadsPage() {
   const { t } = useI18n();
   const { downloads, startDownload, removeDownload, preferredPlayerPackage } = useMusicStore();
-  const isNative = Capacitor.isNativePlatform();
 
   const completed = [...downloads].filter((d) => d.status === 'completed').reverse();
   const [showAllCompleted, setShowAllCompleted] = useState(false);

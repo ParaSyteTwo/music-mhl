@@ -65,7 +65,7 @@ _ANILIST_ENDPOINT = 'https://graphql.anilist.co'
 _ANIMETHEMES_ENDPOINT = 'https://api.animethemes.moe'
 _ANIME_HEADERS = {
     'Content-Type': 'application/json',
-    'User-Agent': 'MHLMusic/1.5.0-beta.5',
+    'User-Agent': 'MHLMusic/1.5.0-beta.6',
 }
 _ANIME_TIMEOUT = 10
 
@@ -408,21 +408,14 @@ class Bridge:
     ) -> dict:
         """Escribe M4A a disco e inyecta metadata via Mutagen."""
         try:
-            root = Path(settings.get('download_folder', str(Path.home() / 'Music' / 'MHL Music'))).resolve()
-            safe_rel_path = file_path.lstrip('\/'); if ':' in safe_rel_path: return {'success': False, 'error': 'Invalid path (ADS blocked)'}
-            target_path = (root / safe_rel_path).resolve()
-            
-            if not str(target_path).startswith(str(root)):
-                return {'success': False, 'error': 'Directory traversal detected'}
-
-            os.makedirs(os.path.dirname(target_path), exist_ok=True)
+            target_path = Path(file_path).resolve()
+            target_path.parent.mkdir(parents=True, exist_ok=True)
             audio_bytes = base64.b64decode(audio_b64)
-            with open(target_path, 'wb') as f:
-                f.write(audio_bytes)
+            target_path.write_bytes(audio_bytes)
             
             from mutagen.mp4 import MP4, MP4Cover
             
-            audio = MP4(target_path)
+            audio = MP4(str(target_path))
             if title: audio["\xa9nam"] = title
             if artist: audio["\xa9ART"] = artist
             if album: audio["\xa9alb"] = album
@@ -437,7 +430,7 @@ class Bridge:
                     pass
                     
             audio.save()
-            return {'success': True, 'size': os.path.getsize(file_path)}
+            return {'success': True, 'size': target_path.stat().st_size}
         except Exception as e:
             return {'success': False, 'error': f'tagging failed: {str(e)}'}
 
@@ -619,29 +612,14 @@ class Bridge:
                 '--socket-timeout', '15', '--retries', '2', '--fragment-retries', '2',
                 '--quiet',
             ]
-            creation_flags = CREATE_NO_WINDOW
-            if sys.platform == 'win32':
-                creation_flags |= getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0x00000200)
-
-            proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=creation_flags, encoding='utf-8', errors='replace')
-            try:
-                stdout, stderr = proc.communicate(timeout=300)
-                returncode = proc.returncode
-            except subprocess.TimeoutExpired:
-                if sys.platform == 'win32':
-                    if proc.poll() is None:
-                        subprocess.run(['taskkill', '/T', '/F', '/PID', str(proc.pid)], creationflags=CREATE_NO_WINDOW)
-                else:
-                    proc.kill()
-                proc.communicate()
-                return {'success': False, 'error': 'extraction: yt-dlp timeout'}
-            except Exception:
-                if sys.platform == 'win32':
-                    if proc.poll() is None:
-                        subprocess.run(['taskkill', '/T', '/F', '/PID', str(proc.pid)], creationflags=CREATE_NO_WINDOW)
-                else:
-                    proc.kill()
-                raise
+            proc = subprocess.run(
+                args,
+                capture_output=True,
+                creationflags=CREATE_NO_WINDOW,
+                timeout=300,
+                encoding='utf-8',
+                errors='replace',
+            )
 
             result_path = tmppath
             if not os.path.exists(result_path):
@@ -649,10 +627,10 @@ class Bridge:
                 if files:
                     result_path = str(files[0])
 
-            if returncode != 0 or not os.path.exists(result_path):
-                err_detail = (stderr or '').strip()
+            if proc.returncode != 0 or not os.path.exists(result_path):
+                err_detail = (proc.stderr or '').strip()
                 error_type = 'rate_limit' if re.search(r'403|forbidden|rate.?limit', err_detail, re.I) else 'extraction'
-                return {'success': False, 'error': f'{error_type}: yt-dlp error {returncode}: {err_detail}'}
+                return {'success': False, 'error': f'{error_type}: yt-dlp error {proc.returncode}: {err_detail}'}
 
             if os.path.getsize(result_path) < 16 * 1024:
                 return {'success': False, 'error': 'conversion: output file is too small'}
@@ -808,19 +786,15 @@ class Bridge:
         """Abre un archivo (o carpeta) usando la aplicación por defecto del sistema."""
         try:
             import os
-            root = Path(settings.get('download_folder', str(Path.home() / 'Music' / 'MHL Music'))).resolve()
-            safe_rel_path = file_path.lstrip('\/'); if ':' in safe_rel_path: return {'success': False, 'error': 'Invalid path (ADS blocked)'}
-            target_path = (root / safe_rel_path).resolve()
-
-            if not str(target_path).startswith(str(root)):
-                return {'success': False, 'error': 'Directory traversal detected'}
-            
+            target_path = Path(file_path).resolve()
             if not target_path.exists():
-                return {'success': False, 'error': 'File not found'}
+                root = Path(settings.get('download_folder', str(Path.home() / 'Music' / 'MHL Music'))).resolve()
+                alt_path = (root / file_path).resolve()
+                if alt_path.exists():
+                    target_path = alt_path
+                else:
+                    return {'success': False, 'error': 'File not found'}
                 
-            if target_path.is_file() and target_path.suffix.lower() not in ['.m4a', '.mp3', '.ogg', '.flac', '.wav']:
-                return {'success': False, 'error': 'Invalid file type'}
-
             # Solo para Windows
             os.startfile(str(target_path))
             return {"success": True}

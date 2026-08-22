@@ -1,9 +1,15 @@
-MHL Music 1.5.0 Beta 5 (Resurrección)
+MHL Music 1.5.0 Beta 6 (Estabilidad Definitiva)
 
-La Beta 4 introdujo mejoras importantes de rendimiento y seguridad, pero traía un bug crítico que dejaba la app en una pantalla negra permanente al iniciar. Esta Beta 5 resuelve el problema de raíz y te devuelve una app que arranca instantáneamente.
+MHL Music 1.5.0 Beta 6 llega para consolidar la mayor evolución de rendimiento y estabilidad de la app. Tras las refactorizaciones de las primeras betas, esta versión repara integralmente el motor de audio, el sistema de descargas y el backend de Desktop, eliminando pantallas en blanco y devolviendo una fluidez inmediata.
+
+🚀 **Rendimiento Extremo**
+
+- **Arranque Instantáneo sin WSOD:** Se eliminaron los cuellos de botella y bloqueos de pantalla en blanco durante el inicio de la app. Ahora la interfaz carga al instante sin retrasos ni intermediarios inestables.
+- **Micro-interacciones Fluidas:** Reproductor con diseño glassmorphism renovado, animaciones suaves con Framer Motion y renderizado altamente optimizado.
 
 🛠 **Correcciones y Estabilidad**
 
-- **Adiós pantalla negra (WSOD):** La Beta 4 tenía un error fatal donde React se bloqueaba internamente al iniciar la app. El sistema de hidratación del estado (IndexedDB) hacía un "early return" que violaba las reglas de los Hooks de React, provocando que la app nunca pasara de la pantalla de carga. Ahora todos los hooks se ejecutan correctamente antes de verificar si el estado está listo.
+- **Motor de Descargas Blindado:** Corregidas todas las referencias e imports internos del gestor de descargas para garantizar que cada pista se descargue, etiquete y guarde sin interrupciones ni fallos silenciosos.
+- **Backend Desktop Totalmente Reparado:** Se solucionaron los fallos de inicialización y manejo de rutas en Windows para el backend de pywebview.
+- **Sincronización Total del Reproductor:** Conexión directa y precisa de todos los eventos del motor de audio (play, pause, buffering, duración y tiempo de reproducción).
 
-- **Hidratación a prueba de fallos:** Si el almacenamiento interno (IndexedDB) falla o está corrupto, la app ahora arranca con valores por defecto en lugar de quedarse congelada para siempre. Tus datos se recuperan en cuanto el almacenamiento vuelve a estar disponible.

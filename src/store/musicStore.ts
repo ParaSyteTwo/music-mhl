@@ -1,7 +1,6 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage, StateStorage } from 'zustand/middleware';
-import { get, set as idbSet, del } from 'idb-keyval';
-import { MusicStore } from './slices/types';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import { MusicStore, ResolutionProfile, CellularResolutionPolicy } from './slices/types';
 import { createPlayerSlice } from './slices/playerSlice';
 import { createSearchSlice } from './slices/searchSlice';
 import { createDownloadSlice } from './slices/downloadSlice';
@@ -9,80 +8,42 @@ import { createSettingsSlice } from './slices/settingsSlice';
 import { audioEngine } from '@/lib/audioEngine';
 import { isUiLanguageMode, isLyricsTargetLanguage, Lang } from '@/lib/language';
 
-const idbStorage: StateStorage = {
-  getItem: async (name: string): Promise<string | null> => {
-    try {
-      const value = await get(name);
-      if (!value) {
-        // Migración automática de LocalStorage a IndexedDB
-        const lsValue = localStorage.getItem(name);
-        if (lsValue) {
-          await idbSet(name, lsValue);
-          return lsValue; // No borramos localstorage aún, como fallback seguro
-        }
-        return null;
-      }
-      return value || null;
-    } catch (e) {
-      console.warn('IDB get falló', e);
-      return localStorage.getItem(name);
-    }
-  },
-  setItem: async (name: string, value: string): Promise<void> => {
-    try {
-      await idbSet(name, value);
-    } catch (e) {
-      console.error('IDB set falló', e);
-      import('sonner').then(({ toast }) => {
-        toast.error('No hay espacio en disco (o IDB corrupto). El historial no se guardará.', { duration: 10000 });
-      }).catch(() => {});
-    }
-  },
-  removeItem: async (name: string): Promise<void> => {
-    try {
-      await del(name);
-    } catch (e) {
-      console.warn('IDB del falló', e);
-    }
-  },
-};
+export type { ResolutionProfile, CellularResolutionPolicy, MusicStore };
 
 export const useMusicStore = create<MusicStore>()(
   persist(
     (set, get, api) => {
       audioEngine.onTimeUpdate = (time) => {
-        if (get()._hasHydrated) set({ progress: time });
+        set({ progress: time });
       };
 
       audioEngine.onCanPlay = () => {
-        if (get()._hasHydrated) set({
+        set({
           isLoading: false,
           duration: audioEngine.duration || get().currentTrack?.duration || 0,
         });
       };
 
       audioEngine.onLoadedMetadata = () => {
-        if (get()._hasHydrated) set({
+        set({
           duration: audioEngine.duration || get().currentTrack?.duration || 0,
         });
       };
 
       audioEngine.onWaiting = () => {
-        if (get()._hasHydrated && get().currentTrack) set({ isLoading: true });
+        if (get().currentTrack) set({ isLoading: true });
       };
 
       audioEngine.onStalled = () => {
-        if (get()._hasHydrated && get().isPlaying) set({ isLoading: true });
+        if (get().isPlaying) set({ isLoading: true });
       };
 
-      audioEngine.onPlaying = () => {
-        if (get()._hasHydrated) set({ isPlaying: true, isLoading: false });
+      audioEngine.onPlay = () => {
+        set({ isPlaying: true, isLoading: false });
       };
-      audioEngine.onPause = () => {
-        if (get()._hasHydrated) set({ isPlaying: false, isLoading: false });
-      };
+
       audioEngine.onEnded = () => {
-        if (get()._hasHydrated) set({ isPlaying: false, progress: 0 });
+        set({ isPlaying: false, progress: 0 });
       };
 
       return {
@@ -94,16 +55,11 @@ export const useMusicStore = create<MusicStore>()(
     },
     {
       name: 'mhl-store',
-      storage: createJSONStorage(() => idbStorage),
-      onRehydrateStorage: () => (state, error) => {
-        if (error) {
-          console.error('[MusicStore] Hydration error:', error);
-        }
-        // Ensure the app always mounts even if IDB/LocalStorage is corrupted
-        useMusicStore.setState({ _hasHydrated: true });
-      },
+      storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
-        downloads: state.downloads.filter((d) => d.status === 'completed' || d.status === 'error'),
+        downloads: state.downloads
+          .filter((d) => d.status === 'completed' || d.status === 'error')
+          .slice(-100),
         volume: state.volume,
         downloadFolderName: state.downloadFolderName,
         uiLanguageMode: state.uiLanguageMode,
@@ -153,6 +109,7 @@ export const useMusicStore = create<MusicStore>()(
         mostDownloadedArtists: persisted?.mostDownloadedArtists ?? [],
         preferredPlayerPackage: persisted?.preferredPlayerPackage ?? null,
         autoDownload: persisted?.autoDownload ?? true,
+        _hasHydrated: true,
       }),
     }
   )

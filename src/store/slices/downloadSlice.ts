@@ -1,12 +1,21 @@
 import { StateCreator } from 'zustand';
 import { MusicStore, DownloadSlice } from './types';
+import { Track, Download } from '@/types/music';
 import { Capacitor } from '@capacitor/core';
 import { toast } from 'sonner';
 import { storeText } from './utils';
 import { canDownloadWithOneTap } from '@/lib/download/candidateResolver';
-import { downloadTrackAudio, getDownloadCandidates, invalidateDownloadCandidateCache } from '@/lib/api/musicApi';
-import { encodeArrayBufferBase64, decodeBase64ArrayBuffer } from '@/lib/binaryEncoding';
+import {
+  downloadTrackAudio,
+  getDownloadCandidates,
+  getDeezerTrackMeta,
+  getLyrics,
+  invalidateDownloadCandidateCache,
+} from '@/lib/api/musicApi';
+import { encodeArrayBufferBase64 } from '@/lib/binaryEncoding';
 import { buildDownloadFileName, getPreferredAlbumName } from '@/lib/music/metadata';
+import { getDeviceContext } from '@/lib/deviceContext';
+import { resolveSystemLanguage } from '@/lib/language';
 
 let isProcessingDownloadQueue = false;
 let rateLimitCooldownUntil = 0;
@@ -118,7 +127,7 @@ export const createDownloadSlice: StateCreator<
               const api = (window as any).pywebview?.api;
               const settings = await api.get_settings();
               const outputDir = settings.download_folder || 'C:/Users/Paul/Music/MHL Music';
-              const [rawResult, [trackMeta, lyricsResult]] = await Promise.all([
+              const [rawResult, [, lyricsResult]] = await Promise.all([
                 api.get_raw_audio(
                   resolvedVideoId ?? null,
                   track.canonicalTitle?.trim() || track.title,
@@ -131,9 +140,6 @@ export const createDownloadSlice: StateCreator<
               ]);
               if (!rawResult.success) throw new Error(rawResult.error || 'Error descargando audio');
               const lyrics = lyricsResult.synced || lyricsResult.plain || null;
-
-              updateDl({ progress: 50 });
-              const audioBuffer = decodeBase64ArrayBuffer(rawResult.data_b64 as string);
 
               updateDl({ progress: 70 });
 
@@ -195,7 +201,7 @@ export const createDownloadSlice: StateCreator<
                   : undefined,
               });
 
-              const [audioBuffer, [trackMeta, lyricsResult]] = await Promise.all([
+              const [audioBuffer, [, lyricsResult]] = await Promise.all([
                 downloadTrackAudio(track, (progress) => {
                   updateDl({ progress });
                 }, resolvedVideoId, sourceUrlOverride),
@@ -220,14 +226,16 @@ export const createDownloadSlice: StateCreator<
                 });
                 
                 updateDl({ progress: 95, mediaUri });
-
-                              } else {
+              } else {
                 // Web/Desktop wrapper
                 const fileName = resolvedFileName;
                 
-                if (window.pywebview) {
-                  const { api } = window as any;
-                  const filePath = (get().downloadFolder as any) + '/' + fileName;
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const pywebview = (window as any).pywebview;
+                if (pywebview?.api) {
+                  const api = pywebview.api;
+                  const folder = typeof get().downloadFolder === 'string' ? get().downloadFolder : 'C:/Users/Paul/Music/MHL Music';
+                  const filePath = folder + '/' + fileName;
                   
                   const writeResult = await api.tag_and_save_m4a(
                     filePath,
@@ -256,7 +264,6 @@ export const createDownloadSlice: StateCreator<
                 }
                 
                 updateDl({ progress: 95 });
-
               }
 
               updateDl({ progress: 100, status: 'completed', error: undefined, fileName: resolvedFileName });

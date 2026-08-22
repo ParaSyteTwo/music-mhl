@@ -21,7 +21,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
-from bridge import Bridge
+from bridge import Bridge, _ANIME_HEADERS
 
 
 # ---------------------------------------------------------------------------
@@ -587,7 +587,7 @@ def test_anime_requests_carry_user_agent_and_json_content_type_headers():
         bridge.anime_search("naruto", 5)
 
         assert captured_headers.get("Content-Type") == "application/json"
-        assert captured_headers.get("User-Agent") == "MHLMusic/1.5.0-beta.3"
+        assert captured_headers.get("User-Agent") == _ANIME_HEADERS["User-Agent"]
 
 
 def test_letras_fetch_returns_html_from_letras_domain():

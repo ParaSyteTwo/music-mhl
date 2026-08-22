@@ -26,7 +26,7 @@ export function buildDownloadFileName(track: Track, fileExtension: string): stri
   const preferredTitle = track.canonicalTitle?.trim() || track.title;
   const cleanTitle = cleanTrackTitleForFileName(preferredTitle);
   return `${cleanTitle} - ${track.artist}.${fileExtension}`
-    .replace(/[\/\\?%*:|"<>]/g, '')
+    .replace(/[/\\?%*:|"<>]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
 }

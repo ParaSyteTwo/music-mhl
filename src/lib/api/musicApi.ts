@@ -128,13 +128,24 @@ function mapRawDeezerTrack(t: RawDeezerTrack): Track {
   };
 }
 
+interface RawITunesTrack {
+  trackId?: number | string;
+  trackName?: string;
+  artistName?: string;
+  collectionName?: string;
+  trackTimeMillis?: number;
+  artworkUrl100?: string;
+  previewUrl?: string;
+  trackExplicitness?: string;
+}
+
 // ─── iTunes Fallback ───
 async function searchITunes(query: string, limit = 25): Promise<Track[]> {
   try {
     const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(query)}&media=music&limit=${limit}`);
     if (!res.ok) return [];
     const data = await res.json();
-    return (data.results || []).map((t: any): Track => ({
+    return ((data.results || []) as RawITunesTrack[]).map((t): Track => ({
       id: `itunes_${t.trackId}`,
       title: t.trackName || 'Unknown Title',
       canonicalTitle: t.trackName || 'Unknown Title',
