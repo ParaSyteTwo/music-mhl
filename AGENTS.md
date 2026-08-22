@@ -65,6 +65,7 @@ explícitamente.
 | PWA | (eliminada) | Restos históricos | No hay manifest ni service worker activos. |
 
 **Prohibido:**
+- Publicar o crear CUALQUIER release/prerelease en GitHub sin adjuntar obligatoriamente el manifiesto `MHL-Music-Android.json` junto con el APK y el ZIP portable.
 - Llamar al backend legado desde Desktop o Android
 - Asumir web como plataforma soportada en planes / SDD / docs
 - Crear endpoints nuevos en `services/ytdlp-service/` "por si la web los
@@ -83,9 +84,6 @@ explícitamente.
 4. **Tests required**: Cada feature debe incluir tests proporcionales al riesgo
 5. **Error handling**: Las fronteras async de red, bridge, filesystem y plugins
    deben capturar errores y devolver fallos tipados
-
-## Workflow — SDD Super Prompt
-
 Para cada request de feature, estructurar como:
 
 ```
