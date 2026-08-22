@@ -7,6 +7,7 @@ import { createDownloadSlice } from './slices/downloadSlice';
 import { createSettingsSlice } from './slices/settingsSlice';
 import { audioEngine } from '@/lib/audioEngine';
 import { isUiLanguageMode, isLyricsTargetLanguage, Lang } from '@/lib/language';
+import { applyThemeToDOM } from '@/lib/themes/themeCatalog';
 
 export type { ResolutionProfile, CellularResolutionPolicy, MusicStore };
 
@@ -76,41 +77,47 @@ export const useMusicStore = create<MusicStore>()(
         mostDownloadedArtists: state.mostDownloadedArtists,
         preferredPlayerPackage: state.preferredPlayerPackage,
         autoDownload: state.autoDownload,
+        appTheme: state.appTheme,
       }),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      merge: (persisted: any, current) => ({
-        ...current,
-        downloads: Array.isArray(persisted?.downloads) ? persisted.downloads : [],
-        volume: persisted?.volume ?? 0.8,
-        downloadFolderName: persisted?.downloadFolderName || '',
-        uiLanguageMode: isUiLanguageMode(persisted?.uiLanguageMode)
-          ? persisted.uiLanguageMode
-          : isUiLanguageMode(persisted?.appLanguage)
-            ? (persisted.appLanguage as Lang)
+      merge: (persisted: any, current) => {
+        const theme = persisted?.appTheme || 'original_minimalist';
+        applyThemeToDOM(theme);
+        return {
+          ...current,
+          downloads: Array.isArray(persisted?.downloads) ? persisted.downloads : [],
+          volume: persisted?.volume ?? 0.8,
+          downloadFolderName: persisted?.downloadFolderName || '',
+          uiLanguageMode: isUiLanguageMode(persisted?.uiLanguageMode)
+            ? persisted.uiLanguageMode
+            : isUiLanguageMode(persisted?.appLanguage)
+              ? (persisted.appLanguage as Lang)
+              : 'system',
+          appTheme: theme,
+          lyricOriginal: persisted?.lyricOriginal ?? true,
+          lyricRomanization: persisted?.lyricRomanization ?? true,
+          lyricTranslation: persisted?.lyricTranslation ?? true,
+          lyricLatinOnly: persisted?.lyricLatinOnly ?? false,
+          lyricsTargetLanguage: isLyricsTargetLanguage(persisted?.lyricsTargetLanguage)
+            ? persisted.lyricsTargetLanguage
             : 'system',
-        lyricOriginal: persisted?.lyricOriginal ?? true,
-        lyricRomanization: persisted?.lyricRomanization ?? true,
-        lyricTranslation: persisted?.lyricTranslation ?? true,
-        lyricLatinOnly: persisted?.lyricLatinOnly ?? false,
-        lyricsTargetLanguage: isLyricsTargetLanguage(persisted?.lyricsTargetLanguage)
-          ? persisted.lyricsTargetLanguage
-          : 'system',
-        animeSearchEnabled: persisted?.animeSearchEnabled ?? false,
-        autoCandidateResolution: persisted?.autoCandidateResolution ?? true,
-        resolutionProfile: persisted?.resolutionProfile === 'economy' || persisted?.resolutionProfile === 'adaptive'
-          ? persisted.resolutionProfile
-          : persisted?.androidFastSearchMode === true ? 'economy' : 'adaptive',
-        cellularResolutionPolicy: ['off', 'light', 'full'].includes(persisted?.cellularResolutionPolicy)
-          ? persisted.cellularResolutionPolicy
-          : 'light',
-        editionPreference: ['catalog', 'explicit', 'clean', 'ask'].includes(persisted?.editionPreference)
-          ? persisted.editionPreference
-          : 'catalog',
-        mostDownloadedArtists: persisted?.mostDownloadedArtists ?? [],
-        preferredPlayerPackage: persisted?.preferredPlayerPackage ?? null,
-        autoDownload: persisted?.autoDownload ?? true,
-        _hasHydrated: true,
-      }),
+          animeSearchEnabled: persisted?.animeSearchEnabled ?? false,
+          autoCandidateResolution: persisted?.autoCandidateResolution ?? true,
+          resolutionProfile: persisted?.resolutionProfile === 'economy' || persisted?.resolutionProfile === 'adaptive'
+            ? persisted.resolutionProfile
+            : persisted?.androidFastSearchMode === true ? 'economy' : 'adaptive',
+          cellularResolutionPolicy: ['off', 'light', 'full'].includes(persisted?.cellularResolutionPolicy)
+            ? persisted.cellularResolutionPolicy
+            : 'light',
+          editionPreference: ['catalog', 'explicit', 'clean', 'ask'].includes(persisted?.editionPreference)
+            ? persisted.editionPreference
+            : 'catalog',
+          mostDownloadedArtists: persisted?.mostDownloadedArtists ?? [],
+          preferredPlayerPackage: persisted?.preferredPlayerPackage ?? null,
+          autoDownload: persisted?.autoDownload ?? true,
+          _hasHydrated: true,
+        };
+      },
     }
   )
 );

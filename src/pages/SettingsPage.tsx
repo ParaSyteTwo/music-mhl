@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Settings, Folder, RefreshCw, CheckCircle2, FolderOpen, X, Music2, ChevronDown, ChevronRight } from 'lucide-react';
+import { Settings, Folder, RefreshCw, CheckCircle2, FolderOpen, X, Music2, ChevronDown, ChevronRight, Palette } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useMusicStore } from '@/store/musicStore';
 import { useI18n } from '@/lib/useI18n';
 import type { LyricsTargetLanguage, UiLanguageMode } from '@/lib/language';
+import { APP_THEMES, type AppThemeId } from '@/lib/themes/themeCatalog';
 import { Capacitor } from '@capacitor/core';
 import { isPyWebView } from '@/lib/platform';
 import type { AudioPlayer } from '@/lib/openFileBridge';
@@ -64,6 +65,7 @@ export default function SettingsPage() {
     cellularResolutionPolicy, setCellularResolutionPolicy,
     editionPreference, setEditionPreference,
     autoDownload, setAutoDownload,
+    appTheme, setAppTheme,
   } = useMusicStore();
 
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'done' | 'skipped' | 'error'>('idle');
@@ -183,6 +185,53 @@ export default function SettingsPage() {
     >
       <h1 className="text-lg sm:text-2xl font-semibold tracking-tighter mb-1 sm:mb-2">{t('settings')}</h1>
       <p className="text-xs sm:text-sm text-[#666660] mb-6 sm:mb-8">{t('appSettingsSubtitle')}</p>
+
+      {/* Apariencia & Temas (13 Estilos) */}
+      <section className="mb-8">
+        <div className="flex items-center gap-2 mb-3">
+          <Palette className="w-4 h-4 text-[var(--accent-primary)]" />
+          <h2 className="text-xs font-mono uppercase tracking-widest text-[#9E9E98]">{t('appearanceTitle')}</h2>
+        </div>
+        <div className="p-4 rounded-2xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)]">
+          <p className="text-xs text-[#9E9E98] mb-4">{t('appearanceHelp')}</p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-3">
+            {Object.values(APP_THEMES).map((theme) => {
+              const isActive = (appTheme || 'original_minimalist') === theme.id;
+              return (
+                <button
+                  key={theme.id}
+                  type="button"
+                  onClick={() => setAppTheme(theme.id)}
+                  className={`group relative flex flex-col p-3 rounded-xl border text-left transition-all overflow-hidden active:scale-95 ${
+                    isActive
+                      ? 'border-[var(--accent-primary)] bg-white/[0.08] shadow-lg shadow-[var(--accent-glow)]'
+                      : 'border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.05] hover:border-white/[0.12]'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <span className="text-base sm:text-lg">{theme.emoji}</span>
+                    <div className="flex items-center gap-1">
+                      {theme.swatch.map((color, idx) => (
+                        <span
+                          key={idx}
+                          className="w-2.5 h-2.5 rounded-full border border-black/40 shadow-sm flex-shrink-0"
+                          style={{ backgroundColor: color }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                  <p className={`text-xs font-bold leading-tight ${isActive ? 'text-[var(--accent-primary)]' : 'text-[#F5F5F0]'}`}>
+                    {t(theme.nameKey)}
+                  </p>
+                  <p className="text-[10px] text-[#8E8E88] mt-1 leading-tight line-clamp-2">
+                    {t(theme.descKey)}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </section>
 
       <section className="mb-8">
         <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">{t('language')}</h2>

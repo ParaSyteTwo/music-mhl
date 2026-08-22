@@ -1,6 +1,7 @@
 import { Track, Download } from '@/types/music';
 import { UiLanguageMode, LyricsTargetLanguage } from '@/lib/language';
 import { EditionPreference } from '@/lib/download/candidateResolver';
+import { AppThemeId } from '@/lib/themes/themeCatalog';
 
 export type ResolutionProfile = 'adaptive' | 'economy';
 export type CellularResolutionPolicy = 'off' | 'light' | 'full';
@@ -63,6 +64,7 @@ export interface SettingsSlice {
   setHasHydrated: (state: boolean) => void;
   uiLanguageMode: UiLanguageMode;
   preferredPlayerPackage: string | null;
+  appTheme: AppThemeId;
   lyricOriginal: boolean;
   lyricRomanization: boolean;
   lyricTranslation: boolean;
@@ -79,6 +81,7 @@ export interface SettingsSlice {
   ytDlpUpdating: boolean;
 
   setUiLanguageMode: (mode: UiLanguageMode) => void;
+  setAppTheme: (theme: AppThemeId) => void;
   setPreferredPlayerPackage: (pkg: string | null) => void;
   setLyricOriginal: (v: boolean) => void;
   setLyricRomanization: (v: boolean) => void;

@@ -1,5 +1,6 @@
 import { StateCreator } from 'zustand';
 import { MusicStore, SettingsSlice } from './types';
+import { applyThemeToDOM, DEFAULT_THEME_ID, AppThemeId } from '@/lib/themes/themeCatalog';
 
 export const createSettingsSlice: StateCreator<
   MusicStore,
@@ -11,6 +12,11 @@ export const createSettingsSlice: StateCreator<
   setHasHydrated: (state) => set({ _hasHydrated: state }),
   uiLanguageMode: 'system',
   setUiLanguageMode: (mode) => set({ uiLanguageMode: mode }),
+  appTheme: DEFAULT_THEME_ID,
+  setAppTheme: (theme: AppThemeId) => {
+    applyThemeToDOM(theme);
+    set({ appTheme: theme });
+  },
 
   lyricOriginal: true,
   lyricRomanization: true,

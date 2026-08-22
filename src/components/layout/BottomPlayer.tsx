@@ -63,10 +63,10 @@ export function BottomPlayer() {
             <div
               className="absolute inset-y-0 left-0 w-full origin-left rounded-r-full"
               style={{
-                background: 'linear-gradient(90deg, #C8F04B 0%, #8BC34A 100%)',
+                background: 'linear-gradient(90deg, var(--accent-primary) 0%, var(--accent-secondary) 100%)',
                 transform: `scaleX(${Math.min(Math.max(0, progressPercent / 100), 1)})`,
                 willChange: 'transform',
-                boxShadow: hoverProgress ? '0 0 15px rgba(200, 240, 75, 0.6)' : 'none',
+                boxShadow: hoverProgress ? '0 0 15px var(--accent-glow)' : 'none',
               }}
             />
           </div>
@@ -81,7 +81,7 @@ export function BottomPlayer() {
                 style={{
                   left: `${Math.min(Math.max(0, progressPercent), 100)}%`,
                   marginLeft: -7,
-                  boxShadow: '0 0 10px rgba(255,255,255,0.8), 0 0 20px rgba(200, 240, 75, 0.6)',
+                  boxShadow: '0 0 10px rgba(255,255,255,0.8), 0 0 20px var(--accent-glow)',
                 }}
               />
             )}
@@ -130,9 +130,9 @@ export function BottomPlayer() {
           whileHover={{ scale: 1.08 }}
           whileTap={{ scale: 0.9 }}
           onClick={togglePlay}
-          className="w-12 h-12 rounded-full bg-[#C8F04B] text-[#080808] flex items-center justify-center flex-shrink-0 relative overflow-hidden shadow-lg active:opacity-90"
+          className="w-12 h-12 rounded-full bg-[var(--accent-primary)] text-[#080808] flex items-center justify-center flex-shrink-0 relative overflow-hidden shadow-lg active:opacity-90 transition-colors duration-300"
           style={{
-            boxShadow: isPlaying && !isLoading ? '0 8px 24px rgba(200, 240, 75, 0.35)' : '0 4px 12px rgba(0,0,0,0.4)',
+            boxShadow: isPlaying && !isLoading ? '0 8px 24px var(--accent-glow)' : '0 4px 12px rgba(0,0,0,0.4)',
           }}
           disabled={isLoading}
           aria-label={isLoading ? t('loading') : isPlaying ? t('pause') : t('play')}
@@ -180,7 +180,7 @@ export function BottomPlayer() {
           >
             <div className="w-full h-1.5 bg-white/15 rounded-full overflow-hidden">
               <div
-                className="h-full bg-white group-hover:bg-[#C8F04B] rounded-full transition-all"
+                className="h-full bg-white group-hover:bg-[var(--accent-primary)] rounded-full transition-all"
                 style={{ width: `${volume * 100}%` }}
               />
             </div>

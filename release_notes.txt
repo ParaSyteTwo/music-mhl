@@ -1,14 +1,26 @@
-MHL Music 1.5.1 Beta 2 (4 Líneas de Artistas & Descubrimiento Inteligente)
+MHL Music 1.5.1 Beta 3 (Motor de 13 Temas & Nuevo Isotipo Oficial)
 
-MHL Music 1.5.1 Beta 2 optimiza la distribución de la pantalla de inicio con 4 líneas completas de 3 artistas (12 artistas en total), llenando armónicamente el espacio visual en móviles sin saturar la interfaz.
+MHL Music 1.5.1 Beta 3 introduce el nuevo motor universal de personalización visual con 13 temas estéticos únicos, el nuevo icono oficial de alta definición sin texto, y mejoras en la fluidez de toda la aplicación.
 
-✨ **Nuevas Funciones & Estética**
+✨ **Novedades de la Versión**
 
-- **4 Líneas de Artistas (12 en total):** Cuadrícula simétrica y equilibrada de 3 en 3 que aprovecha de forma natural la altura de pantalla en móviles.
-- **Catálogo Masivo de +1.500 Artistas:** Base de datos mundial exhaustiva con 20 géneros (Urbano, Pop, Rock, Metal, Regional Mexicano, K-Pop, J-Pop, Electrónica, Jazz, Afrobeats, etc.).
-- **Motor de Afinidad por Descargas:** El algoritmo aprende de tus canciones descargadas y te sugiere automáticamente más artistas de tus géneros favoritos.
-- **Rotación Cíclica Sin Repeticiones:** Historial dinámico de exclusiones de hasta 300 artistas para descubrir siempre música nueva.
-- **Resolución Inteligente de Enlaces:** Pega cualquier enlace de YouTube, YouTube Music, Spotify o SoundCloud y la app identificará automáticamente la canción, artista y álbum oficial en Ultra HD con letras sincronizadas.
+- **Nuevo Isotipo Oficial HD:** Auriculares de estudio y nota musical con acabados en profundidad 3D, sin texto y perfectamente centrados.
+- **Motor de 13 Temas Visuales:** Selector interactivo en Ajustes para personalizar la app con un toque:
+  1. ⚡ *Acid Cyberpunk* (Neón Lima Eléctrico)
+  2. 🌌 *OLED Sapphire* (Azul Cobalto Láser)
+  3. 🌸 *Vaporwave Sunset* (Degradado Retro Magenta & Naranja)
+  4. 🔮 *Amethyst Royal* (Púrpura Imperial & Ultravioleta)
+  5. 🌲 *Emerald Aurora* (Verde Esmeralda Nórdico)
+  6. ☀️ *Solar Amber* (Ámbar Dorado & Calidez Analógica)
+  7. 🩸 *Crimson Velocity* (Rojo Rubí & Fibra Oscura)
+  8. 🌊 *Oceanic Abyss* (Turquesa Bioluminiscente)
+  9. 🍵 *Matcha Zen* (Verde Matcha & Serenidad Japonesa)
+  10. 🍬 *Cotton Candy Dream* (Rosa Pastel & Lila)
+  11. 🛸 *Matrix Terminal* (Fósforo Verde CRT Hacker)
+  12. 🪙 *Titanium Luxury* (Platino Plateado de Lujo)
+  13. 🎧 *MHL Minimalista Clásico* (El clásico original puro)
+- **4 Líneas de Artistas (12 en total):** Cuadrícula simétrica optimizada para móviles.
+- **Catálogo de +1.500 Artistas y Afinidad de Descarga:** Recomendaciones inteligentes que aprenden de tus gustos musicales.
 - **Pantalla de Búsqueda sin Scroll:** Todo cabe de forma equilibrada y elegante en la pantalla de inicio sin desbordes verticales en móviles.
 - **Tipografía Limpia y Natural:** Encabezados desahogados sin fuentes comprimidas artificialmente.
 

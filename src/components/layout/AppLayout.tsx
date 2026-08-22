@@ -38,17 +38,17 @@ export function AppLayout() {
         }}
       >
         <span className="mr-2 inline-flex items-center gap-2 font-[family-name:Syne] text-sm font-bold tracking-[-0.03em] text-[#F5F5F0]">
-          <span className="h-2.5 w-2.5 rotate-12 rounded-[3px] bg-[#C8F04B] shadow-[0_0_16px_rgba(200,240,75,0.45)]" />
+          <span className="h-2.5 w-2.5 rotate-12 rounded-[3px] bg-[var(--accent-primary)] shadow-[0_0_16px_var(--accent-glow)] transition-colors duration-300" />
           MHL
         </span>
         <span className="h-4 w-px bg-white/[0.08]" aria-hidden="true" />
-        <NavLink to="/" className={({ isActive }) => `flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors ${isActive ? 'text-[#C8F04B] bg-[rgba(200,240,75,0.1)]' : 'text-[#999] hover:text-[#F5F5F0]'}`}>
+        <NavLink to="/" className={({ isActive }) => `flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors ${isActive ? 'text-[var(--accent-primary)] bg-[var(--accent-primary)]/10' : 'text-[#999] hover:text-[#F5F5F0]'}`}>
           <Search className="w-4 h-4" /> {t('search')}
         </NavLink>
-        <NavLink to="/downloads" className={({ isActive }) => `flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors ${isActive ? 'text-[#C8F04B] bg-[rgba(200,240,75,0.1)]' : 'text-[#999] hover:text-[#F5F5F0]'}`}>
+        <NavLink to="/downloads" className={({ isActive }) => `flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors ${isActive ? 'text-[var(--accent-primary)] bg-[var(--accent-primary)]/10' : 'text-[#999] hover:text-[#F5F5F0]'}`}>
           <Download className="w-4 h-4" /> {t('downloads')}
         </NavLink>
-        <NavLink to="/settings" className={({ isActive }) => `flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors ${isActive ? 'text-[#C8F04B] bg-[rgba(200,240,75,0.1)]' : 'text-[#999] hover:text-[#F5F5F0]'}`}>
+        <NavLink to="/settings" className={({ isActive }) => `flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors ${isActive ? 'text-[var(--accent-primary)] bg-[var(--accent-primary)]/10' : 'text-[#999] hover:text-[#F5F5F0]'}`}>
           <Settings className="w-4 h-4" /> {t('settings')}
         </NavLink>
         <div className="flex-1" />
@@ -78,20 +78,20 @@ export function AppLayout() {
           height: 'calc(var(--nav-height) + var(--sab))',
         }}
       >
-        <NavLink to="/" className={({ isActive }) => `flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors min-h-[44px] ${isActive ? 'text-[#C8F04B] bg-[rgba(200,240,75,0.06)]' : 'text-[#666]'}`}>
+        <NavLink to="/" className={({ isActive }) => `flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors min-h-[44px] ${isActive ? 'text-[var(--accent-primary)] bg-[var(--accent-primary)]/10' : 'text-[#666]'}`}>
           <Search className="w-5 h-5" />
           <span className="text-[10px] font-medium">{t('search')}</span>
         </NavLink>
-        <NavLink to="/downloads" className={({ isActive }) => `flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors relative min-h-[44px] ${isActive ? 'text-[#C8F04B] bg-[rgba(200,240,75,0.06)]' : 'text-[#666]'}`}>
+        <NavLink to="/downloads" className={({ isActive }) => `flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors relative min-h-[44px] ${isActive ? 'text-[var(--accent-primary)] bg-[var(--accent-primary)]/10' : 'text-[#666]'}`}>
           <Download className="w-5 h-5" />
           <span className="text-[10px] font-medium">{t('downloads')}</span>
           {downloadCount > 0 && (
-            <span className="absolute top-1.5 right-[calc(50%-2px)] translate-x-3 w-4 h-4 rounded-full bg-[#C8F04B] text-[#080808] text-[9px] font-bold flex items-center justify-center">
+            <span className="absolute top-1.5 right-[calc(50%-2px)] translate-x-3 w-4 h-4 rounded-full bg-[var(--accent-primary)] text-[#080808] text-[9px] font-bold flex items-center justify-center transition-colors duration-300">
               {downloadCount}
             </span>
           )}
         </NavLink>
-        <NavLink to="/settings" className={({ isActive }) => `flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors min-h-[44px] ${isActive ? 'text-[#C8F04B] bg-[rgba(200,240,75,0.06)]' : 'text-[#666]'}`}>
+        <NavLink to="/settings" className={({ isActive }) => `flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors min-h-[44px] ${isActive ? 'text-[var(--accent-primary)] bg-[var(--accent-primary)]/10' : 'text-[#666]'}`}>
           <Settings className="w-5 h-5" />
           <span className="text-[10px] font-medium">{t('settings')}</span>
         </NavLink>
