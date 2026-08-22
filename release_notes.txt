@@ -1,16 +1,15 @@
-MHL Music 1.5.0 (Evolución Visual & Experiencia Definitiva)
+MHL Music 1.5.1 Beta 1 (Smart Discovery & Full Engine)
 
-MHL Music 1.5.0 es el lanzamiento oficial y definitivo que redefine la experiencia visual, estética y de rendimiento en Desktop y Android. Esta versión consolida una renovación integral de la pantalla principal con cuadrícula compacta de artistas, aceleración total por hardware, switches táctiles de alta gama y un diseño inmersivo de borde a borde.
+MHL Music 1.5.1 Beta 1 incorpora la base de datos masiva de más de 1.500 artistas mundiales clasificados en 20 géneros musicales, el nuevo motor de recomendación inteligente basado en descargas previas, resolución avanzada de enlaces multimedia y blindaje total de la interfaz.
 
 ✨ **Nuevas Funciones & Estética**
 
-- **Catálogo Masivo de Artistas & Afinidad por Género:** Más de 1,500 artistas globales clasificados en 20 géneros musicales. El algoritmo inteligente analiza tus descargas previas y te recomienda automáticamente más artistas de tus géneros favoritos sin repetir recomendaciones recientes.
+- **Catálogo Masivo de +1.500 Artistas:** Base de datos mundial exhaustiva con 20 géneros (Urbano, Pop, Rock, Metal, Regional Mexicano, K-Pop, J-Pop, Electrónica, Jazz, Afrobeats, etc.).
+- **Motor de Afinidad por Descargas:** El algoritmo aprende de tus canciones descargadas y te sugiere automáticamente más artistas de tus géneros favoritos.
+- **Rotación Cíclica Sin Repeticiones:** Historial dinámico de exclusiones de hasta 300 artistas para descubrir siempre música nueva.
 - **Resolución Inteligente de Enlaces:** Pega cualquier enlace de YouTube, YouTube Music, Spotify o SoundCloud y la app identificará automáticamente la canción, artista y álbum oficial en Ultra HD con letras sincronizadas.
-- **Cuadrícula Compacta de Artistas:** Descubre y explora música con una cuadrícula simétrica de 3 en 3 en móviles con avatares vibrantes, halo ambiental (*glow*) y micro-etiquetas de género.
-- **Hero de Búsqueda Rediseñado:** Encabezado espacioso y pulido con márgenes seguros para la barra de estado de Android y soporte para enlaces directos de YouTube y Spotify.
-- **Buscador Sutil y Moderno:** Placeholder minimalista, accesible y limpio sin textos toscos en mayúsculas.
-- **Switches Táctiles de Alta Gama:** Toggles animados y elegantes en Ajustes con acento Acid Lime.
-- **Popups y Notificaciones Frosted Glass:** Notificaciones emergentes con alto contraste, bordes luminosos y desenfoque ultra nítido.
+- **Pantalla de Búsqueda sin Scroll:** Todo cabe de forma equilibrada y elegante en la pantalla de inicio sin desbordes verticales en móviles.
+- **Tipografía Limpia y Natural:** Encabezados desahogados sin fuentes comprimidas artificialmente.
 
 🚀 **Rendimiento Extremo & Fluidez**
 

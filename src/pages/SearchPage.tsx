@@ -18,7 +18,7 @@ import { toast } from 'sonner';
 import { Capacitor } from '@capacitor/core';
 import { canDownloadWithOneTap } from '@/lib/download/candidateResolver';
 import { CandidateScheduler } from '@/lib/download/candidateScheduler';
-import { isDirectMediaUrl, resolveTrackFromUrl } from '@/lib/music/urlResolver';
+import { isDirectMediaUrl, isUnsupportedCollectionUrl, resolveTrackFromUrl } from '@/lib/music/urlResolver';
 
 function formatDuration(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -280,7 +280,13 @@ export default function SearchPage() {
 
   const handleDirectUrl = useCallback(async (rawUrl: string) => {
     const trimmed = rawUrl.trim();
-    if (!trimmed) return;
+    if (!trimmed || isSearching) return;
+
+    if (isUnsupportedCollectionUrl(trimmed)) {
+      toast.error('Pega el enlace de una canción o pista individual', { id: 'url-resolve' });
+      return;
+    }
+
     setIsSearching(true);
     toast.loading(t('resolvingUrl'), { id: 'url-resolve' });
     try {
@@ -303,18 +309,18 @@ export default function SearchPage() {
     } finally {
       setIsSearching(false);
     }
-  }, [autoDownload, startDownload, t]);
+  }, [autoDownload, isSearching, startDownload, t]);
 
   const handleSearch = () => {
-    const trimmed = query.trim();
-    if (!trimmed) return;
+    const sanitized = query.replace(/[\x00-\x1F\x7F]/g, '').trim();
+    if (!sanitized || isSearching) return;
     
-    if (isDirectMediaUrl(trimmed)) {
-      handleDirectUrl(trimmed);
+    if (isDirectMediaUrl(sanitized)) {
+      handleDirectUrl(sanitized);
       return;
     }
     
-    performSearch(trimmed);
+    performSearch(sanitized);
     refreshRecent();
   };
 

@@ -2,8 +2,60 @@ import type { Track } from '@/types/music';
 import { searchDeezer } from '@/lib/api/musicApi';
 
 export function isDirectMediaUrl(input: string): boolean {
+  const trimmed = input.trim().replace(/^[<"']+|[>"']+$/g, '');
+  return /^https?:\/\/(www\.|m\.)?(youtube\.com|youtu\.be|music\.youtube\.com|soundcloud\.com|open\.spotify\.com)\/.+/i.test(trimmed);
+}
+
+export function isUnsupportedCollectionUrl(input: string): boolean {
   const trimmed = input.trim();
-  return /^https?:\/\/(www\.)?(youtube\.com|youtu\.be|music\.youtube\.com|m\.youtube\.com|soundcloud\.com|open\.spotify\.com)\/.+/i.test(trimmed);
+  return (
+    (/[?&]list=/i.test(trimmed) && !/[?&]v=/i.test(trimmed)) ||
+    /open\.spotify\.com\/(?:[a-zA-Z0-9_-]+\/)?(album|playlist|show|episode)\//i.test(trimmed) ||
+    /soundcloud\.com\/[^/]+\/sets\//i.test(trimmed)
+  );
+}
+
+export function extractYouTubeVideoId(urlStr: string): string | null {
+  try {
+    const url = new URL(urlStr.trim().replace(/^[<"']+|[>"']+$/g, ''));
+    const host = url.hostname.toLowerCase();
+
+    if (host === 'youtu.be' || host.endsWith('.youtu.be')) {
+      const id = url.pathname.slice(1).split(/[/?#]/)[0];
+      return id && id.length === 11 ? id : null;
+    }
+
+    if (host === 'youtube.com' || host.endsWith('.youtube.com')) {
+      if (url.pathname.startsWith('/shorts/')) {
+        const id = url.pathname.split('/shorts/')[1]?.split(/[/?#]/)[0];
+        return id && id.length === 11 ? id : null;
+      }
+      if (url.pathname.startsWith('/embed/') || url.pathname.startsWith('/v/')) {
+        const id = url.pathname.split(/\/(?:embed|v)\//)[1]?.split(/[/?#]/)[0];
+        return id && id.length === 11 ? id : null;
+      }
+      const v = url.searchParams.get('v');
+      return v && v.length === 11 ? v : null;
+    }
+  } catch {
+    // regex fallback
+  }
+  const match = urlStr.match(/(?:youtu\.be\/|(?:www\.|m\.)?youtube\.com\/(?:watch\?(?:[^&]*&)?v=|shorts\/|music\/watch\?(?:[^&]*&)?v=|embed\/|v\/))([a-zA-Z0-9_-]{11})/i);
+  return match ? match[1] : null;
+}
+
+export function extractSpotifyTrackId(urlStr: string): string | null {
+  try {
+    const url = new URL(urlStr.trim().replace(/^[<"']+|[>"']+$/g, ''));
+    if (url.hostname.includes('spotify.com')) {
+      const match = url.pathname.match(/(?:[a-zA-Z0-9_-]+\/)?track\/([a-zA-Z0-9]+)/i);
+      return match ? match[1] : null;
+    }
+  } catch {
+    // regex fallback
+  }
+  const match = urlStr.match(/open\.spotify\.com\/(?:[a-zA-Z0-9_-]+\/)?track\/([a-zA-Z0-9]+)/i);
+  return match ? match[1] : null;
 }
 
 export function cleanVideoTitle(rawTitle: string): { title: string; artist?: string } {
@@ -43,23 +95,37 @@ export function cleanVideoTitle(rawTitle: string): { title: string; artist?: str
   return { title: cleaned };
 }
 
+function createTimeoutSignal(ms: number): AbortSignal | undefined {
+  if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+    try {
+      return AbortSignal.timeout(ms);
+    } catch {
+      // fallback
+    }
+  }
+  return undefined;
+}
+
 export async function resolveTrackFromUrl(url: string): Promise<Track | null> {
-  const trimmed = url.trim();
+  const trimmed = url.trim().replace(/^[<"']+|[>"']+$/g, '');
   if (!isDirectMediaUrl(trimmed)) return null;
 
   try {
-    // 1. YouTube & YouTube Music & Shorts
-    const ytMatch = trimmed.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|shorts\/|music\/watch\?(?:.*&)?v=))([a-zA-Z0-9_-]{11})/i);
-    if (ytMatch) {
-      const videoId = ytMatch[1];
+    // 1. YouTube & YouTube Music & Shorts & Embeds
+    const videoId = extractYouTubeVideoId(trimmed);
+    if (videoId) {
       let oembedData: { title?: string; author_name?: string; thumbnail_url?: string } | null = null;
       try {
-        const oembedRes = await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`);
+        const signal = createTimeoutSignal(6000);
+        const oembedRes = await fetch(
+          `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`,
+          signal ? { signal } : undefined
+        );
         if (oembedRes.ok) {
           oembedData = (await oembedRes.json()) as { title?: string; author_name?: string; thumbnail_url?: string };
         }
       } catch {
-        // oEmbed error ignore
+        // oEmbed fallback
       }
 
       const rawTitle = oembedData?.title || 'YouTube Audio';
@@ -108,11 +174,14 @@ export async function resolveTrackFromUrl(url: string): Promise<Track | null> {
     }
 
     // 2. Spotify Track URL
-    const spotifyMatch = trimmed.match(/open\.spotify\.com\/track\/([a-zA-Z0-9]+)/i);
-    if (spotifyMatch) {
+    const spotifyTrackId = extractSpotifyTrackId(trimmed);
+    if (spotifyTrackId) {
       let oembedTitle = '';
       try {
-        const res = await fetch(`https://open.spotify.com/oembed?url=${encodeURIComponent(trimmed)}`);
+        const res = await fetch(
+          `https://open.spotify.com/oembed?url=${encodeURIComponent(trimmed)}`,
+          { signal: AbortSignal.timeout(6000) }
+        );
         if (res.ok) {
           const data = (await res.json()) as { title?: string };
           oembedTitle = data.title || '';
@@ -142,7 +211,10 @@ export async function resolveTrackFromUrl(url: string): Promise<Track | null> {
     if (trimmed.includes('soundcloud.com/')) {
       let scData: { title?: string; author_name?: string; thumbnail_url?: string } | null = null;
       try {
-        const res = await fetch(`https://soundcloud.com/oembed?url=${encodeURIComponent(trimmed)}&format=json`);
+        const res = await fetch(
+          `https://soundcloud.com/oembed?url=${encodeURIComponent(trimmed)}&format=json`,
+          { signal: AbortSignal.timeout(6000) }
+        );
         if (res.ok) {
           scData = (await res.json()) as { title?: string; author_name?: string; thumbnail_url?: string };
         }

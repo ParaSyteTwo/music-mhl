@@ -13,15 +13,17 @@ describe('urlResolver', () => {
   });
 
   describe('isDirectMediaUrl', () => {
-    it('detects YouTube watch and short URLs', () => {
+    it('detects YouTube watch and short URLs with complex parameters', () => {
       expect(isDirectMediaUrl('https://www.youtube.com/watch?v=dQw4w9WgXcQ')).toBe(true);
-      expect(isDirectMediaUrl('https://youtu.be/dQw4w9WgXcQ')).toBe(true);
+      expect(isDirectMediaUrl('https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=45s&si=xyz123')).toBe(true);
+      expect(isDirectMediaUrl('https://youtu.be/dQw4w9WgXcQ?si=abcdef12345')).toBe(true);
       expect(isDirectMediaUrl('https://music.youtube.com/watch?v=dQw4w9WgXcQ')).toBe(true);
       expect(isDirectMediaUrl('https://www.youtube.com/shorts/dQw4w9WgXcQ')).toBe(true);
     });
 
-    it('detects Spotify track URLs', () => {
+    it('detects Spotify track URLs including international regional prefixes', () => {
       expect(isDirectMediaUrl('https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT')).toBe(true);
+      expect(isDirectMediaUrl('https://open.spotify.com/intl-es/track/4cOdK2wGLETKBW3PvgPWqT?si=abc')).toBe(true);
     });
 
     it('detects SoundCloud URLs', () => {
