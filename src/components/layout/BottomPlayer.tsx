@@ -91,7 +91,7 @@ export function BottomPlayer() {
 
       {/* Main player bar - Glassmorphism Mejorado */}
       <div
-        className="fixed left-0 right-0 border-t border-white/10 z-40 flex items-center px-4 sm:px-6 gap-3 sm:gap-4"
+        className="fixed left-0 right-0 border-t border-white/10 z-40 px-4 sm:px-6"
         style={{
           bottom: bottomStyle,
           backdropFilter: 'blur(32px) saturate(180%)',
@@ -103,86 +103,88 @@ export function BottomPlayer() {
           transition: 'background 800ms ease',
         }}
       >
-        {/* Track info con Animación sutil */}
-        <div className="flex items-center gap-3 min-w-0 flex-1">
-          <motion.div 
-            whileHover={{ scale: 1.05 }}
-            className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl overflow-hidden flex-shrink-0 shadow-lg border border-white/10"
-          >
-            {currentTrack.cover ? (
-              <img src={currentTrack.cover} alt="" className="w-full h-full object-cover" />
-            ) : (
-              <div className="w-full h-full bg-white/5 flex items-center justify-center text-white/40 text-xs font-mono">♪</div>
-            )}
-          </motion.div>
-          <div className="min-w-0 flex-1 flex flex-col justify-center">
-            <p className="text-sm sm:text-[15px] font-bold text-[#F5F5F0] truncate tracking-tight">
-              {currentTrack.title}
-            </p>
-            <p className="text-xs sm:text-[13px] text-[#A0A098] truncate font-medium mt-0.5">
-              {currentTrack.artist}
-            </p>
+        <div className="w-full max-w-5xl mx-auto h-full flex items-center gap-3 sm:gap-4">
+          {/* Track info con Animación sutil */}
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <motion.div 
+              whileHover={{ scale: 1.05 }}
+              className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl overflow-hidden flex-shrink-0 shadow-lg border border-white/10"
+            >
+              {currentTrack.cover ? (
+                <img src={currentTrack.cover} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full bg-white/5 flex items-center justify-center text-white/40 text-xs font-mono">♪</div>
+              )}
+            </motion.div>
+            <div className="min-w-0 flex-1 flex flex-col justify-center">
+              <p className="text-sm sm:text-[15px] font-bold text-[#F5F5F0] truncate tracking-tight">
+                {currentTrack.title}
+              </p>
+              <p className="text-xs sm:text-[13px] text-[#A0A098] truncate font-medium mt-0.5">
+                {currentTrack.artist}
+              </p>
+            </div>
           </div>
-        </div>
 
-        {/* Play/Pause - Micro-interacciones Spring */}
-        <motion.button
-          whileHover={{ scale: 1.08 }}
-          whileTap={{ scale: 0.9 }}
-          onClick={togglePlay}
-          className="w-12 h-12 rounded-full bg-[var(--accent-primary)] text-[#080808] flex items-center justify-center flex-shrink-0 relative overflow-hidden shadow-lg active:opacity-90 transition-colors duration-300"
-          style={{
-            boxShadow: isPlaying && !isLoading ? '0 8px 24px var(--accent-glow)' : '0 4px 12px rgba(0,0,0,0.4)',
-          }}
-          disabled={isLoading}
-          aria-label={isLoading ? t('loading') : isPlaying ? t('pause') : t('play')}
-        >
-          <AnimatePresence mode="wait">
-            {isLoading ? (
-              <motion.div key="loader" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                <Loader2 className="w-5 h-5 animate-spin" />
-              </motion.div>
-            ) : isPlaying ? (
-              <motion.div key="pause" initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.5, opacity: 0 }} transition={{ type: "spring", stiffness: 300, damping: 20 }}>
-                <Pause className="w-5 h-5 fill-current" />
-              </motion.div>
-            ) : (
-              <motion.div key="play" initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.5, opacity: 0 }} transition={{ type: "spring", stiffness: 300, damping: 20 }}>
-                <Play className="w-5 h-5 fill-current ml-0.5" />
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </motion.button>
-
-        {/* Time + Volume (Desktop) */}
-        <div className="hidden sm:flex items-center gap-3.5 min-w-[200px] justify-end">
-          <span className="text-[11px] font-mono text-[#A0A098] tabular-nums tracking-wide">
-            {formatTime(progress)} / {formatTime(duration)}
-          </span>
+          {/* Play/Pause - Micro-interacciones Spring */}
           <motion.button
-            whileHover={{ scale: 1.1 }}
+            whileHover={{ scale: 1.08 }}
             whileTap={{ scale: 0.9 }}
-            onClick={() => setVolume(volume > 0 ? 0 : 0.8)}
-            className="text-[#A0A098] hover:text-[#F5F5F0] transition-colors p-1"
-          >
-            {volume > 0 ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-          </motion.button>
-          <div
-            role="slider"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={Math.round(volume * 100)}
-            className="w-20 h-3 flex items-center cursor-pointer group"
-            onClick={(e) => {
-              const rect = e.currentTarget.getBoundingClientRect();
-              setVolume(Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)));
+            onClick={togglePlay}
+            className="w-12 h-12 rounded-full bg-[var(--accent-primary)] text-[#080808] flex items-center justify-center flex-shrink-0 relative overflow-hidden shadow-lg active:opacity-90 transition-colors duration-300"
+            style={{
+              boxShadow: isPlaying && !isLoading ? '0 8px 24px var(--accent-glow)' : '0 4px 12px rgba(0,0,0,0.4)',
             }}
+            disabled={isLoading}
+            aria-label={isLoading ? t('loading') : isPlaying ? t('pause') : t('play')}
           >
-            <div className="w-full h-1.5 bg-white/15 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-white group-hover:bg-[var(--accent-primary)] rounded-full transition-all"
-                style={{ width: `${volume * 100}%` }}
-              />
+            <AnimatePresence mode="wait">
+              {isLoading ? (
+                <motion.div key="loader" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                </motion.div>
+              ) : isPlaying ? (
+                <motion.div key="pause" initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.5, opacity: 0 }} transition={{ type: "spring", stiffness: 300, damping: 20 }}>
+                  <Pause className="w-5 h-5 fill-current" />
+                </motion.div>
+              ) : (
+                <motion.div key="play" initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.5, opacity: 0 }} transition={{ type: "spring", stiffness: 300, damping: 20 }}>
+                  <Play className="w-5 h-5 fill-current ml-0.5" />
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.button>
+
+          {/* Time + Volume (Desktop) */}
+          <div className="hidden sm:flex items-center gap-3.5 min-w-[200px] justify-end">
+            <span className="text-[11px] font-mono text-[#A0A098] tabular-nums tracking-wide">
+              {formatTime(progress)} / {formatTime(duration)}
+            </span>
+            <motion.button
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
+              onClick={() => setVolume(volume > 0 ? 0 : 0.8)}
+              className="text-[#A0A098] hover:text-[#F5F5F0] transition-colors p-1"
+            >
+              {volume > 0 ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+            </motion.button>
+            <div
+              role="slider"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round(volume * 100)}
+              className="w-20 h-3 flex items-center cursor-pointer group"
+              onClick={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                setVolume(Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)));
+              }}
+            >
+              <div className="w-full h-1.5 bg-white/15 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-white group-hover:bg-[var(--accent-primary)] rounded-full transition-all"
+                  style={{ width: `${volume * 100}%` }}
+                />
+              </div>
             </div>
           </div>
         </div>

@@ -69,14 +69,14 @@ public class YtDlpPlugin extends Plugin {
     private synchronized void ensureInitialized() throws Exception {
         if (!isInitialized) {
             try {
-                YoutubeDL.getInstance().init(getContext());
+                YoutubeDL.getInstance().init(getContext().getApplicationContext());
                 Log.i(TAG, "yt-dlp initialized");
             } catch (Exception e) {
                 Log.e(TAG, "yt-dlp init error: " + e.getMessage());
                 throw e;
             }
             try {
-                FFmpeg.getInstance().init(getContext());
+                FFmpeg.getInstance().init(getContext().getApplicationContext());
                 Log.i(TAG, "FFmpeg initialized");
             } catch (Exception e) {
                 Log.w(TAG, "FFmpeg init error (non-fatal): " + e.getMessage());
@@ -85,7 +85,6 @@ public class YtDlpPlugin extends Plugin {
             isInitialized = true;
             Log.i(TAG, "yt-dlp + FFmpeg ready");
         }
-
     }
 
     // Removed SAF/picker helpers — plugin now uses MediaStore to save downloads publicly
@@ -602,35 +601,45 @@ public class YtDlpPlugin extends Plugin {
                 }
 
                 ContentResolver resolver = getContext().getContentResolver();
-                Uri itemUri = resolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values);
+                Uri itemUri = null;
+                try {
+                    itemUri = resolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values);
 
-                if (itemUri == null) {
-                    bridge.getActivity().runOnUiThread(() -> call.reject("MediaStore insert failed"));
-                    return;
-                }
-
-                try (OutputStream os = resolver.openOutputStream(itemUri);
-                     FileInputStream in = new FileInputStream(tempAudio)) {
-                    byte[] buffer = new byte[8192];
-                    int len;
-                    while ((len = in.read(buffer)) > 0) {
-                        os.write(buffer, 0, len);
+                    if (itemUri == null) {
+                        bridge.getActivity().runOnUiThread(() -> call.reject("MediaStore insert failed"));
+                        return;
                     }
+
+                    try (OutputStream os = resolver.openOutputStream(itemUri);
+                         FileInputStream in = new FileInputStream(tempAudio)) {
+                        byte[] buffer = new byte[8192];
+                        int len;
+                        while ((len = in.read(buffer)) > 0) {
+                            os.write(buffer, 0, len);
+                        }
+                    }
+
+                    values.clear();
+                    values.put(MediaStore.Audio.Media.IS_PENDING, 0);
+                    resolver.update(itemUri, values, null, null);
+
+                    Log.i(TAG, "Saved tagged " + fileName + " to Music/MHL Music");
+
+                    JSObject result = new JSObject();
+                    result.put("success", true);
+                    result.put("uri", itemUri.toString());
+                    bridge.getActivity().runOnUiThread(() -> call.resolve(result));
+                } catch (Throwable writeErr) {
+                    if (itemUri != null) {
+                        try {
+                            resolver.delete(itemUri, null, null);
+                        } catch (Exception ignored) {}
+                    }
+                    throw writeErr;
                 }
-
-                values.clear();
-                values.put(MediaStore.Audio.Media.IS_PENDING, 0);
-                resolver.update(itemUri, values, null, null);
-
-                Log.i(TAG, "Saved tagged " + fileName + " to Music/MHL Music");
-
-                JSObject result = new JSObject();
-                result.put("success", true);
-                result.put("uri", itemUri.toString());
-                bridge.getActivity().runOnUiThread(() -> call.resolve(result));
-            } catch (Exception e) {
+            } catch (Throwable e) {
                 Log.e(TAG, "tagAndSaveM4A failed", e);
-                bridge.getActivity().runOnUiThread(() -> call.reject(e.getMessage()));
+                bridge.getActivity().runOnUiThread(() -> call.reject(e.getMessage() != null ? e.getMessage() : "Tagging failed"));
             } finally {
                 if (tempAudio != null) tempAudio.delete();
                 if (tempCover != null) tempCover.delete();

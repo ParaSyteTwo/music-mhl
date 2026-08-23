@@ -65,7 +65,7 @@ _ANILIST_ENDPOINT = 'https://graphql.anilist.co'
 _ANIMETHEMES_ENDPOINT = 'https://api.animethemes.moe'
 _ANIME_HEADERS = {
     'Content-Type': 'application/json',
-    'User-Agent': 'MHLMusic/1.5.2',
+    'User-Agent': 'MHLMusic/1.5.3',
 }
 _ANIME_TIMEOUT = 10
 
@@ -416,7 +416,17 @@ class Bridge:
     ) -> dict:
         """Escribe M4A a disco e inyecta metadata via Mutagen."""
         try:
+            root = Path(settings.get(
+                'download_folder',
+                str(Path.home() / 'Music' / 'MHL Music'),
+            )).resolve()
             target_path = Path(file_path).resolve()
+            try:
+                target_path.relative_to(root)
+            except ValueError:
+                safe_name = re.sub(r'[\<\>\:\"\/\\\|\?\*]', '_', Path(file_path).name)
+                target_path = (root / safe_name).resolve()
+
             target_path.parent.mkdir(parents=True, exist_ok=True)
             audio_bytes = base64.b64decode(audio_b64)
             target_path.write_bytes(audio_bytes)
@@ -653,6 +663,9 @@ class Bridge:
 
         if not video_id and not source_url:
             return {'success': False, 'error': 'candidate_invalid: resolved videoId required'}
+
+        if video_id and not re.match(r'^[a-zA-Z0-9_-]+$', video_id):
+            return {'success': False, 'error': 'candidate_invalid: invalid videoId format'}
 
         is_mp3 = str(audio_format).lower() == 'mp3'
         ext = 'mp3' if is_mp3 else 'm4a'

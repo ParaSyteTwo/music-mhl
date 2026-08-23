@@ -43,7 +43,7 @@ export function extractYouTubeVideoId(urlStr: string): string | null {
   } catch {
     // regex fallback
   }
-  const match = urlStr.match(/(?:youtu\.be\/|(?:www\.|m\.)?youtube\.com\/(?:watch\?(?:[^&]*&)?v=|shorts\/|music\/watch\?(?:[^&]*&)?v=|embed\/|v\/))([a-zA-Z0-9_-]{11})/i);
+  const match = urlStr.match(/(?:youtu\.be\/|(?:www\.|m\.)?youtube\.com\/(?:watch\?(?:[^&]*&)?v=|shorts\/|music\/watch\?(?:[^&]*&)?v=|embed\/|v\/))([a-zA-Z0-9_-]{11})(?=$|[?&#/\s"'>])/i);
   return match ? match[1] : null;
 }
 
@@ -183,7 +183,9 @@ function detectLongAudioFromTitle(title: string): boolean {
 
 export async function resolveTrackFromUrl(url: string): Promise<Track | null> {
   const trimmed = url.trim().replace(/^[<"']+|[>"']+$/g, '');
-  if (!isDirectMediaUrl(trimmed) || isNonPlayableMediaUrl(trimmed)) return null;
+  if (!isDirectMediaUrl(trimmed) || isNonPlayableMediaUrl(trimmed) || isUnsupportedCollectionUrl(trimmed)) {
+    return null;
+  }
 
   const isPodcastLink = isPodcastOrEpisodeUrl(trimmed);
 

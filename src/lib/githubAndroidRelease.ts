@@ -322,7 +322,9 @@ export function parseOfficialAndroidRelease(
   }
   const manifest = manifestResult.data;
 
-  if (release.tag_name !== `v${manifest.versionName}`) {
+  const isStableMatch = release.tag_name === `v${manifest.versionName}`;
+  const isBetaMatch = channel !== 'stable' && release.tag_name.startsWith(`v${manifest.versionName}`);
+  if (!isStableMatch && !isBetaMatch) {
     return {
       success: false,
       error: { code: 'INVALID_RELEASE_METADATA', detail: 'Release tag and Android version do not match.' },

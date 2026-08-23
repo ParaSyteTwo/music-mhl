@@ -38,7 +38,7 @@ export const createDownloadSlice: StateCreator<
             if (downloadQueue.length === 0 || activeDownloads >= 2) return;
 
             const [nextId, ...rest] = downloadQueue;
-            set({ downloadQueue: rest });
+            set((s) => ({ downloadQueue: rest, activeDownloads: s.activeDownloads + 1 }));
 
             const dl = get().downloads.find((d) => d.id === nextId);
             if (dl && dl.status === 'queued') {
@@ -48,6 +48,8 @@ export const createDownloadSlice: StateCreator<
                 dl.videoIdOverride,
                 dl.sourceUrlOverride,
               );
+            } else {
+              set((s) => ({ activeDownloads: Math.max(0, s.activeDownloads - 1) }));
             }
           } finally {
             isProcessingDownloadQueue = false;
@@ -79,13 +81,13 @@ export const createDownloadSlice: StateCreator<
           if (Date.now() < rateLimitCooldownUntil) {
             const seconds = Math.ceil((rateLimitCooldownUntil - Date.now()) / 1000);
             set((s) => ({
+              activeDownloads: Math.max(0, s.activeDownloads - 1),
               downloads: s.downloads.map((download) => download.id === id
                 ? { ...download, status: 'error', error: `rate_limit: espera ${seconds}s antes de reintentar` }
                 : download),
             }));
             return;
           }
-          set((s) => ({ activeDownloads: s.activeDownloads + 1 }));
 
           const updateDl = (patch: Partial<Download>) =>
             set((s) => ({

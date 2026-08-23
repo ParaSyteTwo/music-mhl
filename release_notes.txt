@@ -1,22 +1,27 @@
-MHL Music 1.5.2 (Puente Universal de Streaming & Nuevo Icono Centralizado)
+MHL Music 1.5.3 (Blindaje Integral & Selector de Calidad/Compatibilidad)
 
-MHL Music 1.5.2 introduce el Puente Universal de Streaming multidispositivo, permitiendo pegar enlaces de cualquier plataforma de streaming (Spotify, Apple Music, Deezer, Tidal, Amazon Music, SoundCloud, TikTok y Bandcamp) para identificar la pista al instante, extraer sus metadatos de estudio oficiales en HD y descargar el audio impecable mediante YouTube Music sin bloqueos ni errores de DRM. Además, se actualiza el icono oficial de la aplicación a su diseño centralizado y purificado sin texto.
+MHL Music 1.5.3 es una actualización de blindaje profundo y estabilidad extrema tras una auditoría destructiva masiva de 7 vectores. Esta versión garantiza una experiencia de reproducción y descarga fluida, libre de congelamientos, con soporte completo para descarga en Modo Calidad (M4A) o Modo Compatibilidad (MP3 320 kbps) e iconos purificados en Android.
 
-✨ **Principales Novedades de la Versión 1.5.2**
+✨ **Principales Novedades de la Versión 1.5.3**
 
-- 🎧 **Puente Universal de Streaming (Cero Errores DRM):**
-  - Compatibilidad total con enlaces de **Spotify**, **Apple Music**, **Deezer**, **Tidal**, **Amazon Music**, **SoundCloud**, **TikTok**, **Bandcamp** y **YouTube**.
-  - **Identificador de Estudio:** Las plataformas de streaming actúan como verificador inteligente para identificar la canción y rescatar su carátula HD original (1400x1400), álbum oficial, año, género e ISRC desde los catálogos oficiales.
-  - **Enrutado Automático a YouTube Music:** Las descargas de audio se procesan sin requerir cuentas de pago ni tropezar con protecciones DRM privativas, eliminando el error de "candidato resuelto".
-- 🎨 **Nuevo Icono Centralizado y Purificado:**
-  - Icono rediseñado 1:1 con el disco lima característico y los auriculares con nota musical perfectamente centrados geométricamente, eliminando el texto "MHL MUSIC" para un look más limpio, moderno y profesional en Android y Windows.
-- ⚡ **Resolución Dinámica al Vuelo:**
-  - Si una canción no tiene candidato precalculado, el motor de descargas busca y selecciona automáticamente el mejor flujo de YouTube Music en milisegundos.
-- 🌡️ **Control Térmico y Soporte de Podcasts en Opciones Avanzadas:**
-  - Interruptor dedicado en Ajustes Avanzados para habilitar descargas de podcasts o audios extensos (>20 min) con alerta preventiva de CPU y temperatura para dispositivos de gama baja.
+💎 **Audio y Formatos de Descarga**
+- **Selector de Modo Calidad vs Compatibilidad:** Configura desde Ajustes Avanzados tu preferencia de audio entre **Modo Calidad** (M4A / AAC directo de estudio sin re-compresión para móviles, PC y auriculares) y **Modo Compatibilidad** (MP3 a 320 kbps con tags ID3v2.3 completos para radios de coche y pendrives USB).
+- **Preservación Total de Metadatos:** Ambos formatos conservan carátula HD original, artista, álbum, año, género, número de pista y letras sincronizadas.
 
-🛠 **Correcciones y Estabilidad**
+🚀 **Rendimiento y Motor de Reproducción**
+- **Protección Antispam de Clics:** El reproductor gestiona de forma transparente las cancelaciones asíncronas (`AbortError`), evitando que la barra de reproducción quede desincronizada al cambiar de canción rápidamente.
+- **Detección de Pausas Nativas en Android:** Sincronización inmediata de la UI ante llamadas telefónicas entrantes, audífonos desconectados o reposo del sistema.
+- **Cero Fugas de Memoria:** Inicialización desacoplada del ciclo de vida de la actividad en Android, optimizando el consumo de RAM tras sesiones prolongadas.
 
-- Corrección definitiva del fallo en descargas directas de enlaces de Spotify.
-- 245/245 pruebas unitarias automáticas pasando al 100%.
-- Compatibilidad completa con auto-actualizaciones OTA en Android según contrato `ANDROID_UPDATE_CONTRACT.md`.
+🛠️ **Estabilidad y Cola de Descargas**
+- **Barrera de Concurrencia Inquebrantable:** Protección en tiempo real contra pulsaciones múltiples que asegura el límite estricto de descargas simultáneas sin saturar el procesador.
+- **Limpieza de Almacenamiento Zombi:** En Android 10 a 15, cualquier error de disco lleno o interrupción de red limpia inmediatamente los archivos pendientes en MediaStore para no dejar archivos residuales bloqueados.
+- **Validación de URLs y Extracción Precisa:** El buscador distingue canciones individuales de álbumes/playlists completas, evitando descargas no deseadas, y mejora el soporte para títulos en japonés, coreano y cirílico.
+
+📱 **Diseño UI / UX y Pantallas Grandes**
+- **Icono Oficial Purificado en Android:** Compatibilidad completa con Adaptive Icons (Android 8.0+) con el disco centralizado y fondo oscuro en todas las resoluciones.
+- **Ergonomía en Monitores 4K / Ultrawide:** Barra de reproducción inferior centrada armónicamente en resoluciones ultra anchas.
+
+🧪 **Calidad y Verificación**
+- 246/246 pruebas unitarias automáticas pasando al 100%.
+- Compatibilidad absoluta con el contrato de actualizaciones Android (`ANDROID_UPDATE_CONTRACT.md`).

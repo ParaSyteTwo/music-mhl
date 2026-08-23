@@ -10,6 +10,7 @@ class AudioEngine {
   private _onWaiting: (() => void) | null = null;
   private _onStalled: (() => void) | null = null;
   private _onPlay: (() => void) | null = null;
+  private _onPause: (() => void) | null = null;
   private _onError: ((error: string) => void) | null = null;
   private _onPlayControlPressed: (() => void) | null = null;
   private _onPauseControlPressed: (() => void) | null = null;
@@ -54,6 +55,10 @@ class AudioEngine {
       this._onPlay?.();
     });
 
+    this.audio.addEventListener('pause', () => {
+      this._onPause?.();
+    });
+
     this.audio.addEventListener('error', () => {
       const err = this.audio.error;
       let errorMsg = 'Error al reproducir audio';
@@ -95,7 +100,7 @@ class AudioEngine {
   }
 
   seek(time: number) {
-    if (isFinite(time) && time >= 0) {
+    if (typeof time === 'number' && !isNaN(time) && isFinite(time) && time >= 0) {
       this.audio.currentTime = time;
     }
   }

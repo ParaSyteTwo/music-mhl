@@ -34,6 +34,7 @@ export const createPlayerSlice: StateCreator<
     document.title = `${track.title} · ${track.artist} - MHL Music`;
 
     if (track.preview) {
+      const targetId = track.id;
       audioEngine.load(track.preview);
       audioEngine.setVolume(get().volume);
       audioEngine.updateMediaSession({
@@ -43,11 +44,18 @@ export const createPlayerSlice: StateCreator<
         artwork: track.cover,
       });
       audioEngine.play()
-        .then(() => set({ isPlaying: true, isLoading: false }))
+        .then(() => {
+          if (get().currentTrack?.id === targetId) {
+            set({ isPlaying: true, isLoading: false });
+          }
+        })
         .catch((error) => {
-          console.error('Play failed:', error);
-          set({ isLoading: false, isPlaying: false });
-          toast.error(storeText(get().uiLanguageMode, 'playbackFailed'));
+          if (error?.name === 'AbortError') return;
+          if (get().currentTrack?.id === targetId) {
+            console.error('Play failed:', error);
+            set({ isLoading: false, isPlaying: false });
+            toast.error(storeText(get().uiLanguageMode, 'playbackFailed'));
+          }
         });
     } else {
       set({ isLoading: false });
@@ -62,15 +70,21 @@ export const createPlayerSlice: StateCreator<
       audioEngine.setPlaybackState('paused');
       set({ isPlaying: false });
     } else {
+      const targetId = currentTrack.id;
       void audioEngine.play()
         .then(() => {
-          audioEngine.setPlaybackState('playing');
-          set({ isPlaying: true });
+          if (get().currentTrack?.id === targetId) {
+            audioEngine.setPlaybackState('playing');
+            set({ isPlaying: true });
+          }
         })
         .catch((error) => {
-          console.error('Play failed:', error);
-          set({ isPlaying: false });
-          toast.error(storeText(get().uiLanguageMode, 'playbackFailed'));
+          if (error?.name === 'AbortError') return;
+          if (get().currentTrack?.id === targetId) {
+            console.error('Play failed:', error);
+            set({ isPlaying: false });
+            toast.error(storeText(get().uiLanguageMode, 'playbackFailed'));
+          }
         });
     }
   },

@@ -43,6 +43,15 @@ export const useMusicStore = create<MusicStore>()(
         set({ isPlaying: true, isLoading: false });
       };
 
+      audioEngine.onPause = () => {
+        set({ isPlaying: false });
+      };
+
+      audioEngine.onError = (errorMsg) => {
+        set({ isPlaying: false, isLoading: false });
+        console.warn('[AudioEngine] Playback error:', errorMsg);
+      };
+
       audioEngine.onEnded = () => {
         set({ isPlaying: false, progress: 0 });
       };
