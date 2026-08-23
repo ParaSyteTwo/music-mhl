@@ -88,23 +88,39 @@ def process_icon():
         clean_base.save('mhl-desktop/MHL.ico', format='ICO', sizes=ico_sizes)
         print("Updated mhl-desktop/MHL.ico")
         
-    # Actualizar Android mipmaps
+    # Actualizar Android mipmaps (tanto iconos legacy como Adaptive Icons v26)
     res_dir = 'android/app/src/main/res'
     if os.path.exists(res_dir):
-        mipmap_targets = {
-            'mipmap-xxxhdpi': 192,
-            'mipmap-xxhdpi': 144,
-            'mipmap-xhdpi': 96,
-            'mipmap-hdpi': 72,
-            'mipmap-mdpi': 48,
+        mipmap_configs = {
+            'mipmap-xxxhdpi': {'legacy': 192, 'adaptive': 432, 'safe': 288},
+            'mipmap-xxhdpi': {'legacy': 144, 'adaptive': 324, 'safe': 216},
+            'mipmap-xhdpi': {'legacy': 96, 'adaptive': 216, 'safe': 144},
+            'mipmap-hdpi': {'legacy': 72, 'adaptive': 162, 'safe': 108},
+            'mipmap-mdpi': {'legacy': 48, 'adaptive': 108, 'safe': 72},
         }
-        for folder, size in mipmap_targets.items():
+        for folder, conf in mipmap_configs.items():
             folder_path = os.path.join(res_dir, folder)
             if os.path.exists(folder_path):
-                resized = clean_base.resize((size, size), Image.Resampling.LANCZOS)
-                resized.save(os.path.join(folder_path, 'ic_launcher.png'))
-                resized.save(os.path.join(folder_path, 'ic_launcher_round.png'))
-                print(f"Updated Android {folder} ({size}x{size})")
+                # 1. Legacy square & round
+                legacy_size = conf['legacy']
+                resized_legacy = clean_base.resize((legacy_size, legacy_size), Image.Resampling.LANCZOS)
+                resized_legacy.save(os.path.join(folder_path, 'ic_launcher.png'))
+                resized_legacy.save(os.path.join(folder_path, 'ic_launcher_round.png'))
+                
+                # 2. Adaptive Foreground (Icono centrado en la zona segura del canvas 108dp)
+                adaptive_size = conf['adaptive']
+                safe_size = conf['safe']
+                foreground = Image.new('RGBA', (adaptive_size, adaptive_size), (0, 0, 0, 0))
+                disc_safe = clean_base.resize((safe_size, safe_size), Image.Resampling.LANCZOS)
+                offset = (adaptive_size - safe_size) // 2
+                foreground.paste(disc_safe, (offset, offset), disc_safe)
+                foreground.save(os.path.join(folder_path, 'ic_launcher_foreground.png'))
+                
+                # 3. Adaptive Background (Fondo Luxury Dark #080808)
+                background = Image.new('RGBA', (adaptive_size, adaptive_size), (8, 8, 8, 255))
+                background.save(os.path.join(folder_path, 'ic_launcher_background.png'))
+                
+                print(f"Updated Android {folder} (legacy: {legacy_size}px, adaptive: {adaptive_size}px)")
 
 if __name__ == '__main__':
     process_icon()
