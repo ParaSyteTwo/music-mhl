@@ -1,11 +1,12 @@
-MHL Music 1.5.1 Beta 5 (Desplegable Elegante de Temas & Cero-Scroll)
+MHL Music 1.5.1 Beta 6 (Atmósferas Shaders & 12 Diseños Thematic Worlds)
 
-MHL Music 1.5.1 Beta 5 integra el selector de Apariencia & Temas en un menú desplegable ordenado y coherente con el resto de la pantalla de Ajustes, mostrando el tema activo y su paleta de colores.
+MHL Music 1.5.1 Beta 6 transforma profundamente la experiencia visual con atmósferas ambientales específicas para cada uno de los 12 estilos, incluyendo CRT Scanlines para Matrix, horizontes radiales Vaporwave, espacio cósmico OLED, y previsualizaciones dinámicas con badges de identidad.
 
 ✨ **Novedades de la Versión**
 
-- **Selector Desplegable de Temas:** Menú acordeón limpio en Ajustes con previsualización del tema actual y desplegable fluido.
-- **13 Temas Estéticos Únicos:** Personalización instantánea de colores, fondos y resplandor.
+- **Atmósferas Ambientales Específicas por Tema:** Shaders de fondo y resplandor inmersivo para los 12 mundos visuales.
+- **Badges de Identidad Visual:** Indicadores de estilo de cada tema (`[CRT MATRIX]`, `[SYNTHWAVE 80s]`, `[COSMIC OLED]`, `[ANALOG VINYL]`, `[SUPERCAR CARBON]`, `[ULTRAVIOLET GEM]`, etc.).
+- **Selector Acordeón Fluido:** Desplegable de Apariencia con banner de gradiente y paleta de acentos.
 - **Pantalla de Búsqueda 100% Cero-Scroll:** Cuadrícula de 12 artistas optimizada ergonómicamente.
 - **Nuevo Isotipo Oficial HD:** Auriculares de estudio en relieve 3D sin texto.
   1. ⚡ *Acid Cyberpunk* (Neón Lima Eléctrico)

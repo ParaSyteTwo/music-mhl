@@ -234,13 +234,23 @@ export default function SettingsPage() {
                     onClick={() => setAppTheme(theme.id)}
                     className={`group relative flex flex-col p-3 rounded-xl border text-left transition-all overflow-hidden active:scale-95 ${
                       isActive
-                        ? 'border-[var(--accent-primary)] bg-white/[0.08] shadow-lg shadow-[var(--accent-glow)]'
+                        ? 'border-[var(--accent-primary)] bg-white/[0.08] shadow-lg shadow-[var(--accent-glow)] ring-1 ring-[var(--accent-primary)]/50'
                         : 'border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.05] hover:border-white/[0.12]'
                     }`}
                   >
-                    <div className="flex items-center justify-between gap-2 mb-2">
-                      <span className="text-base sm:text-lg">{theme.emoji}</span>
-                      <div className="flex items-center gap-1">
+                    {/* Top ambient banner with theme gradient */}
+                    <div 
+                      className="w-full h-1 rounded-full mb-2.5 opacity-80 group-hover:opacity-100 transition-opacity"
+                      style={{ background: theme.gradient }}
+                    />
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="text-base sm:text-lg flex-shrink-0">{theme.emoji}</span>
+                        <span className="text-[8px] font-mono tracking-wider px-1.5 py-0.5 rounded bg-white/[0.06] text-[#A0A098] uppercase font-bold truncate">
+                          {theme.badge}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1 flex-shrink-0">
                         {theme.swatch.map((color, idx) => (
                           <span
                             key={idx}
@@ -250,7 +260,7 @@ export default function SettingsPage() {
                         ))}
                       </div>
                     </div>
-                    <p className={`text-xs font-bold leading-tight ${isActive ? 'text-[var(--accent-primary)]' : 'text-[#F5F5F0]'}`}>
+                    <p className={`text-xs font-bold leading-tight mt-1 ${isActive ? 'text-[var(--accent-primary)]' : 'text-[#F5F5F0]'}`}>
                       {t(theme.nameKey)}
                     </p>
                     <p className="text-[10px] text-[#8E8E88] mt-1 leading-tight line-clamp-2">
