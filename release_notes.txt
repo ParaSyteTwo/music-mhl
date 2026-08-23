@@ -1,11 +1,12 @@
-MHL Music 1.5.1 Beta 10 (Reproductor Predeterminado Plegable en Ajustes)
+MHL Music 1.5.1 Beta 11 (Corrección Crítica de Ajustes & Suite de Tests Robusta)
 
-MHL Music 1.5.1 Beta 10 convierte la sección de 'Reproductor predeterminado' en Android en un menú desplegable tipo acordeón compacto y ordenado, evitando que ocupe espacio vertical prolongado.
+MHL Music 1.5.1 Beta 11 soluciona el fallo en la pantalla de Ajustes restaurando la importación de iconos y añadiendo tests unitarios integrales para garantizar estabilidad total.
 
 ✨ **Novedades de la Versión**
 
+- **Corrección Crítica en Ajustes:** Solucionado el error de renderizado en la sección de opciones avanzadas.
 - **Reproductor Predeterminado Plegable:** Selector de reproductor externo compacto en Android con indicador del reproductor activo y desplegable fluido.
-- **Ajustes 100% Organizados:** Menú avanzado limpio y opciones técnicas secundarias plegadas por defecto.
+- **Suite de Tests Blindada:** 239/239 pruebas automáticas pasando al 100%.
 - **13 Mundos Visuales con ADN Único:** Tipografías, bordes geométricos e iconos específicos para cada tema.
 - **ADN Visual y Tipográfico por Tema:** 13 temas con iconos dedicados, tipografías personalizadas (JetBrains Mono para Matrix, Syne Italic para Vaporwave, Georgia para Solar, etc.), y badges de funciones exclusivas.
 - **Selector Acordeón Fluido:** Desplegable de Apariencia con banner de gradiente y paleta de acentos.

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Settings, Folder, RefreshCw, CheckCircle2, FolderOpen, X, Music2, ChevronDown, ChevronRight, Palette } from 'lucide-react';
+import { Settings, Folder, RefreshCw, CheckCircle2, FolderOpen, X, Music2, ChevronDown, ChevronRight, Palette, Zap } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useMusicStore } from '@/store/musicStore';
 import { useI18n } from '@/lib/useI18n';
