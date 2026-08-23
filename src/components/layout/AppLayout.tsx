@@ -3,6 +3,7 @@ import { BottomPlayer } from './BottomPlayer';
 import { Search, Download, Settings } from 'lucide-react';
 import { useI18n } from '@/lib/useI18n';
 import { useMusicStore } from '@/store/musicStore';
+import { getTheme } from '@/lib/themes/themeCatalog';
 import { AppUpdateNotice } from '@/components/updates/AppUpdateNotice';
 
 export function AppLayout() {
@@ -10,9 +11,21 @@ export function AppLayout() {
   const downloadCount = useMusicStore((s) => s.downloads.filter((d) => d.status === 'downloading').length);
   const dominantColor = useMusicStore((s) => s.dominantColor);
   const currentTrack = useMusicStore((s) => s.currentTrack);
+  const appTheme = useMusicStore((s) => s.appTheme);
+  const theme = getTheme(appTheme);
+
   return (
     <div className="relative isolate flex flex-col h-[100dvh] bg-background overflow-hidden">
       <div className="app-ambient fixed inset-0 z-0 pointer-events-none" aria-hidden="true" />
+
+      {/* Theme ambient atmospheric aura */}
+      <div
+        className="fixed inset-0 z-0 pointer-events-none transition-all duration-700 opacity-80"
+        style={{
+          background: theme.ambientAura,
+        }}
+        aria-hidden="true"
+      />
 
       {/* Dynamic color gradient from album art */}
       {currentTrack && dominantColor && (

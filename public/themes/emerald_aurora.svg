@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 240">
+  <defs>
+    <linearGradient id="aurora" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10B981" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#047857" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="nightSky" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#022c22"/>
+      <stop offset="100%" stop-color="#064e3b"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="240" fill="url(#nightSky)"/>
+  
+  <!-- Cortinas Boreales -->
+  <path d="M-50,120 Q100,40 250,130 T450,90 L450,240 L-50,240 Z" fill="url(#aurora)"/>
+  <path d="M-20,160 Q150,90 280,180 T450,140 L450,240 L-20,240 Z" fill="url(#aurora)" opacity="0.6"/>
+  
+  <!-- Siluetas de Pinos -->
+  <polygon points="40,240 60,160 80,240" fill="#020617"/>
+  <polygon points="20,240 35,180 50,240" fill="#020617"/>
+  <polygon points="320,240 345,140 370,240" fill="#020617"/>
+  <polygon points="350,240 375,170 400,240" fill="#020617"/>
+  <polygon points="90,240 105,190 120,240" fill="#020617"/>
+</svg>

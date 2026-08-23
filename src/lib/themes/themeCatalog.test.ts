@@ -18,6 +18,8 @@ describe('themeCatalog', () => {
       expect(theme.swatch).toHaveLength(3);
       expect(theme.emoji.length).toBeGreaterThan(0);
       expect(theme.nameKey).toBe(`theme_${id}`);
+      expect(theme.artworkUrl).toBe(`/themes/${id}.svg`);
+      expect(theme.ambientAura.length).toBeGreaterThan(0);
     }
   });
 

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 240">
+  <defs>
+    <radialGradient id="abyssGlow" cx="50%" cy="80%" r="70%">
+      <stop offset="0%" stop-color="#06B6D4" stop-opacity="0.7"/>
+      <stop offset="100%" stop-color="#082f49" stop-opacity="1"/>
+    </radialGradient>
+    <linearGradient id="lightRays" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#22d3ee" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#082f49" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="240" fill="url(#abyssGlow)"/>
+  
+  <!-- Rayos de luz descendiendo -->
+  <polygon points="100,0 180,240 120,240 50,0" fill="url(#lightRays)"/>
+  <polygon points="250,0 350,240 280,240 200,0" fill="url(#lightRays)"/>
+
+  <!-- Bioluminiscencia / Olas de luz -->
+  <path d="M-20,180 C100,230 200,150 420,190" fill="none" stroke="#22d3ee" stroke-width="2.5" opacity="0.8" filter="blur(1px)"/>
+  <path d="M-20,210 C150,260 250,170 420,220" fill="none" stroke="#67e8f9" stroke-width="1.5" opacity="0.5"/>
+  
+  <!-- Arrecife místico -->
+  <path d="M0,240 Q30,200 60,240 Q110,170 160,240 Q240,160 300,240 Q360,190 400,240 L0,240 Z" fill="#020617" opacity="0.9"/>
+  <circle cx="150" cy="220" r="3" fill="#06B6D4" opacity="0.8"/>
+  <circle cx="280" cy="230" r="2" fill="#06B6D4" opacity="0.6"/>
+  <circle cx="50" cy="210" r="4" fill="#06B6D4" opacity="0.5"/>
+</svg>

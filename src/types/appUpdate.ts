@@ -95,6 +95,32 @@ export interface InstalledAndroidBuild {
   signingCertificateDigests: Sha256Digest[];
 }
 
+export interface InstalledDesktopBuild {
+  platform: 'desktop';
+  versionName: string;
+  frozen: boolean;
+  appDir: string;
+}
+
+export interface RemoteDesktopBuild {
+  platform: 'desktop';
+  channel: AppUpdateChannel;
+  releaseId: number;
+  releaseTag: string;
+  releaseUrl: string;
+  assetId: number;
+  assetName: string;
+  assetUrl: string;
+  assetSize: number;
+  assetUpdatedAt: string;
+  versionName: string;
+}
+
+export interface FetchedDesktopRelease {
+  build: RemoteDesktopBuild;
+  trustedTimeMs: number;
+}
+
 export interface InspectedAndroidApk extends InstalledAndroidBuild {
   matchesInstalledCertificate: boolean;
 }

@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 240" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bg-grad-crimson" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0d0d0d" />
+      <stop offset="100%" stop-color="#1a1a1a" />
+    </linearGradient>
+    <pattern id="carbon-fiber" width="8" height="8" patternUnits="userSpaceOnUse">
+      <path d="M0,0 L4,4 M4,0 L8,4 M0,4 L4,8 M4,4 L8,8" stroke="#262626" stroke-width="1.5" />
+    </pattern>
+    <filter id="glow-crimson">
+      <feGaussianBlur stdDeviation="5" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+  <rect width="100%" height="100%" fill="url(#bg-grad-crimson)" />
+  <rect width="100%" height="100%" fill="url(#carbon-fiber)" opacity="0.6" />
+  
+  <path d="M -20 180 Q 200 180 420 80" fill="none" stroke="#333" stroke-width="4" />
+  <path d="M -20 190 Q 200 190 420 90" fill="none" stroke="#EF4444" stroke-width="4" filter="url(#glow-crimson)" />
+  
+  <circle cx="200" cy="120" r="70" fill="none" stroke="#333" stroke-width="10" />
+  <path d="M 130 120 A 70 70 0 0 1 250 70" fill="none" stroke="#EF4444" stroke-width="10" filter="url(#glow-crimson)" />
+  <line x1="200" y1="120" x2="235" y2="85" stroke="#fff" stroke-width="3" stroke-linecap="round" />
+  <circle cx="200" cy="120" r="8" fill="#EF4444" filter="url(#glow-crimson)" />
+  
+  <polygon points="320,200 380,200 360,220 300,220" fill="#EF4444" filter="url(#glow-crimson)" opacity="0.8" />
+  <polygon points="330,185 375,185 365,195 320,195" fill="#EF4444" opacity="0.5" />
+</svg>

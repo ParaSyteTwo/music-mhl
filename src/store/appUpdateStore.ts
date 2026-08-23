@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { Capacitor } from '@capacitor/core';
 import { evaluateAppUpdate } from '@/lib/appUpdatePolicy';
-import { getInstalledAppIdentity } from '@/lib/appUpdaterBridge';
+import { getInstalledAppIdentity, getInstalledDesktopIdentity, applyDesktopUpdate } from '@/lib/appUpdaterBridge';
 import {
   addUpdateDownloadProgressListener,
   canInstallAndroidPackages,
@@ -12,14 +12,19 @@ import {
   installAndroidUpdate,
   openAndroidInstallPermissionSettings,
 } from '@/lib/appUpdaterBridge';
-import { fetchLatestOfficialAndroidRelease } from '@/lib/githubAndroidRelease';
+import {
+  fetchLatestOfficialAndroidRelease,
+  fetchLatestOfficialDesktopRelease,
+} from '@/lib/githubAndroidRelease';
 import type {
   AppUpdateDecision,
   AppUpdateChannel,
   AppUpdateError,
   AppUpdateStatus,
   InstalledAndroidBuild,
+  InstalledDesktopBuild,
   RemoteAndroidBuild,
+  RemoteDesktopBuild,
 } from '@/types/appUpdate';
 
 const AUTO_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
@@ -27,8 +32,8 @@ let appUpdateOperation: Promise<void> | null = null;
 
 interface AppUpdateState {
   status: AppUpdateStatus;
-  installedBuild: InstalledAndroidBuild | null;
-  remoteBuild: RemoteAndroidBuild | null;
+  installedBuild: InstalledAndroidBuild | InstalledDesktopBuild | null;
+  remoteBuild: RemoteAndroidBuild | RemoteDesktopBuild | null;
   decision: AppUpdateDecision | null;
   error: AppUpdateError | null;
   lastCheckedAt: number;
@@ -46,6 +51,18 @@ interface AppUpdateState {
   openInstallPermission: () => Promise<void>;
   resumeInstallAfterPermission: () => Promise<void>;
   dismissCurrentBuild: () => void;
+}
+
+function compareSemver(a: string, b: string): number {
+  const pa = a.split('.').map((n) => parseInt(n, 10) || 0);
+  const pb = b.split('.').map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const na = pa[i] ?? 0;
+    const nb = pb[i] ?? 0;
+    if (na > nb) return 1;
+    if (na < nb) return -1;
+  }
+  return 0;
 }
 
 export const useAppUpdateStore = create<AppUpdateState>()(
@@ -69,8 +86,28 @@ export const useAppUpdateStore = create<AppUpdateState>()(
           return;
         }
 
+        const isAndroid = Capacitor.getPlatform() === 'android';
         const operation = (async () => {
           const initialStatus = get().status;
+
+          if (!isAndroid) {
+            // Flujo Desktop
+            if (initialStatus !== 'available') {
+              await get().checkForUpdate(true);
+            }
+            const remote = get().remoteBuild;
+            if (get().status === 'available' && remote) {
+              set({ status: 'downloading', downloadProgress: 50, error: null });
+              const result = await applyDesktopUpdate(remote.assetUrl, remote.versionName);
+              if (result.success) {
+                set({ status: 'installing', downloadProgress: 100 });
+              } else {
+                set({ status: 'error', error: result.error });
+              }
+            }
+            return;
+          }
+
           if (initialStatus === 'readyToInstall' || initialStatus === 'permissionRequired') {
             await get().installReadyUpdate();
             return;
@@ -110,7 +147,13 @@ export const useAppUpdateStore = create<AppUpdateState>()(
       },
 
       checkForUpdate: async (force = false) => {
-        if (Capacitor.getPlatform() !== 'android') return;
+        const isAndroid = Capacitor.getPlatform() === 'android';
+        const isPyWebView = typeof window !== 'undefined' && 'pywebview' in window;
+        if (!isAndroid && !isPyWebView) {
+          // Si estamos en entorno web de prueba o no soportado, salir
+          return;
+        }
+
         const now = Date.now();
         const decision = get().decision;
         const waitingMayBeEligible = decision?.status === 'waiting' &&
@@ -125,6 +168,82 @@ export const useAppUpdateStore = create<AppUpdateState>()(
         }
 
         set({ status: 'checking', error: null });
+
+        if (!isAndroid) {
+          // --- Flujo de Verificación Desktop ---
+          try {
+            const [installedResult, releaseResult] = await Promise.all([
+              getInstalledDesktopIdentity(),
+              fetchLatestOfficialDesktopRelease(get().updateChannel),
+            ]);
+
+            if (installedResult.success === false) {
+              set({ status: 'error', error: installedResult.error });
+              return;
+            }
+            if (releaseResult.success === false) {
+              set({
+                status: 'error',
+                error: releaseResult.error,
+                installedBuild: installedResult.data,
+              });
+              return;
+            }
+
+            const installed = installedResult.data;
+            const remote = releaseResult.data.build;
+            const trustedTimeMs = Math.max(
+              get().lastTrustedTimeMs,
+              releaseResult.data.trustedTimeMs,
+            );
+
+            const isNewer = compareSemver(remote.versionName, installed.versionName) > 0;
+            if (!isNewer) {
+              set({
+                status: 'upToDate',
+                installedBuild: installed,
+                remoteBuild: remote,
+                decision: { status: 'upToDate', reason: 'sameBuild' },
+                error: null,
+                lastCheckedAt: now,
+                lastTrustedTimeMs: trustedTimeMs,
+              });
+              return;
+            }
+
+            const eligibleAt =
+              get().updateChannel === 'beta'
+                ? new Date(trustedTimeMs || now).toISOString()
+                : new Date(Date.parse(remote.assetUpdatedAt) + 7 * 24 * 60 * 60 * 1000).toISOString();
+            const isWaiting = get().updateChannel === 'stable' && now < Date.parse(eligibleAt);
+
+            const desktopDecision: AppUpdateDecision = isWaiting
+              ? { status: 'waiting', replacementBuild: false, eligibleAt }
+              : { status: 'available', replacementBuild: false, eligibleAt };
+
+            set({
+              status: desktopDecision.status,
+              installedBuild: installed,
+              remoteBuild: remote,
+              decision: desktopDecision,
+              error: null,
+              lastCheckedAt: now,
+              lastTrustedTimeMs: trustedTimeMs,
+            });
+            return;
+          } catch (error) {
+            set({
+              status: 'error',
+              error: {
+                code: 'NETWORK',
+                detail: error instanceof Error ? error.message : 'Unexpected desktop update check failure.',
+              },
+            });
+            return;
+          }
+        }
+
+        // --- Flujo de Verificación Android ---
         try {
           const [installedResult, releaseResult] = await Promise.all([
             getInstalledAppIdentity(),
@@ -444,7 +563,10 @@ export const useAppUpdateStore = create<AppUpdateState>()(
       },
 
       dismissCurrentBuild: () => {
-        set({ dismissedDigest: get().remoteBuild?.digest ?? null });
+        const remote = get().remoteBuild;
+        if (!remote) return;
+        const key = 'digest' in remote ? remote.digest : remote.versionName;
+        set({ dismissedDigest: key });
       },
     }),
     {

@@ -32,6 +32,8 @@ export type AppTheme = {
   borderSubtle: string;
   tagBg: string;
   tagText: string;
+  artworkUrl: string;
+  ambientAura: string;
   swatch: [string, string, string]; // [accentPrimary, accentSecondary, bgBase]
 };
 
@@ -55,6 +57,8 @@ export const APP_THEMES: Record<AppThemeId, AppTheme> = {
     borderSubtle: 'rgba(200, 240, 75, 0.15)',
     tagBg: 'rgba(200, 240, 75, 0.12)',
     tagText: '#C8F04B',
+    artworkUrl: '/themes/acid_cyberpunk.svg',
+    ambientAura: 'radial-gradient(ellipse 80% 50% at 50% -20%, rgba(200, 240, 75, 0.12), transparent 70%)',
     swatch: ['#C8F04B', '#22C55E', '#080808'],
   },
   oled_sapphire: {
@@ -76,6 +80,8 @@ export const APP_THEMES: Record<AppThemeId, AppTheme> = {
     borderSubtle: 'rgba(56, 189, 248, 0.15)',
     tagBg: 'rgba(56, 189, 248, 0.12)',
     tagText: '#38BDF8',
+    artworkUrl: '/themes/oled_sapphire.svg',
+    ambientAura: 'radial-gradient(ellipse 80% 50% at 50% -20%, rgba(56, 189, 248, 0.12), transparent 70%)',
     swatch: ['#38BDF8', '#3B82F6', '#040711'],
   },
   vaporwave_sunset: {
@@ -97,6 +103,8 @@ export const APP_THEMES: Record<AppThemeId, AppTheme> = {
     borderSubtle: 'rgba(244, 63, 94, 0.15)',
     tagBg: 'rgba(244, 63, 94, 0.12)',
     tagText: '#F43F5E',
+    artworkUrl: '/themes/vaporwave_sunset.svg',
+    ambientAura: 'radial-gradient(ellipse 80% 50% at 50% -20%, rgba(244, 63, 94, 0.12), transparent 70%)',
     swatch: ['#F43F5E', '#FB923C', '#11060D'],
   },
   amethyst_royal: {
@@ -118,6 +126,8 @@ export const APP_THEMES: Record<AppThemeId, AppTheme> = {
     borderSubtle: 'rgba(168, 85, 247, 0.15)',
     tagBg: 'rgba(168, 85, 247, 0.12)',
     tagText: '#A855F7',
+    artworkUrl: '/themes/amethyst_royal.svg',
+    ambientAura: 'radial-gradient(ellipse 80% 50% at 50% -20%, rgba(168, 85, 247, 0.12), transparent 70%)',
     swatch: ['#A855F7', '#C084FC', '#0C0514'],
   },
   emerald_aurora: {
@@ -139,6 +149,8 @@ export const APP_THEMES: Record<AppThemeId, AppTheme> = {
     borderSubtle: 'rgba(16, 185, 129, 0.15)',
     tagBg: 'rgba(16, 185, 129, 0.12)',
     tagText: '#10B981',
+    artworkUrl: '/themes/emerald_aurora.svg',
+    ambientAura: 'radial-gradient(ellipse 80% 50% at 50% -20%, rgba(16, 185, 129, 0.12), transparent 70%)',
     swatch: ['#10B981', '#34D399', '#030C07'],
   },
   solar_amber: {
@@ -160,6 +172,8 @@ export const APP_THEMES: Record<AppThemeId, AppTheme> = {
     borderSubtle: 'rgba(245, 158, 11, 0.15)',
     tagBg: 'rgba(245, 158, 11, 0.12)',
     tagText: '#F59E0B',
+    artworkUrl: '/themes/solar_amber.svg',
+    ambientAura: 'radial-gradient(ellipse 80% 50% at 50% -20%, rgba(245, 158, 11, 0.12), transparent 70%)',
     swatch: ['#F59E0B', '#FBBF24', '#0E0904'],
   },
   crimson_velocity: {
@@ -181,6 +195,8 @@ export const APP_THEMES: Record<AppThemeId, AppTheme> = {
     borderSubtle: 'rgba(239, 68, 68, 0.15)',
     tagBg: 'rgba(239, 68, 68, 0.12)',
     tagText: '#EF4444',
+    artworkUrl: '/themes/crimson_velocity.svg',
+    ambientAura: 'radial-gradient(ellipse 80% 50% at 50% -20%, rgba(239, 68, 68, 0.12), transparent 70%)',
     swatch: ['#EF4444', '#F87171', '#0A0303'],
   },
   oceanic_abyss: {
@@ -202,6 +218,8 @@ export const APP_THEMES: Record<AppThemeId, AppTheme> = {
     borderSubtle: 'rgba(6, 182, 212, 0.15)',
     tagBg: 'rgba(6, 182, 212, 0.12)',
     tagText: '#06B6D4',
+    artworkUrl: '/themes/oceanic_abyss.svg',
+    ambientAura: 'radial-gradient(ellipse 80% 50% at 50% -20%, rgba(6, 182, 212, 0.12), transparent 70%)',
     swatch: ['#06B6D4', '#2DD4BF', '#030D14'],
   },
   matcha_zen: {
@@ -223,6 +241,8 @@ export const APP_THEMES: Record<AppThemeId, AppTheme> = {
     borderSubtle: 'rgba(132, 204, 22, 0.15)',
     tagBg: 'rgba(132, 204, 22, 0.12)',
     tagText: '#84CC16',
+    artworkUrl: '/themes/matcha_zen.svg',
+    ambientAura: 'radial-gradient(ellipse 80% 50% at 50% -20%, rgba(132, 204, 22, 0.12), transparent 70%)',
     swatch: ['#84CC16', '#A3E635', '#0C0D08'],
   },
   cotton_candy: {
@@ -244,6 +264,8 @@ export const APP_THEMES: Record<AppThemeId, AppTheme> = {
     borderSubtle: 'rgba(236, 72, 153, 0.15)',
     tagBg: 'rgba(236, 72, 153, 0.12)',
     tagText: '#EC4899',
+    artworkUrl: '/themes/cotton_candy.svg',
+    ambientAura: 'radial-gradient(ellipse 80% 50% at 50% -20%, rgba(236, 72, 153, 0.12), transparent 70%)',
     swatch: ['#EC4899', '#818CF8', '#110814'],
   },
   matrix_terminal: {
@@ -265,6 +287,8 @@ export const APP_THEMES: Record<AppThemeId, AppTheme> = {
     borderSubtle: 'rgba(34, 197, 94, 0.15)',
     tagBg: 'rgba(34, 197, 94, 0.12)',
     tagText: '#22C55E',
+    artworkUrl: '/themes/matrix_terminal.svg',
+    ambientAura: 'radial-gradient(ellipse 80% 50% at 50% -20%, rgba(34, 197, 94, 0.12), transparent 70%)',
     swatch: ['#22C55E', '#4ADE80', '#020B04'],
   },
   titanium_luxury: {
@@ -286,6 +310,8 @@ export const APP_THEMES: Record<AppThemeId, AppTheme> = {
     borderSubtle: 'rgba(226, 232, 240, 0.15)',
     tagBg: 'rgba(226, 232, 240, 0.12)',
     tagText: '#E2E8F0',
+    artworkUrl: '/themes/titanium_luxury.svg',
+    ambientAura: 'radial-gradient(ellipse 80% 50% at 50% -20%, rgba(226, 232, 240, 0.10), transparent 70%)',
     swatch: ['#E2E8F0', '#94A3B8', '#0B0C0E'],
   },
   original_minimalist: {
@@ -307,6 +333,8 @@ export const APP_THEMES: Record<AppThemeId, AppTheme> = {
     borderSubtle: 'rgba(255, 255, 255, 0.06)',
     tagBg: 'rgba(255, 255, 255, 0.04)',
     tagText: '#8E8E88',
+    artworkUrl: '/themes/original_minimalist.svg',
+    ambientAura: 'radial-gradient(ellipse 80% 50% at 50% -20%, rgba(200, 240, 75, 0.08), transparent 70%)',
     swatch: ['#C8F04B', '#A6C955', '#080808'],
   },
 };

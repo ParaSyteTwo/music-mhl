@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 240" width="100%" height="100%">
+  <defs>
+    <radialGradient id="bg-grad-matrix" cx="50%" cy="50%" r="70%">
+      <stop offset="0%" stop-color="#071b07" />
+      <stop offset="100%" stop-color="#000000" />
+    </radialGradient>
+    <filter id="glow-matrix">
+      <feGaussianBlur stdDeviation="3" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+    <pattern id="scanlines" width="1" height="4" patternUnits="userSpaceOnUse">
+      <rect width="1" height="2" fill="#000" fill-opacity="0.3" />
+    </pattern>
+  </defs>
+  <rect width="100%" height="100%" fill="url(#bg-grad-matrix)" />
+  
+  <g fill="#22C55E" font-family="monospace" font-size="14" font-weight="bold" filter="url(#glow-matrix)" opacity="0.8">
+    <text x="20" y="30">01001010 01110101</text>
+    <text x="180" y="50">01101110 01100111</text>
+    <text x="60" y="80">SYSTEM.OVERRIDE()</text>
+    <text x="240" y="110">10110011 00101100</text>
+    <text x="30" y="140">&gt; _ROOT_ACCESS_GRANTED</text>
+    <text x="220" y="170">01010111 01000001</text>
+    <text x="80" y="200">INITIATING_PROTOCOL</text>
+  </g>
+  
+  <rect width="100%" height="100%" fill="url(#scanlines)" pointer-events="none" />
+  
+  <rect x="15" y="15" width="370" height="210" fill="none" stroke="#22C55E" stroke-width="2" stroke-dasharray="10 5" opacity="0.5" />
+</svg>

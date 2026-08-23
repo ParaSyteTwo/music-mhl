@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 240">
+  <defs>
+    <linearGradient id="cottonGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2D112B"/>
+      <stop offset="50%" stop-color="#1B1238"/>
+      <stop offset="100%" stop-color="#220B2E"/>
+    </linearGradient>
+    <linearGradient id="cloudGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#EC4899" stop-opacity="0.7"/>
+      <stop offset="100%" stop-color="#818CF8" stop-opacity="0.7"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="240" fill="url(#cottonGrad)"/>
+  <path d="M-20 180 Q 50 100 120 160 T 280 140 T 420 190 L 420 240 L -20 240 Z" fill="url(#cloudGrad)"/>
+  <path d="M-20 220 Q 80 150 200 190 T 420 170 L 420 240 L -20 240 Z" fill="#F472B6" opacity="0.6"/>
+  <circle cx="60" cy="50" r="3" fill="#EC4899" opacity="0.8"/>
+  <circle cx="120" cy="80" r="2" fill="#818CF8" opacity="0.6"/>
+  <circle cx="320" cy="60" r="4" fill="#818CF8" opacity="0.8"/>
+  <circle cx="270" cy="100" r="2" fill="#EC4899" opacity="0.5"/>
+</svg>

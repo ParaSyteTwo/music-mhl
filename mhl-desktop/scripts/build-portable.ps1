@@ -58,12 +58,19 @@ try {
     if ($LASTEXITCODE -ne 0) {
         throw 'PyInstaller build failed'
     }
+
+    $sourceConfig = Join-Path $desktopDir 'MHL Music.exe.config'
+    $targetConfig = Join-Path $appDir 'MHL Music.exe.config'
+    if (Test-Path -LiteralPath $sourceConfig) {
+        Copy-Item -LiteralPath $sourceConfig -Destination $targetConfig -Force
+    }
 } finally {
     Pop-Location
 }
 
 foreach ($required in @(
     $exePath,
+    (Join-Path $appDir 'MHL Music.exe.config'),
     (Join-Path $appDir '_internal\pythonnet\runtime\Python.Runtime.dll'),
     (Join-Path $appDir '_internal\clr_loader\ffi\dlls\amd64\ClrLoader.dll')
 )) {

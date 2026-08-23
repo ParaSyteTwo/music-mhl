@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 240">
+  <defs>
+    <linearGradient id="titaniumBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#181A20"/>
+      <stop offset="30%" stop-color="#242730"/>
+      <stop offset="70%" stop-color="#14161B"/>
+      <stop offset="100%" stop-color="#0E0F12"/>
+    </linearGradient>
+    <linearGradient id="dialGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#64748B"/>
+      <stop offset="50%" stop-color="#F1F5F9"/>
+      <stop offset="100%" stop-color="#475569"/>
+    </linearGradient>
+    <filter id="brushed">
+      <feTurbulence type="fractalNoise" baseFrequency="0.8 0.05" numOctaves="2" result="noise"/>
+      <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.15 0" in="noise" result="coloredNoise"/>
+      <feBlend in="SourceGraphic" in2="coloredNoise" mode="multiply"/>
+    </filter>
+  </defs>
+  <rect width="400" height="240" fill="url(#titaniumBg)" filter="url(#brushed)"/>
+  <circle cx="200" cy="120" r="70" fill="url(#dialGrad)" stroke="#F8FAFC" stroke-width="2"/>
+  <circle cx="200" cy="120" r="55" fill="#1E293B" stroke="#94A3B8" stroke-width="1"/>
+  <circle cx="200" cy="120" r="45" fill="url(#dialGrad)"/>
+  <circle cx="235" cy="85" r="4" fill="#0F172A"/>
+  <path d="M 120 120 A 80 80 0 0 1 280 120" stroke="#94A3B8" stroke-width="4" stroke-dasharray="2 6" fill="none"/>
+</svg>

@@ -9,13 +9,16 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
+import threading
+import time
+from pathlib import Path
+from urllib.parse import quote_plus, urlparse
 
 # CREATE_NO_WINDOW para evitar popup de consola en Windows
 CREATE_NO_WINDOW = 0x08000000 if sys.platform == 'win32' else 0
-import tempfile
-import threading
-from pathlib import Path
-from urllib.parse import quote_plus, urlparse
+
+APP_VERSION = '1.5.4'
 
 import requests
 
@@ -65,7 +68,7 @@ _ANILIST_ENDPOINT = 'https://graphql.anilist.co'
 _ANIMETHEMES_ENDPOINT = 'https://api.animethemes.moe'
 _ANIME_HEADERS = {
     'Content-Type': 'application/json',
-    'User-Agent': 'MHLMusic/1.5.3',
+    'User-Agent': f'MHLMusic/{APP_VERSION}',
 }
 _ANIME_TIMEOUT = 10
 
@@ -873,3 +876,140 @@ class Bridge:
             return {"success": True}
         except Exception as e:
             return {"success": False, "error": str(e)}
+
+    # ── App Info & Auto-Updater ───────────────────────────────────────────────
+
+    def get_app_info(self) -> dict:
+        """Devuelve información de la versión e instalación de la aplicación Desktop."""
+        frozen = getattr(sys, 'frozen', False)
+        app_dir = str(Path(sys.executable).parent if frozen else Path(__file__).parent)
+        return {
+            'success': True,
+            'version': APP_VERSION,
+            'frozen': frozen,
+            'app_dir': app_dir,
+            'platform': 'desktop',
+        }
+
+    def apply_desktop_update(self, zip_url: str, version: str) -> dict:
+        """
+        Descarga el paquete portable .zip de GitHub, genera el script de auto-actualización
+        y lanza el proceso de reemplazo independiente que reiniciará MHL Music.
+        """
+        if not zip_url or not zip_url.startswith('https://'):
+            return {'success': False, 'error': 'Invalid download URL'}
+
+        # Sanitizar versión para evitar path traversal
+        clean_version = re.sub(r'[^0-9a-zA-Z._-]', '', version or '')
+        if not clean_version:
+            return {'success': False, 'error': 'Invalid version parameter'}
+
+        frozen = getattr(sys, 'frozen', False)
+        app_dir = Path(sys.executable).parent if frozen else Path(__file__).parent
+        exe_name = Path(sys.executable).name if frozen else 'MHL Music.exe'
+        current_pid = os.getpid()
+
+        # Carpeta temporal única y segura por intento
+        update_temp_dir = Path(tempfile.mkdtemp(prefix='mhl_update_'))
+        zip_dest = update_temp_dir / f'MHL-Music-Portable-{clean_version}.zip'
+        script_path = update_temp_dir / 'update_runner.ps1'
+
+        try:
+            # 1. Descargar el zip con timeout de conexión y lectura
+            resp = requests.get(zip_url, stream=True, timeout=(10, 180))
+            if resp.status_code != 200:
+                shutil.rmtree(update_temp_dir, ignore_errors=True)
+                return {'success': False, 'error': f'Download failed with HTTP {resp.status_code}'}
+
+            with open(zip_dest, 'wb') as f:
+                for chunk in resp.iter_content(chunk_size=65536):
+                    if chunk:
+                        f.write(chunk)
+
+            # 2. Generar el script de actualización en PowerShell con paso de argumentos y rollback
+            ps_script = '''# MHL Music Desktop Updater
+param(
+    [Parameter(Mandatory=$true)][int]$pidToWait,
+    [Parameter(Mandatory=$true)][string]$targetAppDir,
+    [Parameter(Mandatory=$true)][string]$archivePath,
+    [Parameter(Mandatory=$true)][string]$executableName
+)
+
+$ErrorActionPreference = 'SilentlyContinue'
+
+# Esperar a que el proceso principal cierre
+try {
+    Wait-Process -Id $pidToWait -Timeout 25
+} catch {}
+Start-Sleep -Seconds 1
+
+# Si sigue corriendo por alguna razón, forzar término
+Stop-Process -Id $pidToWait -Force -ErrorAction SilentlyContinue
+
+# Extraer contenido en subcarpeta temporal
+$extractDir = Join-Path (Split-Path $archivePath) 'extracted'
+if (Test-Path -LiteralPath $extractDir) { Remove-Item -LiteralPath $extractDir -Recurse -Force }
+Expand-Archive -LiteralPath $archivePath -DestinationPath $extractDir -Force
+
+# Preservar MHL Music.exe.config preexistente
+$configPath = Join-Path $targetAppDir 'MHL Music.exe.config'
+$configBackup = Join-Path (Split-Path $archivePath) 'MHL Music.exe.config.bak'
+if (Test-Path -LiteralPath $configPath) {
+    Copy-Item -LiteralPath $configPath -Destination $configBackup -Force
+}
+
+# Copiar archivos a la carpeta de la aplicación
+Copy-Item -Path (Join-Path $extractDir '*') -Destination $targetAppDir -Recurse -Force
+
+# Restaurar o asegurar configuración .NET
+if (Test-Path -LiteralPath $configBackup) {
+    Copy-Item -LiteralPath $configBackup -Destination $configPath -Force
+}
+
+# Limpiar temporales
+Remove-Item -LiteralPath $extractDir -Recurse -Force
+Remove-Item -LiteralPath $archivePath -Force
+
+# Desbloquear todos los archivos (Zone.Identifier) de forma robusta
+Get-ChildItem -LiteralPath $targetAppDir -Recurse -Force | Unblock-File -ErrorAction SilentlyContinue
+
+# Reiniciar la aplicación actualizada
+$targetExe = Join-Path $targetAppDir $executableName
+if (Test-Path -LiteralPath $targetExe) {
+    Start-Process -FilePath $targetExe
+}
+'''
+            script_path.write_text(ps_script, encoding='utf-8')
+
+            # 3. Lanzar el helper de PowerShell pasando parámetros de forma segura
+            DETACHED_FLAGS = 0x00000008 | 0x08000000 if sys.platform == 'win32' else 0  # DETACHED_PROCESS | CREATE_NO_WINDOW
+            cmd = [
+                'powershell.exe',
+                '-NoProfile',
+                '-ExecutionPolicy', 'Bypass',
+                '-File', str(script_path),
+                '-pidToWait', str(current_pid),
+                '-targetAppDir', str(app_dir),
+                '-archivePath', str(zip_dest),
+                '-executableName', str(exe_name),
+            ]
+            subprocess.Popen(cmd, creationflags=DETACHED_FLAGS, close_fds=True)
+
+            # 4. Programar cierre de la app actual
+            def _close_app():
+                time.sleep(0.6)
+                window = getattr(self, '_window', None)
+                if window:
+                    try:
+                        window.destroy()
+                    except Exception:
+                        pass
+                os._exit(0)
+
+            threading.Thread(target=_close_app, daemon=True).start()
+
+            return {'success': True, 'started': True}
+        except Exception as exc:
+            shutil.rmtree(update_temp_dir, ignore_errors=True)
+            return {'success': False, 'error': str(exc)}
+

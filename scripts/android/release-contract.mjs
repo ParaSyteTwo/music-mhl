@@ -30,6 +30,10 @@ export function parseAndroidVersion(buildGradle) {
 }
 
 export function parseDesktopVersion(bridgeSource) {
+  const constMatch = bridgeSource.match(/^\s*APP_VERSION\s*=\s*['"]([^'"]+)['"]/m);
+  if (constMatch) {
+    return constMatch[1];
+  }
   const versionMatch = bridgeSource.match(
     /['"]User-Agent['"]\s*:\s*['"]MHLMusic\/([^'"]+)['"]/,
   );

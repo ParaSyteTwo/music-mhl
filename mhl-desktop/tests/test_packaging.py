@@ -40,6 +40,7 @@ def test_packaging_sources_do_not_pin_developer_machine_paths():
         DESKTOP_DIR / 'launcher.py',
         DESKTOP_DIR / 'bridge.py',
         DESKTOP_DIR / 'settings.py',
+        DESKTOP_DIR / 'MHL Music.exe.config',
     ]
     forbidden_fragments = [
         'C:\\Users\\',
@@ -51,3 +52,16 @@ def test_packaging_sources_do_not_pin_developer_machine_paths():
     for path in checked_files:
         content = path.read_text(encoding='utf-8')
         assert not any(fragment in content for fragment in forbidden_fragments), path
+
+
+def test_clr_runtime_configuration_exists_and_valid():
+    config_path = DESKTOP_DIR / 'MHL Music.exe.config'
+    assert config_path.exists()
+    content = config_path.read_text(encoding='utf-8')
+    assert '<loadFromRemoteSources enabled="true"/>' in content
+
+    spec = (DESKTOP_DIR / 'MHLMusic.spec').read_text(encoding='utf-8')
+    assert "'MHL Music.exe.config'" in spec
+
+    script = (DESKTOP_DIR / 'scripts' / 'build-portable.ps1').read_text(encoding='utf-8')
+    assert "'MHL Music.exe.config'" in script

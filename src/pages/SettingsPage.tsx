@@ -227,7 +227,7 @@ export default function SettingsPage() {
 
         {showThemes && (
           <div className="mt-3 p-3 sm:p-4 rounded-2xl bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.06)] animate-in slide-in-from-top-2 fade-in duration-200">
-            <div className="grid grid-cols-2 gap-2 sm:gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {Object.values(APP_THEMES).map((theme) => {
                 const isActive = (appTheme || 'original_minimalist') === theme.id;
                 return (
@@ -235,30 +235,40 @@ export default function SettingsPage() {
                     key={theme.id}
                     type="button"
                     onClick={() => setAppTheme(theme.id)}
-                    className={`group relative flex flex-col p-2.5 sm:p-3 rounded-xl border text-left transition-all overflow-hidden active:scale-95 min-w-0 ${
+                    className={`group relative flex flex-col p-3 rounded-2xl border text-left transition-all overflow-hidden active:scale-[0.98] min-w-0 ${
                       isActive
-                        ? 'border-[var(--accent-primary)] bg-white/[0.08] shadow-lg shadow-[var(--accent-glow)] ring-1 ring-[var(--accent-primary)]/50'
-                        : 'border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.05] hover:border-white/[0.12]'
+                        ? 'border-[var(--accent-primary)] bg-white/[0.08] shadow-xl shadow-[var(--accent-glow)] ring-1 ring-[var(--accent-primary)]/50'
+                        : 'border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.05] hover:border-white/[0.15]'
                     }`}
                   >
-                    {/* Top ambient banner with theme gradient */}
-                    <div 
-                      className="w-full h-1 sm:h-1.5 rounded-full mb-2 opacity-85 group-hover:opacity-100 transition-opacity flex-shrink-0"
-                      style={{ background: theme.gradient }}
-                    />
-                    
-                    <div className="flex items-center justify-between gap-1.5 mb-1.5 w-full">
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <div 
-                          className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center text-xs sm:text-sm flex-shrink-0 shadow-sm border border-white/10"
-                          style={{ background: theme.bgSurface }}
-                        >
-                          {theme.emoji}
-                        </div>
-                        <span className="text-[7.5px] sm:text-[8px] font-mono tracking-wider px-1 sm:px-1.5 py-0.5 rounded bg-white/[0.06] text-[#A0A098] uppercase font-bold truncate">
+                    {/* Discord-style Theme Illustration Banner */}
+                    <div className="w-full h-20 sm:h-24 rounded-xl mb-2.5 overflow-hidden relative border border-white/10 bg-black/50 flex-shrink-0">
+                      <img
+                        src={theme.artworkUrl}
+                        alt={t(theme.nameKey)}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        loading="lazy"
+                      />
+                      <div
+                        className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent pointer-events-none"
+                      />
+                      <div className="absolute top-2 left-2 flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-black/60 backdrop-blur-md border border-white/10">
+                        <span className="text-xs">{theme.emoji}</span>
+                        <span className="text-[8px] font-mono tracking-wider text-[#F5F5F0] uppercase font-bold">
                           {theme.badge}
                         </span>
                       </div>
+                      {isActive && (
+                        <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-[var(--accent-primary)] text-[#080808] text-[8px] font-bold tracking-wider uppercase shadow-md">
+                          ACTIVO
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-between gap-1.5 mb-1 w-full">
+                      <p className={`text-xs sm:text-sm font-bold leading-tight truncate ${isActive ? 'text-[var(--accent-primary)]' : 'text-[#F5F5F0]'}`}>
+                        {t(theme.nameKey)}
+                      </p>
                       <div className="flex items-center gap-1 flex-shrink-0">
                         {theme.swatch.map((color, idx) => (
                           <span
@@ -270,21 +280,17 @@ export default function SettingsPage() {
                       </div>
                     </div>
 
-                    <p className={`text-xs font-bold leading-tight mt-0.5 truncate w-full ${isActive ? 'text-[var(--accent-primary)]' : 'text-[#F5F5F0]'}`}>
-                      {t(theme.nameKey)}
-                    </p>
-                    
                     {/* Unique Signature feature & Font tags */}
-                    <div className="flex flex-col gap-0.5 mt-1.5 mb-1 w-full min-w-0">
-                      <span className="text-[7px] sm:text-[8px] font-semibold px-1 py-0.5 rounded bg-white/[0.05] text-[#D0D0C8] border border-white/[0.05] truncate w-full">
+                    <div className="flex flex-col gap-1 mt-1 mb-1 w-full min-w-0">
+                      <span className="text-[8px] font-semibold px-1.5 py-0.5 rounded-md bg-white/[0.05] text-[#D0D0C8] border border-white/[0.05] truncate w-full">
                         {theme.signatureFx}
                       </span>
-                      <span className="text-[7px] sm:text-[8px] font-mono px-1 py-0.5 rounded bg-white/[0.03] text-[#8E8E88] truncate w-full">
+                      <span className="text-[7.5px] font-mono px-1.5 py-0.5 rounded-md bg-white/[0.03] text-[#8E8E88] truncate w-full">
                         Aa {theme.font}
                       </span>
                     </div>
 
-                    <p className="text-[9px] sm:text-[9.5px] text-[#8E8E88] leading-tight line-clamp-2 mt-0.5 hidden sm:block">
+                    <p className="text-[9px] text-[#8E8E88] leading-snug line-clamp-2 mt-0.5">
                       {t(theme.descKey)}
                     </p>
                   </button>
@@ -795,8 +801,8 @@ export default function SettingsPage() {
         </section>
       )}
 
-      {/* yt-dlp — solo visible en Android, con diseño coherente */}
-      {isAndroid && (
+      {/* App Updates — visible en Android y Desktop */}
+      {(isAndroid || isPyWebView) && (
         <section className="mb-8">
           <h2 className="text-xs font-semibold uppercase tracking-widest text-[#8A8A8A] mb-2">
             {t('appUpdates')}

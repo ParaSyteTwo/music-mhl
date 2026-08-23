@@ -13,9 +13,10 @@ export function AppUpdateNotice() {
   const dismissedDigest = useAppUpdateStore((state) => state.dismissedDigest);
   const dismissCurrentBuild = useAppUpdateStore((state) => state.dismissCurrentBuild);
 
+  const remoteKey = remoteBuild && ('digest' in remoteBuild ? remoteBuild.digest : remoteBuild.versionName);
   if (
     !remoteBuild ||
-    dismissedDigest === remoteBuild.digest ||
+    dismissedDigest === remoteKey ||
     (status !== 'available' && status !== 'waiting')
   ) {
     return null;

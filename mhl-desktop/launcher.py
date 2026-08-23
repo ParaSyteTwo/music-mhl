@@ -10,14 +10,53 @@ import socket
 from pathlib import Path
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 
-import webview
-
 
 def _base_dir() -> Path:
     """Directorio raíz: _MEIPASS cuando está congelado, o el directorio del script."""
     if getattr(sys, 'frozen', False):
         return Path(sys._MEIPASS)          # type: ignore[attr-defined]
     return Path(__file__).parent
+
+
+def _unblock_app_files():
+    """
+    Elimina el Alternate Data Stream 'Zone.Identifier' (Mark of the Web) de los archivos
+    de la aplicación si fue descargada en un archivo ZIP desde la web.
+    En Windows, .NET Framework bloquea DLLs no confiables (como Python.Runtime.dll)
+    si conservan dicha marca de zona remota.
+    """
+    if sys.platform != 'win32':
+        return
+
+    candidates = set()
+    base = _base_dir()
+    candidates.add(base)
+
+    if getattr(sys, 'frozen', False):
+        try:
+            candidates.add(Path(sys.executable).parent)
+        except Exception:
+            pass
+
+    for root_dir in candidates:
+        if not root_dir.exists():
+            continue
+        try:
+            for p in root_dir.rglob('*'):
+                if p.is_file():
+                    zone_path = Path(f'{p}:Zone.Identifier')
+                    try:
+                        if zone_path.exists():
+                            zone_path.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+
+_unblock_app_files()
+
+import webview
 
 
 def _dist_dir() -> Path:

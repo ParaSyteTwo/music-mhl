@@ -26,6 +26,8 @@ a = Analysis(
         (str(DIST), 'dist'),
         # Ícono (embebido en el exe por PyInstaller, también disponible en assets/)
         (str(APP_ICON), 'assets'),
+        # Configuración .NET para habilitar carga de ensamblados remotos / Zone.Identifier
+        (str(ROOT / 'MHL Music.exe.config'), '.'),
     ],
     hiddenimports=[
         'webview',

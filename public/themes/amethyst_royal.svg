@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 240" width="100%" height="100%">
+  <defs>
+    <!-- Deep Space Background -->
+    <radialGradient id="royalSpace" cx="50%" cy="50%" r="80%">
+      <stop offset="0%" stop-color="#2E1065"/>
+      <stop offset="70%" stop-color="#0D0514"/>
+      <stop offset="100%" stop-color="#000000"/>
+    </radialGradient>
+
+    <!-- Amethyst Gem Gradients -->
+    <linearGradient id="amethystLight" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#D8B4FE"/>
+      <stop offset="100%" stop-color="#9333EA"/>
+    </linearGradient>
+    <linearGradient id="amethystDark" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#A855F7"/>
+      <stop offset="100%" stop-color="#4C1D95"/>
+    </linearGradient>
+    <linearGradient id="amethystCore" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#F3E8FF"/>
+      <stop offset="100%" stop-color="#7E22CE"/>
+    </linearGradient>
+
+    <!-- Constellation Glow -->
+    <filter id="magicGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="2.5" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="400" height="240" fill="url(#royalSpace)"/>
+
+  <!-- Constellations and Stardust -->
+  <g stroke="#E9D5FF" stroke-width="0.5" opacity="0.6">
+    <!-- Constellation 1 (Left) -->
+    <line x1="40" y1="50" x2="80" y2="90"/>
+    <line x1="80" y1="90" x2="60" y2="140"/>
+    <line x1="80" y1="90" x2="120" y2="110"/>
+    
+    <!-- Constellation 2 (Right) -->
+    <line x1="350" y1="60" x2="310" y2="80"/>
+    <line x1="310" y1="80" x2="320" y2="130"/>
+    <line x1="310" y1="80" x2="270" y2="50"/>
+  </g>
+
+  <!-- Constellation Nodes / Stars -->
+  <g fill="#F3E8FF" filter="url(#magicGlow)">
+    <circle cx="40" cy="50" r="2"/>
+    <circle cx="80" cy="90" r="2.5"/>
+    <circle cx="60" cy="140" r="1.5"/>
+    <circle cx="120" cy="110" r="1.5"/>
+    
+    <circle cx="350" cy="60" r="2"/>
+    <circle cx="310" cy="80" r="2.5"/>
+    <circle cx="320" cy="130" r="1.5"/>
+    <circle cx="270" cy="50" r="1.5"/>
+    
+    <!-- Floating Stardust -->
+    <circle cx="200" cy="30" r="1" opacity="0.8"/>
+    <circle cx="160" cy="180" r="1.2" opacity="0.7"/>
+    <circle cx="240" cy="200" r="1" opacity="0.9"/>
+  </g>
+
+  <!-- Giant Carved Amethyst Crystal -->
+  <g transform="translate(200, 120)">
+    <!-- Back Facets -->
+    <polygon points="0,-70 -40,-20 0,60" fill="url(#amethystDark)"/>
+    <polygon points="0,-70 40,-20 0,60" fill="url(#amethystDark)" opacity="0.8"/>
+    
+    <!-- Front Facets -->
+    <polygon points="0,-70 -25,-10 0,80" fill="url(#amethystLight)" opacity="0.9"/>
+    <polygon points="0,-70 25,-10 0,80" fill="url(#amethystCore)"/>
+    
+    <!-- Side Highlights -->
+    <polygon points="-25,-10 0,80 -40,-20" fill="#7E22CE" opacity="0.6"/>
+    <polygon points="25,-10 0,80 40,-20" fill="#D8B4FE" opacity="0.4"/>
+    
+    <!-- Top Cut -->
+    <polygon points="0,-70 -25,-10 25,-10" fill="#F3E8FF" opacity="0.8"/>
+  </g>
+</svg>

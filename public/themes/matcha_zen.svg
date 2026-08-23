@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 240">
+  <defs>
+    <radialGradient id="sandZen" cx="50%" cy="50%" r="60%">
+      <stop offset="0%" stop-color="#1B1E12"/>
+      <stop offset="100%" stop-color="#0E1009"/>
+    </radialGradient>
+  </defs>
+  <rect width="400" height="240" fill="url(#sandZen)"/>
+  
+  <!-- Ondas concéntricas de arena zen -->
+  <g stroke="#84CC16" stroke-width="2" fill="none" opacity="0.3">
+    <circle cx="200" cy="120" r="30" />
+    <circle cx="200" cy="120" r="60" />
+    <circle cx="200" cy="120" r="90" />
+    <circle cx="200" cy="120" r="120" />
+    <circle cx="200" cy="120" r="150" />
+  </g>
+  
+  <!-- Bambú estilizado -->
+  <g fill="#84CC16" opacity="0.85">
+    <!-- Tronco Izquierdo -->
+    <rect x="40" y="-20" width="14" height="280" rx="4"/>
+    <line x1="35" y1="50" x2="59" y2="50" stroke="#4d7c0f" stroke-width="3"/>
+    <line x1="35" y1="130" x2="59" y2="130" stroke="#4d7c0f" stroke-width="3"/>
+    <line x1="35" y1="200" x2="59" y2="200" stroke="#4d7c0f" stroke-width="3"/>
+    
+    <!-- Tronco Derecho -->
+    <rect x="340" y="-20" width="18" height="280" rx="6"/>
+    <line x1="334" y1="80" x2="364" y2="80" stroke="#4d7c0f" stroke-width="4"/>
+    <line x1="334" y1="170" x2="364" y2="170" stroke="#4d7c0f" stroke-width="4"/>
+  </g>
+  
+  <!-- Hojas de té matcha orgánicas -->
+  <path d="M200,120 C220,95 245,115 200,120 Z" fill="#65a30d"/>
+  <path d="M190,110 C165,95 180,75 190,110 Z" fill="#4d7c0f"/>
+  <path d="M210,135 C240,140 230,165 210,135 Z" fill="#84CC16"/>
+</svg>

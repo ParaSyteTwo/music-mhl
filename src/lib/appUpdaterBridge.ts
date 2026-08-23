@@ -6,6 +6,7 @@ import {
   type DownloadedAndroidApk,
   type InspectedAndroidApk,
   type InstalledAndroidBuild,
+  type InstalledDesktopBuild,
 } from '@/types/appUpdate';
 
 interface NativeAppUpdateError {
@@ -320,3 +321,79 @@ export async function installAndroidUpdate(options: {
     };
   }
 }
+
+export async function getInstalledDesktopIdentity(): Promise<AppUpdateResult<InstalledDesktopBuild>> {
+  try {
+    const isPyWebView = typeof window !== 'undefined' && 'pywebview' in window;
+    if (isPyWebView && (window as any).pywebview?.api?.get_app_info) {
+      const res = await (window as any).pywebview.api.get_app_info();
+      if (res && res.success) {
+        return {
+          success: true,
+          data: {
+            platform: 'desktop',
+            versionName: res.version || '1.5.4',
+            frozen: !!res.frozen,
+            appDir: res.app_dir || '',
+          },
+        };
+      }
+    }
+    return {
+      success: true,
+      data: {
+        platform: 'desktop',
+        versionName: '1.5.4',
+        frozen: false,
+        appDir: '',
+      },
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: {
+        code: 'NATIVE_IDENTITY_FAILED',
+        detail: error instanceof Error ? error.message : 'Could not read Desktop identity.',
+      },
+    };
+  }
+}
+
+export async function applyDesktopUpdate(
+  url: string,
+  version: string,
+): Promise<AppUpdateResult<{ started: boolean }>> {
+  try {
+    const isPyWebView = typeof window !== 'undefined' && 'pywebview' in window;
+    if (!isPyWebView || !(window as any).pywebview?.api?.apply_desktop_update) {
+      return {
+        success: false,
+        error: {
+          code: 'UNSUPPORTED_PLATFORM',
+          detail: 'Desktop auto-updater is only available in pywebview desktop runtime.',
+        },
+      };
+    }
+
+    const res = await (window as any).pywebview.api.apply_desktop_update(url, version);
+    if (res && res.success) {
+      return { success: true, data: { started: true } };
+    }
+    return {
+      success: false,
+      error: {
+        code: 'INSTALL_FAILED',
+        detail: res?.error || 'Desktop update failed to initiate.',
+      },
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: {
+        code: 'INSTALL_FAILED',
+        detail: error instanceof Error ? error.message : 'Could not apply Desktop update.',
+      },
+    };
+  }
+}
+

@@ -7,8 +7,10 @@ import {
   type AndroidReleaseManifest,
   type AppUpdateChannel,
   type FetchedAndroidRelease,
+  type FetchedDesktopRelease,
   type AppUpdateResult,
   type RemoteAndroidBuild,
+  type RemoteDesktopBuild,
   type Sha256Digest,
 } from '@/types/appUpdate';
 
@@ -382,3 +384,129 @@ export function parseOfficialAndroidRelease(
     },
   };
 }
+
+export function parseOfficialDesktopRelease(
+  releaseValue: unknown,
+  channel: AppUpdateChannel = 'stable',
+): AppUpdateResult<RemoteDesktopBuild> {
+  const release = parseRelease(releaseValue);
+  if (
+    !release ||
+    release.draft ||
+    (channel === 'stable' && release.prerelease)
+  ) {
+    return {
+      success: false,
+      error: {
+        code: 'INVALID_RELEASE',
+        detail: 'Release is invalid, draft, or incompatible with the selected channel.',
+      },
+    };
+  }
+
+  const versionName = release.tag_name.replace(/^v/, '');
+  const expectedZipName = `MHL-Music-Portable-${versionName}.zip`;
+  const zipAssets = release.assets.filter(
+    (asset) =>
+      asset.name === expectedZipName ||
+      (asset.name.startsWith('MHL-Music-Portable-') && asset.name.endsWith('.zip')),
+  );
+
+  if (zipAssets.length === 0) {
+    return {
+      success: false,
+      error: {
+        code: 'NO_COMPATIBLE_APK',
+        detail: `Release ${release.tag_name} does not contain a portable Windows ZIP asset.`,
+      },
+    };
+  }
+
+  const zipAsset = zipAssets[0];
+  if (zipAsset.state !== 'uploaded') {
+    return {
+      success: false,
+      error: { code: 'NO_COMPATIBLE_APK', detail: 'Portable ZIP asset is not fully uploaded.' },
+    };
+  }
+
+  return {
+    success: true,
+    data: {
+      platform: 'desktop',
+      channel,
+      releaseId: release.id,
+      releaseTag: release.tag_name,
+      releaseUrl: release.html_url,
+      assetId: zipAsset.id,
+      assetName: zipAsset.name,
+      assetUrl: zipAsset.browser_download_url,
+      assetSize: zipAsset.size,
+      assetUpdatedAt: zipAsset.updated_at,
+      versionName,
+    },
+  };
+}
+
+export async function fetchLatestOfficialDesktopRelease(
+  channel: AppUpdateChannel = 'stable',
+  fetchImpl?: typeof fetch,
+): Promise<AppUpdateResult<FetchedDesktopRelease>> {
+  try {
+    const releaseApi =
+      channel === 'stable'
+        ? 'https://api.github.com/repos/ParaSyteTwo/music-mhl/releases/latest'
+        : 'https://api.github.com/repos/ParaSyteTwo/music-mhl/releases?per_page=20';
+
+    const releaseResponse = await (fetchImpl ?? fetch)(releaseApi, {
+      headers: { Accept: 'application/vnd.github+json' },
+      cache: 'no-store',
+    });
+
+    if (!releaseResponse.ok) {
+      return {
+        success: false,
+        error: {
+          code: 'NETWORK',
+          detail: `GitHub release request failed with status ${releaseResponse.status}.`,
+        },
+      };
+    }
+
+    const responseValue = await releaseResponse.json();
+    const githubDateHeader = releaseResponse.headers.get('date') ?? '';
+
+    const releaseValue =
+      channel === 'stable'
+        ? responseValue
+        : Array.isArray(responseValue)
+          ? responseValue.find((value) => {
+              const candidate = parseRelease(value);
+              return candidate && !candidate.draft;
+            })
+          : null;
+
+    const parsed = parseOfficialDesktopRelease(releaseValue, channel);
+    if (parsed.success === false) {
+      return { success: false, error: parsed.error };
+    }
+
+    const githubDate = Date.parse(githubDateHeader);
+    return {
+      success: true,
+      data: {
+        build: parsed.data,
+        trustedTimeMs: Number.isFinite(githubDate) ? githubDate : 0,
+      },
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: {
+        code: 'NETWORK',
+        detail: error instanceof Error ? error.message : 'Could not query GitHub Releases.',
+      },
+    };
+  }
+}
+
