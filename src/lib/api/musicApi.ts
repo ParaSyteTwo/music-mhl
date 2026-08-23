@@ -768,19 +768,35 @@ export async function downloadTrackAudio(
   videoIdOverride?: string,
   sourceUrlOverride?: string,
 ): Promise<ArrayBuffer> {
+  let resolvedVideoId = videoIdOverride;
+  const cleanSourceUrl = sourceUrlOverride && !sourceUrlOverride.includes('spotify.com') ? sourceUrlOverride : undefined;
+
+  // Si no hay videoId ni sourceUrl directo válido, resolver dinámicamente el mejor candidato de YouTube Music
+  if (!resolvedVideoId && !cleanSourceUrl) {
+    try {
+      const candidates = await getDownloadCandidates(track, { depth: 'light' });
+      const best = candidates.find((c) => c.confidence >= 40) || candidates[0];
+      if (best) {
+        resolvedVideoId = best.videoId;
+      }
+    } catch {
+      // fallback
+    }
+  }
+
   if (isRunningInPyWebView()) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const api = (window as any).pywebview.api;
-    if (!videoIdOverride && !sourceUrlOverride) {
+    if (!resolvedVideoId && !cleanSourceUrl) {
       throw new DownloadFailure('candidate_invalid', 'La descarga requiere un candidato resuelto');
     }
     onProgress?.(10);
     const result = await api.get_raw_audio(
-      videoIdOverride ?? null,
+      resolvedVideoId ?? null,
       getPreferredTrackTitle(track),
       track.artist,
       [],
-      sourceUrlOverride ?? null,
+      cleanSourceUrl ?? null,
       track.duration ?? 0,
     );
     if (!result.success) throw new Error(result.error || 'Error descargando audio');
@@ -792,11 +808,11 @@ export async function downloadTrackAudio(
   if (Capacitor.isNativePlatform()) {
     const { downloadMp3Native } = await import('@/lib/ytdlpBridge');
 
-    if (sourceUrlOverride) {
+    if (cleanSourceUrl) {
       onProgress?.(10);
       try {
         return await downloadMp3Native(null, {
-          sourceUrl: sourceUrlOverride,
+          sourceUrl: cleanSourceUrl,
           expectedDuration: track.duration,
         });
       } catch {
@@ -804,12 +820,24 @@ export async function downloadTrackAudio(
       }
     }
 
-    if (!videoIdOverride) {
+    if (!resolvedVideoId) {
+      try {
+        const candidates = await getDownloadCandidates(track, { depth: 'deep' });
+        const best = candidates.find((c) => c.confidence >= 35) || candidates[0];
+        if (best) {
+          resolvedVideoId = best.videoId;
+        }
+      } catch {
+        // fallback
+      }
+    }
+
+    if (!resolvedVideoId) {
       throw new DownloadFailure('candidate_invalid', 'La descarga requiere un candidato resuelto');
     }
     onProgress?.(10);
     try {
-      return await downloadMp3Native(videoIdOverride, { expectedDuration: track.duration });
+      return await downloadMp3Native(resolvedVideoId, { expectedDuration: track.duration });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'No se pudo descargar';
       if (/403|forbidden|rate.?limit/i.test(message)) throw new DownloadFailure('rate_limit', message);

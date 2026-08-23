@@ -61,6 +61,21 @@ export const createDownloadSlice: StateCreator<
           sourceUrlOverride?: string,
         ) => {
           let resolvedVideoId = videoIdOverride;
+          const cleanSourceUrl = sourceUrlOverride && !sourceUrlOverride.includes('spotify.com') ? sourceUrlOverride : undefined;
+
+          // Si no hay videoId ni sourceUrl válido, resolver dinámicamente el mejor candidato de YouTube Music
+          if (!resolvedVideoId && !cleanSourceUrl) {
+            try {
+              const candidates = await getDownloadCandidates(track, { depth: 'light' });
+              const best = candidates.find((c) => c.confidence >= 40) || candidates[0];
+              if (best) {
+                resolvedVideoId = best.videoId;
+              }
+            } catch {
+              // fallback
+            }
+          }
+
           if (Date.now() < rateLimitCooldownUntil) {
             const seconds = Math.ceil((rateLimitCooldownUntil - Date.now()) / 1000);
             set((s) => ({
@@ -147,7 +162,7 @@ export const createDownloadSlice: StateCreator<
                   track.canonicalTitle?.trim() || track.title,
                   track.artist,
                   queries,
-                  sourceUrlOverride ?? null,
+                  cleanSourceUrl ?? null,
                   track.duration ?? 0,
                 ),
                 supplementalDataPromise,
@@ -226,7 +241,7 @@ export const createDownloadSlice: StateCreator<
               const [audioBuffer, [trackMeta, lyricsResult]] = await Promise.all([
                 downloadTrackAudio(track, (progress) => {
                   updateDl({ progress });
-                }, resolvedVideoId, sourceUrlOverride),
+                }, resolvedVideoId, cleanSourceUrl),
                 supplementalDataPromise,
               ]);
               updateDl({ progress: 80 });

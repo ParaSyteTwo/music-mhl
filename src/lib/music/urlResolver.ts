@@ -269,7 +269,6 @@ export async function resolveTrackFromUrl(url: string): Promise<Track | null> {
         if (results.length > 0) {
           return {
             ...results[0],
-            sourceUrl: trimmed,
             isLongAudio: (results[0].duration > 1200) || isLongByTitle || isPodcastLink,
             isPodcast: isPodcastLink || isLongByTitle,
           };
@@ -287,7 +286,6 @@ export async function resolveTrackFromUrl(url: string): Promise<Track | null> {
           preview: '',
           isrc: '',
           edition: 'unknown',
-          sourceUrl: trimmed,
           isLongAudio: isLongByTitle || isPodcastLink,
           isPodcast: isPodcastLink || isLongByTitle,
         };
