@@ -130,5 +130,57 @@ describe('urlResolver', () => {
       const track = await resolveTrackFromUrl('https://www.youtube.com/@TheBestMusicChannel');
       expect(track).toBeNull();
     });
+
+    it('resolves Spotify URL purely as verifier without attaching Spotify audio stream', async () => {
+      global.fetch = vi.fn().mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          title: 'Kanaria - 革命道中 - On The Way by Kanaria',
+        }),
+      });
+
+      vi.mocked(searchDeezer).mockResolvedValueOnce([
+        {
+          id: 'dz-kanaria-1',
+          title: '革命道中 - On The Way',
+          artist: 'Kanaria',
+          album: 'Kanaria Album',
+          duration: 180,
+          cover: 'https://cover.jpg',
+        },
+      ]);
+
+      const track = await resolveTrackFromUrl('https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT');
+      expect(track).not.toBeNull();
+      expect(track?.title).toBe('革命道中 - On The Way');
+      expect(track?.artist).toBe('Kanaria');
+      expect(track?.sourceUrl).toBeUndefined();
+    });
+
+    it('resolves Apple Music URL and bridges to Deezer studio track', async () => {
+      global.fetch = vi.fn().mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          title: 'Stay',
+          author_name: 'The Kid LAROI, Justin Bieber',
+        }),
+      });
+
+      vi.mocked(searchDeezer).mockResolvedValueOnce([
+        {
+          id: 'dz-stay',
+          title: 'Stay',
+          artist: 'The Kid LAROI',
+          album: 'F*CK LOVE 3',
+          duration: 141,
+          cover: 'https://cover-stay.jpg',
+        },
+      ]);
+
+      const track = await resolveTrackFromUrl('https://music.apple.com/us/album/stay/1574984448?i=1574984450');
+      expect(track).not.toBeNull();
+      expect(track?.title).toBe('Stay');
+      expect(track?.artist).toBe('The Kid LAROI');
+    });
   });
 });

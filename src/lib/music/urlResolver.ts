@@ -3,14 +3,17 @@ import { searchDeezer } from '@/lib/api/musicApi';
 
 export function isDirectMediaUrl(input: string): boolean {
   const trimmed = input.trim().replace(/^[<"']+|[>"']+$/g, '');
-  return /^https?:\/\/(www\.|m\.)?(youtube\.com|youtu\.be|music\.youtube\.com|soundcloud\.com|open\.spotify\.com)\/.+/i.test(trimmed);
+  return /^https?:\/\/(www\.|m\.|music\.|open\.|listen\.|vt\.|[a-z0-9-]+\.)?(youtube\.com|youtu\.be|spotify\.com|apple\.com|deezer\.com|deezer\.page\.link|tidal\.com|amazon\.[a-z.]+|soundcloud\.com|bandcamp\.com|tiktok\.com)\/.+/i.test(trimmed);
 }
 
 export function isUnsupportedCollectionUrl(input: string): boolean {
   const trimmed = input.trim();
   return (
     (/[?&]list=/i.test(trimmed) && !/[?&]v=/i.test(trimmed)) ||
-    /open\.spotify\.com\/(?:[a-zA-Z0-9_-]+\/)?(album|playlist)\//i.test(trimmed) ||
+    /open\.spotify\.com\/(?:[a-zA-Z0-9_-]+\/)?(album|playlist|artist|user)\//i.test(trimmed) ||
+    /music\.apple\.com\/(?:[a-zA-Z0-9_-]+\/)?(playlist|artist|curator)\//i.test(trimmed) ||
+    /deezer\.com\/(?:[a-zA-Z0-9_-]+\/)?(album|playlist|artist)\//i.test(trimmed) ||
+    /tidal\.com\/(?:browse\/)?(album|playlist|artist)\//i.test(trimmed) ||
     /soundcloud\.com\/[^/]+\/sets\//i.test(trimmed)
   );
 }
@@ -56,6 +59,30 @@ export function extractSpotifyTrackId(urlStr: string): string | null {
   }
   const match = urlStr.match(/open\.spotify\.com\/(?:[a-zA-Z0-9_-]+\/)?track\/([a-zA-Z0-9]+)/i);
   return match ? match[1] : null;
+}
+
+export function extractDeezerTrackId(urlStr: string): string | null {
+  const match = urlStr.match(/deezer\.(?:com|page\.link)\/(?:[a-zA-Z0-9_-]+\/)?track\/(\d+)/i);
+  return match ? match[1] : null;
+}
+
+export function extractAppleMusicInfo(urlStr: string): { title?: string; artist?: string } | null {
+  try {
+    const url = new URL(urlStr.trim().replace(/^[<"']+|[>"']+$/g, ''));
+    if (url.hostname.includes('apple.com')) {
+      // Formato: /album/song-title-slug/123?i=456 o /song/song-title-slug/456
+      const segments = url.pathname.split('/').filter(Boolean);
+      const albumIdx = segments.findIndex((s) => s === 'album' || s === 'song');
+      if (albumIdx >= 0 && segments[albumIdx + 1]) {
+        const rawSlug = segments[albumIdx + 1];
+        const title = decodeURIComponent(rawSlug).replace(/-/g, ' ').trim();
+        return { title };
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return null;
 }
 
 export function cleanVideoTitle(rawTitle: string): { title: string; artist?: string } {
@@ -240,9 +267,9 @@ export async function resolveTrackFromUrl(url: string): Promise<Track | null> {
       };
     }
 
-    // 2. Spotify Track / Episode URL
+    // 2. Spotify Track / Episode URL (Sólo verificador de metadatos ➔ Deezer + YouTube Music)
     const spotifyTrackId = extractSpotifyTrackId(trimmed);
-    if (spotifyTrackId || isPodcastLink) {
+    if (spotifyTrackId || isPodcastLink || trimmed.includes('spotify.com/')) {
       let oembedTitle = '';
       try {
         const res = await fetch(
@@ -292,13 +319,145 @@ export async function resolveTrackFromUrl(url: string): Promise<Track | null> {
       }
     }
 
-    // 3. SoundCloud
+    // 3. Apple Music / iTunes (Sólo verificador ➔ Deezer + YouTube Music)
+    if (trimmed.includes('apple.com')) {
+      let title = '';
+      let artist = '';
+      try {
+        const res = await fetch(
+          `https://music.apple.com/oembed?url=${encodeURIComponent(trimmed)}`,
+          { signal: createTimeoutSignal(6000) }
+        );
+        if (res.ok) {
+          const data = (await res.json()) as { title?: string; author_name?: string };
+          title = data.title || '';
+          artist = data.author_name || '';
+        }
+      } catch {
+        // fallback to slug parser
+      }
+
+      if (!title) {
+        const parsed = extractAppleMusicInfo(trimmed);
+        if (parsed?.title) title = parsed.title;
+      }
+
+      if (title) {
+        const query = artist ? `${artist} ${title}` : title;
+        const results = await searchDeezer(query, 0, 5);
+        if (results.length > 0) {
+          return {
+            ...results[0],
+            isLongAudio: (results[0].duration > 1200) || isPodcastLink,
+            isPodcast: isPodcastLink,
+          };
+        }
+        return {
+          id: `am_${crypto.randomUUID()}`,
+          title,
+          canonicalTitle: title,
+          artist: artist || 'Apple Music',
+          album: artist || 'Apple Music',
+          canonicalAlbum: artist || 'Apple Music',
+          duration: 0,
+          cover: '',
+          preview: '',
+          isrc: '',
+          edition: 'unknown',
+          isLongAudio: isPodcastLink,
+          isPodcast: isPodcastLink,
+        };
+      }
+    }
+
+    // 4. Deezer Direct URL
+    const deezerTrackId = extractDeezerTrackId(trimmed);
+    if (deezerTrackId || trimmed.includes('deezer.com/')) {
+      let oembedTitle = '';
+      let oembedAuthor = '';
+      try {
+        const res = await fetch(
+          `https://api.deezer.com/oembed?url=${encodeURIComponent(trimmed)}&format=json`,
+          { signal: createTimeoutSignal(6000) }
+        );
+        if (res.ok) {
+          const data = (await res.json()) as { title?: string; author_name?: string };
+          oembedTitle = data.title || '';
+          oembedAuthor = data.author_name || '';
+        }
+      } catch {
+        // ignore
+      }
+
+      const query = oembedAuthor ? `${oembedAuthor} ${oembedTitle}` : (oembedTitle || deezerTrackId || '');
+      if (query) {
+        const results = await searchDeezer(query, 0, 5);
+        if (results.length > 0) {
+          return results[0];
+        }
+      }
+    }
+
+    // 5. Tidal / Amazon Music / Bandcamp / TikTok (Sólo verificador ➔ Deezer + YouTube Music)
+    if (trimmed.includes('tidal.com') || trimmed.includes('amazon.') || trimmed.includes('bandcamp.com') || trimmed.includes('tiktok.com')) {
+      let title = '';
+      let author = '';
+
+      if (trimmed.includes('tidal.com')) {
+        try {
+          const res = await fetch(
+            `https://oembed.tidal.com/v1?url=${encodeURIComponent(trimmed)}`,
+            { signal: createTimeoutSignal(6000) }
+          );
+          if (res.ok) {
+            const data = (await res.json()) as { title?: string; author_name?: string };
+            title = data.title || '';
+            author = data.author_name || '';
+          }
+        } catch { /* ignore */ }
+      } else if (trimmed.includes('tiktok.com')) {
+        try {
+          const res = await fetch(
+            `https://www.tiktok.com/oembed?url=${encodeURIComponent(trimmed)}`,
+            { signal: createTimeoutSignal(6000) }
+          );
+          if (res.ok) {
+            const data = (await res.json()) as { title?: string; author_name?: string };
+            title = data.title || '';
+            author = data.author_name || '';
+          }
+        } catch { /* ignore */ }
+      }
+
+      if (title || author) {
+        const query = `${author} ${title}`.trim();
+        const results = await searchDeezer(query, 0, 5);
+        if (results.length > 0) {
+          return results[0];
+        }
+        return {
+          id: `stream_${crypto.randomUUID()}`,
+          title: title || 'Stream Track',
+          canonicalTitle: title || 'Stream Track',
+          artist: author || 'Streaming',
+          album: author || 'Streaming',
+          canonicalAlbum: author || 'Streaming',
+          duration: 0,
+          cover: '',
+          preview: '',
+          isrc: '',
+          edition: 'unknown',
+        };
+      }
+    }
+
+    // 6. SoundCloud
     if (trimmed.includes('soundcloud.com/')) {
       let scData: { title?: string; author_name?: string; thumbnail_url?: string } | null = null;
       try {
         const res = await fetch(
           `https://soundcloud.com/oembed?url=${encodeURIComponent(trimmed)}&format=json`,
-          { signal: AbortSignal.timeout(6000) }
+          { signal: createTimeoutSignal(6000) }
         );
         if (res.ok) {
           scData = (await res.json()) as { title?: string; author_name?: string; thumbnail_url?: string };

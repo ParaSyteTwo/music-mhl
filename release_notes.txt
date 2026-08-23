@@ -1,39 +1,22 @@
-MHL Music 1.5.1 (Release Oficial: 13 Mundos Visuales, Cuadrícula 2-Col, Descarga Unificada & 18 Artistas)
+MHL Music 1.5.2 (Puente Universal de Streaming & Nuevo Icono Centralizado)
 
-MHL Music 1.5.1 es la versión oficial definitiva con personalización estética extrema, cuadrícula de temas en 2 columnas, botón de descarga inteligente unificado, tipografías Google Fonts dedicadas por estilo y 18 artistas sugeridos en el explorador.
+MHL Music 1.5.2 introduce el Puente Universal de Streaming multidispositivo, permitiendo pegar enlaces de cualquier plataforma de streaming (Spotify, Apple Music, Deezer, Tidal, Amazon Music, SoundCloud, TikTok y Bandcamp) para identificar la pista al instante, extraer sus metadatos de estudio oficiales en HD y descargar el audio impecable mediante YouTube Music sin bloqueos ni errores de DRM. Además, se actualiza el icono oficial de la aplicación a su diseño centralizado y purificado sin texto.
 
-✨ **Principales Novedades de la Versión 1.5.1**
+✨ **Principales Novedades de la Versión 1.5.2**
 
-- **Selector de Temas en 2 Columnas:** Cuadrícula de 2 columnas ('grid-cols-2') compacta y balanceada en Ajustes, con iconos de aplicación estilizados, badges de efectos visuales y swatches de color.
-- **Acción de Descarga Inteligente Unificada:** Integración completa de la descarga de mejor coincidencia verificada ('Zap') y descarga manual en un único botón inteligente y reactivo.
-- **13 Tipografías Radicales por Tema:** Inyección de familias tipográficas reales con Google Fonts (JetBrains Mono, Syne, Space Grotesk, Playfair Display, Orbitron, Cinzel, Outfit, Quicksand, Fredoka, etc.) que transforman por completo toda la interfaz al cambiar de tema.
-- **18 Artistas Sugeridos en Búsqueda:** Cuadrícula expandida de 6 filas de 3 artistas en móviles (18 artistas con avatares de monograma y géneros musicales).
-- **Ajustes 100% Organizados:** Acordeones colapsables elegantes para Apariencia & Temas, Opciones avanzadas (anime, auto-descarga, resolución, letras) y Reproductor predeterminado.
-- **13 Estilos Visuales Completos:**
-  1. ⚡ *Acid Cyberpunk* (Neón Lima Eléctrico)
-  2. 🌌 *OLED Sapphire* (Azul Cobalto Láser)
-  3. 🌸 *Vaporwave Sunset* (Degradado Retro Magenta & Naranja)
-  4. 🔮 *Amethyst Royal* (Púrpura Imperial & Ultravioleta)
-  5. 🌲 *Emerald Aurora* (Verde Esmeralda Nórdico)
-  6. ☀️ *Solar Amber* (Ámbar Dorado & Calidez Analógica)
-  7. 🩸 *Crimson Velocity* (Rojo Rubí & Fibra Oscura)
-  8. 🌊 *Oceanic Abyss* (Turquesa Bioluminiscente)
-  9. 🍵 *Matcha Zen* (Verde Matcha & Serenidad Japonesa)
-  10. 🍬 *Cotton Candy Dream* (Rosa Pastel & Lila)
-  11. 🛸 *Matrix Terminal* (Fósforo Verde CRT Hacker)
-  12. 🪙 *Titanium Luxury* (Platino Plateado de Lujo)
-  13. 🎧 *MHL Minimalista Clásico* (El clásico original puro)
-
-🚀 **Rendimiento Extremo & Fluidez**
-
-- **Aceleración GPU en el Reproductor:** Barra de progreso optimizada por hardware (`scaleX`) que erradica las caídas de fotogramas y ahorra batería.
-- **Hitbox Táctil Ampliada:** Desplazamiento y arrastre de la reproducción ultrasuave con el pulgar.
-- **Aislamiento Táctil:** Eliminación definitiva de estados hover pegados o fantasmas en pantallas móviles.
+- 🎧 **Puente Universal de Streaming (Cero Errores DRM):**
+  - Compatibilidad total con enlaces de **Spotify**, **Apple Music**, **Deezer**, **Tidal**, **Amazon Music**, **SoundCloud**, **TikTok**, **Bandcamp** y **YouTube**.
+  - **Identificador de Estudio:** Las plataformas de streaming actúan como verificador inteligente para identificar la canción y rescatar su carátula HD original (1400x1400), álbum oficial, año, género e ISRC desde los catálogos oficiales.
+  - **Enrutado Automático a YouTube Music:** Las descargas de audio se procesan sin requerir cuentas de pago ni tropezar con protecciones DRM privativas, eliminando el error de "candidato resuelto".
+- 🎨 **Nuevo Icono Centralizado y Purificado:**
+  - Icono rediseñado 1:1 con el disco lima característico y los auriculares con nota musical perfectamente centrados geométricamente, eliminando el texto "MHL MUSIC" para un look más limpio, moderno y profesional en Android y Windows.
+- ⚡ **Resolución Dinámica al Vuelo:**
+  - Si una canción no tiene candidato precalculado, el motor de descargas busca y selecciona automáticamente el mejor flujo de YouTube Music en milisegundos.
+- 🌡️ **Control Térmico y Soporte de Podcasts en Opciones Avanzadas:**
+  - Interruptor dedicado en Ajustes Avanzados para habilitar descargas de podcasts o audios extensos (>20 min) con alerta preventiva de CPU y temperatura para dispositivos de gama baja.
 
 🛠 **Correcciones y Estabilidad**
 
-- **Safe Area Superior:** Margen superior dinámico que evita cualquier solapamiento con el reloj y la barra de estado de Android.
-- **Limpieza Visual de Estados Vacíos:** Eliminación de iconos y bloques redundantes para una experiencia limpia y fluida.
-- **Blindaje contra Errores de Red:** Protección en la vista de descargas con limitación de texto para prevenir roturas visuales.
-- **Paridad Lingüística Completa:** 100% de los textos, etiquetas y géneros traducidos con total naturalidad en Español e Inglés.
-- **Estabilidad y Cobertura Total:** 239/239 pruebas unitarias automáticas pasando al 100%.
+- Corrección definitiva del fallo en descargas directas de enlaces de Spotify.
+- 245/245 pruebas unitarias automáticas pasando al 100%.
+- Compatibilidad completa con auto-actualizaciones OTA en Android según contrato `ANDROID_UPDATE_CONTRACT.md`.
