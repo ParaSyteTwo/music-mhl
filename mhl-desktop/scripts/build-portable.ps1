@@ -10,17 +10,24 @@ $buildDir = Join-Path $desktopDir 'build'
 $desktopDistDir = Join-Path $desktopDir 'dist'
 $appDir = Join-Path $desktopDistDir 'MHL Music'
 $exePath = Join-Path $appDir 'MHL Music.exe'
-$pythonPath = Join-Path $desktopDir '.venv\Scripts\python.exe'
 $packagePath = Join-Path $projectDir 'package.json'
 $releaseDir = Join-Path $projectDir 'release'
 
-if (-not (Test-Path -LiteralPath $pythonPath)) {
-    throw "Desktop virtual environment not found: $pythonPath"
+if (Test-Path -LiteralPath (Join-Path $desktopDir '.venv\Scripts\python.exe')) {
+    $pythonPath = Join-Path $desktopDir '.venv\Scripts\python.exe'
+} else {
+    $pythonCmd = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $pythonCmd) {
+        throw "Python executable not found in PATH or .venv"
+    }
+    $pythonPath = $pythonCmd.Source
 }
 
 $pythonVersion = & $pythonPath -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"
-if ($pythonVersion -ne '3.12') {
-    throw "Desktop portable must be built with Python 3.12, found $pythonVersion"
+$pythonMajor = [int](& $pythonPath -c "import sys; print(sys.version_info.major)")
+$pythonMinor = [int](& $pythonPath -c "import sys; print(sys.version_info.minor)")
+if ($pythonMajor -ne 3 -or $pythonMinor -lt 11) {
+    throw "Desktop portable requires Python 3.11+, found $pythonVersion"
 }
 
 if (-not $SkipFrontendBuild) {

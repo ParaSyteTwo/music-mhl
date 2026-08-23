@@ -1,27 +1,18 @@
-MHL Music 1.5.3 (Blindaje Integral & Selector de Calidad/Compatibilidad)
+# MHL Music 1.5.5 (Blindaje de Seguridad y Resiliencia Extrema)
 
-MHL Music 1.5.3 es una actualización de blindaje profundo y estabilidad extrema tras una auditoría destructiva masiva de 7 vectores. Esta versión garantiza una experiencia de reproducción y descarga fluida, libre de congelamientos, con soporte completo para descarga en Modo Calidad (M4A) o Modo Compatibilidad (MP3 320 kbps) e iconos purificados en Android.
+Esta actualización consolida los resultados de la auditoría de seguridad y caza exhaustiva de errores en todas las plataformas soportadas (Desktop y Android). Se eleva el estándar de seguridad en el acceso a archivos, se blindan los contratos de actualización y se eliminan potenciales fugas de memoria en segundo plano.
 
-✨ **Principales Novedades de la Versión 1.5.3**
+---
 
-💎 **Audio y Formatos de Descarga**
-- **Selector de Modo Calidad vs Compatibilidad:** Configura desde Ajustes Avanzados tu preferencia de audio entre **Modo Calidad** (M4A / AAC directo de estudio sin re-compresión para móviles, PC y auriculares) y **Modo Compatibilidad** (MP3 a 320 kbps con tags ID3v2.3 completos para radios de coche y pendrives USB).
-- **Preservación Total de Metadatos:** Ambos formatos conservan carátula HD original, artista, álbum, año, género, número de pista y letras sincronizadas.
+### 🛡️ Mejoras de Seguridad
+- **Sandboxing y Validación de Rutas Reforzada:** El bridge de escritorio ahora valida estrictamente los límites del directorio mediante resolución canónica segura (`relative_to`), permitiendo la organización en subcarpetas de álbumes y artistas mientras bloquea de raíz cualquier intento de *path traversal*.
+- **Contratos de Actualización Tipados al 100%:** Se erradicaron los castings inseguros (`any`) en el subsistema del actualizador Desktop, garantizando la verificación rígida de la API interna de PyWebView.
+- **Saneamiento Determinista de Consultas:** Se reemplazaron expresiones regulares potencialmente problemáticas por un filtrado estricto basado en códigos de caracteres ASCII, blindando la barra de búsqueda contra inyecciones y caracteres de control invisibles.
 
-🚀 **Rendimiento y Motor de Reproducción**
-- **Protección Antispam de Clics:** El reproductor gestiona de forma transparente las cancelaciones asíncronas (`AbortError`), evitando que la barra de reproducción quede desincronizada al cambiar de canción rápidamente.
-- **Detección de Pausas Nativas en Android:** Sincronización inmediata de la UI ante llamadas telefónicas entrantes, audífonos desconectados o reposo del sistema.
-- **Cero Fugas de Memoria:** Inicialización desacoplada del ciclo de vida de la actividad en Android, optimizando el consumo de RAM tras sesiones prolongadas.
+### 🚀 Rendimiento y Prevención de Fugas
+- **Ciclo de Vida Limpio en Descargas Android:** Se implementó una bandera de estado activo que asegura la desuscripción y liberación inmediata de los listeners de progreso nativo (`addDownloadProgressListener`), evitando handles huérfanos o acumulación en segundo plano.
+- **Memoización Optimizada de Hooks:** Se envolvieron las funciones de verificación de descargas en `useCallback` sincronizado con las dependencias del ciclo de vida de React, previniendo re-renderizados innecesarios en la pantalla de búsqueda.
 
-🛠️ **Estabilidad y Cola de Descargas**
-- **Barrera de Concurrencia Inquebrantable:** Protección en tiempo real contra pulsaciones múltiples que asegura el límite estricto de descargas simultáneas sin saturar el procesador.
-- **Limpieza de Almacenamiento Zombi:** En Android 10 a 15, cualquier error de disco lleno o interrupción de red limpia inmediatamente los archivos pendientes en MediaStore para no dejar archivos residuales bloqueados.
-- **Validación de URLs y Extracción Precisa:** El buscador distingue canciones individuales de álbumes/playlists completas, evitando descargas no deseadas, y mejora el soporte para títulos en japonés, coreano y cirílico.
-
-📱 **Diseño UI / UX y Pantallas Grandes**
-- **Icono Oficial Purificado en Android:** Compatibilidad completa con Adaptive Icons (Android 8.0+) con el disco centralizado y fondo oscuro en todas las resoluciones.
-- **Ergonomía en Monitores 4K / Ultrawide:** Barra de reproducción inferior centrada armónicamente en resoluciones ultra anchas.
-
-🧪 **Calidad y Verificación**
-- 246/246 pruebas unitarias automáticas pasando al 100%.
-- Compatibilidad absoluta con el contrato de actualizaciones Android (`ANDROID_UPDATE_CONTRACT.md`).
+### 🛠 Correcciones y Estabilidad
+- **Entorno de Pruebas Desktop Aislado:** Configuración de `pytest.ini` con basetemp local en Windows, eliminando fallos y bloqueos de permisos en directorios temporales compartidos del sistema.
+- **Suite de Pruebas al 100% Verde:** Verificación exhaustiva superada con 246 pruebas Vitest, 49 pruebas Pytest Desktop y 5 pruebas del contrato de actualización Android.

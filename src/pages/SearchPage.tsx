@@ -366,7 +366,13 @@ export default function SearchPage() {
   };
 
   const handleSearch = () => {
-    const sanitized = query.replace(/[\x00-\x1F\x7F]/g, '').trim();
+    const sanitized = Array.from(query)
+      .filter((ch) => {
+        const code = ch.charCodeAt(0);
+        return code >= 32 && code !== 127;
+      })
+      .join('')
+      .trim();
     if (!sanitized || isSearching) return;
     
     if (isDirectMediaUrl(sanitized)) {
@@ -393,11 +399,17 @@ export default function SearchPage() {
     setArtistRotation((current) => current + 1);
   };
 
-  const isDownloading = (trackId: string) =>
-    downloads.some((d) => d.track.id === trackId && d.status === 'downloading');
+  const isDownloading = useCallback(
+    (trackId: string) =>
+      downloads.some((d) => d.track.id === trackId && d.status === 'downloading'),
+    [downloads],
+  );
 
-  const isDownloaded = (trackId: string) =>
-    downloads.some((d) => d.track.id === trackId && d.status === 'completed');
+  const isDownloaded = useCallback(
+    (trackId: string) =>
+      downloads.some((d) => d.track.id === trackId && d.status === 'completed'),
+    [downloads],
+  );
 
   useEffect(() => {
     scheduler.startSession();
@@ -437,7 +449,7 @@ export default function SearchPage() {
         duration: 4000,
       });
     }
-  }, [autoDownload, animeMode, bestCandidates, downloads, isNativeProduct, resolutionStates, searchQuery, searchResults, startDownloadWithVideoId, t]);
+  }, [autoDownload, animeMode, bestCandidates, isDownloaded, isDownloading, isNativeProduct, resolutionStates, searchQuery, searchResults, startDownloadWithVideoId, t]);
 
   useEffect(() => {
     const updateVisibility = () => scheduler.setPaused(document.hidden);
@@ -535,7 +547,7 @@ export default function SearchPage() {
       refreshRecent();
     }, 300);
     return () => window.clearTimeout(timeout);
-  }, [query, searchQuery, performSearch, refreshRecent, animeSearchEnabled, animeMode, handleDirectUrl]);
+  }, [query, searchQuery, performSearch, refreshRecent, animeSearchEnabled, animeMode, handleDirectUrl, t]);
 
   const showEmpty = !query.trim() && searchResults.length === 0 && !isSearching;
 

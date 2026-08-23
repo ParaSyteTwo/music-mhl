@@ -44,6 +44,7 @@ memory.md
 # Python cache
 __pycache__/
 .pytest_cache/
+.pytest_tmp/
 *.pyc
 *.pyo
 

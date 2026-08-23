@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.5.5 - 2026-08-23
+
+**MHL Music 1.5.5 (Blindaje de Seguridad y Resiliencia Extrema)**
+
+🛡️ **Mejoras de Seguridad**
+- **Sandboxing y Validación de Rutas Reforzada:** El bridge de escritorio ahora valida estrictamente los límites del directorio mediante resolución canónica segura (`relative_to`), permitiendo la organización en subcarpetas de álbumes y artistas mientras bloquea de raíz cualquier intento de *path traversal*.
+- **Contratos de Actualización Tipados al 100%:** Se erradicaron los castings inseguros (`any`) en el subsistema del actualizador Desktop, garantizando la verificación rígida de la API interna de PyWebView.
+- **Saneamiento Determinista de Consultas:** Se reemplazaron expresiones regulares potencialmente problemáticas por un filtrado estricto basado en códigos de caracteres ASCII, blindando la barra de búsqueda contra inyecciones y caracteres de control invisibles.
+
+🚀 **Rendimiento y Prevención de Fugas**
+- **Ciclo de Vida Limpio en Descargas Android:** Se implementó una bandera de estado activo que asegura la desuscripción y liberación inmediata de los listeners de progreso nativo (`addDownloadProgressListener`), evitando handles huérfanos o acumulación en segundo plano.
+- **Memoización Optimizada de Hooks:** Se envolvieron las funciones de verificación de descargas en `useCallback` sincronizado con las dependencias del ciclo de vida de React, previniendo re-renderizados innecesarios en la pantalla de búsqueda.
+
+🛠 **Correcciones y Estabilidad**
+- **Entorno de Pruebas Desktop Aislado:** Configuración de `pytest.ini` con basetemp local en Windows, eliminando fallos y bloqueos de permisos en directorios temporales compartidos del sistema.
+- **Suite de Pruebas al 100% Verde:** Verificación exhaustiva superada con 246 pruebas Vitest, 49 pruebas Pytest Desktop y 5 pruebas del contrato de actualización Android.
+
 ## v1.4.9 - 2026-08-20
 
 **MHL Music 1.4.9 (Estabilidad Extrema y Sandboxing)**

@@ -19,7 +19,7 @@ def test_get_app_info_returns_version_and_platform():
 
 def test_apply_desktop_update_rejects_non_https():
     bridge = Bridge()
-    res = bridge.apply_desktop_update('http://insecure.com/app.zip', '1.5.4')
+    res = bridge.apply_desktop_update('http://insecure.com/app.zip', '1.5.5')
     assert res['success'] is False
     assert 'Invalid' in res['error']
 
@@ -48,13 +48,13 @@ def test_apply_desktop_update_downloads_and_spawns_helper(monkeypatch):
         # Evitar que el thread cierre el proceso de pytest
         monkeypatch.setattr('threading.Thread.start', lambda self: None)
 
-        res = bridge.apply_desktop_update('https://github.com/ParaSyteTwo/music-mhl/releases/download/v1.5.4/MHL-Music-Portable-1.5.4.zip', '1.5.4')
+        res = bridge.apply_desktop_update('https://github.com/ParaSyteTwo/music-mhl/releases/download/v1.5.5/MHL-Music-Portable-1.5.5.zip', '1.5.5')
 
         assert res['success'] is True
         assert res['started'] is True
 
         # Verificar que el zip y el script de PowerShell fueron generados
-        zip_file = test_tmp / 'MHL-Music-Portable-1.5.4.zip'
+        zip_file = test_tmp / 'MHL-Music-Portable-1.5.5.zip'
         ps1_file = test_tmp / 'update_runner.ps1'
 
         assert zip_file.exists()

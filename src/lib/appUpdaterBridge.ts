@@ -322,17 +322,38 @@ export async function installAndroidUpdate(options: {
   }
 }
 
+interface PyWebViewDesktopApi {
+  get_app_info?: () => Promise<{
+    success: boolean;
+    version?: string;
+    frozen?: boolean;
+    app_dir?: string;
+  }>;
+  apply_desktop_update?: (
+    url: string,
+    version: string,
+  ) => Promise<{ success: boolean; error?: string }>;
+}
+
+interface PyWebViewDesktopWindow extends Window {
+  pywebview?: {
+    api?: PyWebViewDesktopApi;
+  };
+}
+
 export async function getInstalledDesktopIdentity(): Promise<AppUpdateResult<InstalledDesktopBuild>> {
   try {
     const isPyWebView = typeof window !== 'undefined' && 'pywebview' in window;
-    if (isPyWebView && (window as any).pywebview?.api?.get_app_info) {
-      const res = await (window as any).pywebview.api.get_app_info();
+    const pyWindow = typeof window !== 'undefined' ? (window as PyWebViewDesktopWindow) : undefined;
+    const api = pyWindow?.pywebview?.api;
+    if (isPyWebView && api?.get_app_info) {
+      const res = await api.get_app_info();
       if (res && res.success) {
         return {
           success: true,
           data: {
             platform: 'desktop',
-            versionName: res.version || '1.5.4',
+            versionName: res.version || '1.5.5',
             frozen: !!res.frozen,
             appDir: res.app_dir || '',
           },
@@ -343,7 +364,7 @@ export async function getInstalledDesktopIdentity(): Promise<AppUpdateResult<Ins
       success: true,
       data: {
         platform: 'desktop',
-        versionName: '1.5.4',
+        versionName: '1.5.5',
         frozen: false,
         appDir: '',
       },
@@ -365,7 +386,9 @@ export async function applyDesktopUpdate(
 ): Promise<AppUpdateResult<{ started: boolean }>> {
   try {
     const isPyWebView = typeof window !== 'undefined' && 'pywebview' in window;
-    if (!isPyWebView || !(window as any).pywebview?.api?.apply_desktop_update) {
+    const pyWindow = typeof window !== 'undefined' ? (window as PyWebViewDesktopWindow) : undefined;
+    const api = pyWindow?.pywebview?.api;
+    if (!isPyWebView || !api?.apply_desktop_update) {
       return {
         success: false,
         error: {
@@ -375,7 +398,7 @@ export async function applyDesktopUpdate(
       };
     }
 
-    const res = await (window as any).pywebview.api.apply_desktop_update(url, version);
+    const res = await api.apply_desktop_update(url, version);
     if (res && res.success) {
       return { success: true, data: { started: true } };
     }

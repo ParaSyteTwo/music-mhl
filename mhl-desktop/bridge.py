@@ -18,7 +18,7 @@ from urllib.parse import quote_plus, urlparse
 # CREATE_NO_WINDOW para evitar popup de consola en Windows
 CREATE_NO_WINDOW = 0x08000000 if sys.platform == 'win32' else 0
 
-APP_VERSION = '1.5.4'
+APP_VERSION = '1.5.5'
 
 import requests
 
@@ -759,7 +759,9 @@ class Bridge:
                 str(Path.home() / 'Music' / 'MHL Music'),
             )).resolve()
             target = Path(file_path).resolve()
-            if target.parent != root:
+            try:
+                target.relative_to(root)
+            except ValueError:
                 return {'success': False, 'error': 'Path outside download folder'}
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(bytes(data))

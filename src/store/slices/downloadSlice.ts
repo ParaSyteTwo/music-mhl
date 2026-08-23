@@ -137,12 +137,20 @@ export const createDownloadSlice: StateCreator<
 
           // Listener de progreso real de yt-dlp (Android): conecta 0-100% nativo → 25-80% UI
           let progressHandle: { remove: () => void } | null = null;
+          let isDownloadActive = true;
           if (Capacitor.isNativePlatform()) {
             import('@/lib/ytdlpBridge').then(({ addDownloadProgressListener }) => {
-              addDownloadProgressListener((evt) => {
+              if (!isDownloadActive) return;
+              return addDownloadProgressListener((evt) => {
                 const mapped = Math.round(25 + (evt.progress / 100) * 55);
                 updateDl({ progress: mapped, speed: evt.speed || undefined, eta: evt.eta > 0 ? evt.eta : undefined });
-              }).then((handle) => { progressHandle = handle; }).catch(() => {});
+              }).then((handle) => {
+                if (!isDownloadActive) {
+                  handle?.remove();
+                } else {
+                  progressHandle = handle;
+                }
+              });
             }).catch(() => {});
           }
 
@@ -392,6 +400,7 @@ export const createDownloadSlice: StateCreator<
             }
           }
           } finally {
+            isDownloadActive = false;
             progressHandle?.remove();
             set((s) => ({ activeDownloads: Math.max(0, s.activeDownloads - 1) }));
             get().processDownloadQueue();
