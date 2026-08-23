@@ -1,6 +1,6 @@
 import { useShallow } from 'zustand/react/shallow';
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Download, Play, Pause, Search, Loader2, Music, CheckCircle, X, ArrowLeft, Tv, Zap, RefreshCw, Sparkles } from 'lucide-react';
+import { Download, Play, Pause, Search, Loader2, Music, CheckCircle, X, ArrowLeft, Tv, Zap, RefreshCw, Sparkles, Clipboard } from 'lucide-react';
 import { useMusicStore } from '@/store/musicStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getDownloadCandidates, type DownloadCandidate } from '@/lib/api/musicApi';
@@ -298,8 +298,19 @@ export default function SearchPage() {
         );
         setSearchResults([resolvedTrack]);
         setSearchQuery(resolvedTrack.title);
+        if (resolvedTrack.youtubeId) {
+          const key = candidateTrackKey(resolvedTrack);
+          setBestCandidates((cur) => ({ ...cur, [key]: { videoId: resolvedTrack.youtubeId! } }));
+          setResolutionStates((cur) => ({ ...cur, [key]: 'verified' }));
+        }
         if (autoDownload) {
-          startDownload(resolvedTrack);
+          if (resolvedTrack.youtubeId) {
+            startDownloadWithVideoId(resolvedTrack, resolvedTrack.youtubeId);
+          } else if (resolvedTrack.sourceUrl) {
+            startDownloadWithSourceUrl(resolvedTrack, resolvedTrack.sourceUrl);
+          } else {
+            startDownload(resolvedTrack);
+          }
         }
       } else {
         toast.error(t('noResults'), { id: 'url-resolve' });
@@ -309,7 +320,37 @@ export default function SearchPage() {
     } finally {
       setIsSearching(false);
     }
-  }, [autoDownload, isSearching, startDownload, t]);
+  }, [autoDownload, isSearching, startDownload, startDownloadWithSourceUrl, startDownloadWithVideoId, t]);
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const pastedText = e.clipboardData.getData('text').trim();
+    if (pastedText) {
+      setQuery(pastedText);
+      if (isDirectMediaUrl(pastedText)) {
+        e.preventDefault();
+        handleDirectUrl(pastedText);
+      }
+    }
+  };
+
+  const handlePasteFromClipboard = async () => {
+    try {
+      if (navigator?.clipboard?.readText) {
+        const text = (await navigator.clipboard.readText()).trim();
+        if (text) {
+          setQuery(text);
+          if (isDirectMediaUrl(text)) {
+            handleDirectUrl(text);
+          } else {
+            performSearch(text);
+            refreshRecent();
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+  };
 
   const handleSearch = () => {
     const sanitized = query.replace(/[\x00-\x1F\x7F]/g, '').trim();
@@ -515,7 +556,15 @@ export default function SearchPage() {
             type="text"
             placeholder={t('searchPlaceholder')}
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              const val = e.target.value;
+              setQuery(val);
+              const trimmed = val.trim();
+              if (isDirectMediaUrl(trimmed)) {
+                handleDirectUrl(trimmed);
+              }
+            }}
+            onPaste={handlePaste}
             onKeyDown={handleKeyDown}
             onFocus={() => setInputFocused(true)}
             onBlur={() => setTimeout(() => setInputFocused(false), 200)}
@@ -534,7 +583,17 @@ export default function SearchPage() {
             >
               <X className="w-3 h-3 text-[#A0A09A]" />
             </button>
-          ) : null}
+          ) : (
+            <button
+              type="button"
+              onClick={handlePasteFromClipboard}
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-[#6E6E68] hover:text-[#C8F04B] hover:bg-white/[0.06] transition-colors"
+              title="Pegar enlace del portapapeles"
+              aria-label="Pegar enlace"
+            >
+              <Clipboard className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </section>
 
@@ -817,6 +876,10 @@ export default function SearchPage() {
                           <button
                             onClick={(e) => {
                               if (downloading || downloaded) return;
+                              if (track.sourceUrl && !bestCandidate) {
+                                startDownloadWithSourceUrl(track, track.sourceUrl);
+                                return;
+                              }
                               if (isNativeProduct && bestCandidate) {
                                 void handleBestDownloadClick(e, track);
                               } else {
@@ -957,6 +1020,10 @@ export default function SearchPage() {
                       <button
                         onClick={(e) => {
                           if (downloading || downloaded) return;
+                          if (track.sourceUrl && !bestCandidate) {
+                            startDownloadWithSourceUrl(track, track.sourceUrl);
+                            return;
+                          }
                           if (isNativeProduct && bestCandidate) {
                             void handleBestDownloadClick(e, track);
                           } else {

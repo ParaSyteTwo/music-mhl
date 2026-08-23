@@ -1,6 +1,7 @@
 import { StateCreator } from 'zustand';
 import { MusicStore, SearchSlice } from './types';
 import { searchDeezer } from '@/lib/api/musicApi';
+import { isDirectMediaUrl, resolveTrackFromUrl } from '@/lib/music/urlResolver';
 
 let searchRequestId = 0;
 
@@ -40,6 +41,18 @@ export const createSearchSlice: StateCreator<
         searchOffset: 0,
         hasMoreResults: true,
       });
+
+      if (isDirectMediaUrl(normalizedQuery)) {
+        const resolved = await resolveTrackFromUrl(normalizedQuery);
+        if (requestId !== searchRequestId) return;
+        set({
+          searchResults: resolved ? [resolved] : [],
+          isSearching: false,
+          hasMoreResults: false,
+        });
+        return;
+      }
+
       const tracks = await searchDeezer(normalizedQuery, 0, 25);
       if (requestId !== searchRequestId) return;
       set({ searchResults: tracks, isSearching: false, hasMoreResults: tracks.length >= 25 });

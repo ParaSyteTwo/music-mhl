@@ -179,6 +179,26 @@ async function searchITunes(query: string, limit = 25): Promise<Track[]> {
   }
 }
 
+function deduplicateTracks(tracks: Track[]): Track[] {
+  const seen = new Set<string>();
+  const result: Track[] = [];
+  for (const t of tracks) {
+    const normTitle = (t.canonicalTitle || t.title)
+      .toLowerCase()
+      .replace(/\s*\(.*?\)/g, '')
+      .replace(/\s*\[.*?\]/g, '')
+      .replace(/[^a-z0-9]/g, '');
+    const primaryArtist = t.artist.toLowerCase().split(/&|,|feat\.?|x|\+/i)[0].replace(/[^a-z0-9]/g, '');
+    const durationBucket = Math.round((t.duration || 0) / 4);
+    const key = `${normTitle}_${primaryArtist}_${durationBucket}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      result.push(t);
+    }
+  }
+  return result;
+}
+
 // ─── Deezer Search ───
 export async function searchDeezer(query: string, offset = 0, limit = 25): Promise<Track[]> {
   const normalizedQuery = query.trim().replace(/\s+/g, ' ');
@@ -196,7 +216,7 @@ export async function searchDeezer(query: string, offset = 0, limit = 25): Promi
       const data = await callDeezerDirect<{ data?: RawDeezerTrack[] }>(
         `/search?q=${encodeURIComponent(normalizedQuery)}&limit=${limit}&index=${offset}`,
       );
-      let tracks = (data.data || []).map(mapRawDeezerTrack);
+      let tracks = deduplicateTracks((data.data || []).map(mapRawDeezerTrack));
       
       // Fallback a iTunes si Deezer está caído o no encuentra nada
       if (tracks.length === 0) {
@@ -206,7 +226,7 @@ export async function searchDeezer(query: string, offset = 0, limit = 25): Promi
             toast.info('Buscando en catálogo de respaldo...', { id: 'itunes-fallback' });
           });
         }
-        tracks = await searchITunes(normalizedQuery, limit);
+        tracks = deduplicateTracks(await searchITunes(normalizedQuery, limit));
       }
       
       setCachedValue(searchCache, cacheKey, tracks, SEARCH_CACHE_TTL_MS, SEARCH_CACHE_MAX_ENTRIES);
@@ -219,7 +239,7 @@ export async function searchDeezer(query: string, offset = 0, limit = 25): Promi
           toast.info('Conexión inestable, usando catálogo de respaldo...', { id: 'itunes-fallback' });
         });
       }
-      const tracks = await searchITunes(normalizedQuery, limit);
+      const tracks = deduplicateTracks(await searchITunes(normalizedQuery, limit));
       return tracks;
     } finally {
       searchRequests.delete(cacheKey);
