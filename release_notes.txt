@@ -1,11 +1,13 @@
-MHL Music 1.5.1 Beta 6 (Atmósferas Shaders & 12 Diseños Thematic Worlds)
+MHL Music 1.5.1 Beta 8 (Identidad Visual Radical por Tema & Centrado Perfecto)
 
-MHL Music 1.5.1 Beta 6 transforma profundamente la experiencia visual con atmósferas ambientales específicas para cada uno de los 12 estilos, incluyendo CRT Scanlines para Matrix, horizontes radiales Vaporwave, espacio cósmico OLED, y previsualizaciones dinámicas con badges de identidad.
+MHL Music 1.5.1 Beta 8 dota a cada uno de los 13 estilos de una personalidad visual radicalmente única, incluyendo tipografía monospace y geometría afilada de 4px para Matrix, bordes curvados de 30px y cristal esmerilado para Cotton Candy, estética itálica y synthwave para Vaporwave, cockpit de fibra de carbono para Crimson Velocity, y centrado vertical armónico en la pantalla de búsqueda.
 
 ✨ **Novedades de la Versión**
 
-- **Atmósferas Ambientales Específicas por Tema:** Shaders de fondo y resplandor inmersivo para los 12 mundos visuales.
-- **Badges de Identidad Visual:** Indicadores de estilo de cada tema (`[CRT MATRIX]`, `[SYNTHWAVE 80s]`, `[COSMIC OLED]`, `[ANALOG VINYL]`, `[SUPERCAR CARBON]`, `[ULTRAVIOLET GEM]`, etc.).
+- **Personalidad Visual Radical por Tema:** Cada estilo cuenta con tipografías, curvaturas de esquinas (border-radius desde 4px hasta 30px), shaders y texturas completamente diferenciados.
+- **Centrado Vertical Armónico de Búsqueda:** El contenido se sitúa en el centro perfecto de la pantalla en móviles sin espacio vacío desproporcionado abajo.
+- **Selector Acordeón Fluido:** Desplegable de Apariencia con banner de gradiente y paleta de acentos.
+- **Selector Desplegable Acordeón:** Apariencia limpia y ordenada en Ajustes.
 - **Selector Acordeón Fluido:** Desplegable de Apariencia con banner de gradiente y paleta de acentos.
 - **Pantalla de Búsqueda 100% Cero-Scroll:** Cuadrícula de 12 artistas optimizada ergonómicamente.
 - **Nuevo Isotipo Oficial HD:** Auriculares de estudio en relieve 3D sin texto.

@@ -257,134 +257,264 @@
   }
 
   /* ==========================================================================
-     THEME AMBIENT ATMOSPHERES (12 DISTINCT PARADIGMS)
+     RADICAL THEME DNA OVERRIDES (13 DISTINCT VISUAL PARADIGMS)
      ========================================================================== */
+  
+  /* 1. MATRIX TERMINAL (Cyber Hacker / Monospace CRT Scanlines / Sharp 4px geometry) */
+  [data-theme="matrix_terminal"] {
+    --radius: 4px;
+  }
+  [data-theme="matrix_terminal"] body,
+  [data-theme="matrix_terminal"] h1,
+  [data-theme="matrix_terminal"] h2,
+  [data-theme="matrix_terminal"] h3,
+  [data-theme="matrix_terminal"] button,
+  [data-theme="matrix_terminal"] input,
+  [data-theme="matrix_terminal"] span {
+    font-family: 'JetBrains Mono', monospace !important;
+  }
+  [data-theme="matrix_terminal"] .home-hero,
+  [data-theme="matrix_terminal"] .home-search-shell,
+  [data-theme="matrix_terminal"] .artist-discovery,
+  [data-theme="matrix_terminal"] .artist-showcase-card,
+  [data-theme="matrix_terminal"] button {
+    border-radius: 4px !important;
+  }
   [data-theme="matrix_terminal"] .app-ambient {
     background:
-      radial-gradient(circle at 50% 10%, rgba(34, 197, 94, 0.16), transparent 45%),
-      linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.35) 50%),
+      radial-gradient(circle at 50% 10%, rgba(34, 197, 94, 0.2), transparent 50%),
+      repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0.35) 2px, transparent 2px, transparent 4px),
       #020B04;
-    background-size: 100% 100%, 100% 4px, 100% 100%;
   }
   [data-theme="matrix_terminal"] .home-hero {
-    border-color: rgba(34, 197, 94, 0.3);
-    box-shadow: 0 0 35px rgba(34, 197, 94, 0.2), inset 0 0 15px rgba(34, 197, 94, 0.05);
-    background: rgba(5, 20, 8, 0.9);
+    border: 1px solid rgba(34, 197, 94, 0.5) !important;
+    box-shadow: 0 0 25px rgba(34, 197, 94, 0.25), inset 0 0 20px rgba(34, 197, 94, 0.08) !important;
+    background: rgba(3, 16, 6, 0.95) !important;
+  }
+  [data-theme="matrix_terminal"] .artist-showcase-card {
+    border: 1px solid rgba(34, 197, 94, 0.25) !important;
+    background: rgba(3, 16, 6, 0.8) !important;
   }
 
+  /* 2. VAPORWAVE SUNSET (80s Synthwave / Smooth Pill 28px / Hot Magenta & Orange Glow) */
+  [data-theme="vaporwave_sunset"] {
+    --radius: 24px;
+  }
+  [data-theme="vaporwave_sunset"] h1,
+  [data-theme="vaporwave_sunset"] h2 {
+    font-style: italic;
+    letter-spacing: 0.05em;
+  }
+  [data-theme="vaporwave_sunset"] .home-hero,
+  [data-theme="vaporwave_sunset"] .home-search-shell,
+  [data-theme="vaporwave_sunset"] .artist-discovery,
+  [data-theme="vaporwave_sunset"] .artist-showcase-card {
+    border-radius: 24px !important;
+  }
   [data-theme="vaporwave_sunset"] .app-ambient {
     background:
-      radial-gradient(circle at 50% 100%, rgba(244, 63, 94, 0.25) 0%, rgba(251, 146, 60, 0.15) 35%, transparent 60%),
-      radial-gradient(circle at 10% 20%, rgba(168, 85, 247, 0.15), transparent 40%),
+      radial-gradient(circle at 50% 100%, rgba(244, 63, 94, 0.3) 0%, rgba(251, 146, 60, 0.2) 35%, transparent 65%),
+      radial-gradient(circle at 20% 15%, rgba(168, 85, 247, 0.2), transparent 45%),
       #11060D;
   }
   [data-theme="vaporwave_sunset"] .home-hero {
-    border-color: rgba(244, 63, 94, 0.35);
-    box-shadow: 0 0 40px rgba(244, 63, 94, 0.25), 0 0 20px rgba(251, 146, 60, 0.15);
-    background: linear-gradient(160deg, rgba(29, 11, 22, 0.9), rgba(17, 6, 13, 0.95));
+    border: 1px solid rgba(244, 63, 94, 0.4) !important;
+    box-shadow: 0 0 35px rgba(244, 63, 94, 0.3), 0 0 15px rgba(251, 146, 60, 0.2) !important;
+    background: linear-gradient(160deg, rgba(35, 12, 28, 0.92), rgba(20, 7, 16, 0.95)) !important;
   }
 
+  /* 3. OLED MIDNIGHT SAPPHIRE (Pure Cosmic Abyss / Crystalline Sharp Glass / Laser Cyan) */
+  [data-theme="oled_sapphire"] {
+    --radius: 16px;
+  }
   [data-theme="oled_sapphire"] .app-ambient {
     background:
-      radial-gradient(circle at 50% 0%, rgba(56, 189, 248, 0.22) 0%, rgba(59, 130, 246, 0.12) 40%, transparent 70%),
-      radial-gradient(circle at 90% 80%, rgba(99, 102, 241, 0.1), transparent 50%),
-      #040711;
+      radial-gradient(circle at 50% 0%, rgba(56, 189, 248, 0.25) 0%, rgba(59, 130, 246, 0.15) 45%, transparent 70%),
+      radial-gradient(circle at 85% 85%, rgba(99, 102, 241, 0.12), transparent 50%),
+      #02050E;
   }
   [data-theme="oled_sapphire"] .home-hero {
-    border-color: rgba(56, 189, 248, 0.3);
-    box-shadow: 0 0 35px rgba(56, 189, 248, 0.22), inset 0 1px 0 rgba(56, 189, 248, 0.2);
-    background: linear-gradient(160deg, rgba(9, 15, 32, 0.9), rgba(4, 7, 17, 0.95));
+    border: 1px solid rgba(56, 189, 248, 0.35) !important;
+    box-shadow: 0 0 35px rgba(56, 189, 248, 0.25), inset 0 1px 0 rgba(56, 189, 248, 0.4) !important;
+    background: linear-gradient(160deg, rgba(8, 16, 36, 0.92), rgba(3, 6, 15, 0.96)) !important;
+    backdrop-filter: blur(24px) saturate(200%) !important;
   }
 
+  /* 4. SOLAR AMBER (Analog Vinyl Warmth / Roasted Walnut / Golden Hour Glow) */
+  [data-theme="solar_amber"] {
+    --radius: 18px;
+  }
   [data-theme="solar_amber"] .app-ambient {
     background:
-      radial-gradient(circle at 50% 0%, rgba(245, 158, 11, 0.22) 0%, rgba(217, 119, 6, 0.1) 45%, transparent 70%),
-      radial-gradient(circle at 10% 90%, rgba(251, 191, 36, 0.08), transparent 40%),
-      #0E0904;
+      radial-gradient(circle at 50% 0%, rgba(245, 158, 11, 0.25) 0%, rgba(217, 119, 6, 0.12) 45%, transparent 70%),
+      radial-gradient(circle at 10% 90%, rgba(251, 191, 36, 0.1), transparent 45%),
+      #0E0803;
   }
   [data-theme="solar_amber"] .home-hero {
-    border-color: rgba(245, 158, 11, 0.3);
-    box-shadow: 0 0 35px rgba(245, 158, 11, 0.2), inset 0 1px 0 rgba(245, 158, 11, 0.15);
-    background: linear-gradient(160deg, rgba(28, 18, 8, 0.9), rgba(14, 9, 4, 0.95));
+    border: 1px solid rgba(245, 158, 11, 0.35) !important;
+    box-shadow: 0 0 35px rgba(245, 158, 11, 0.22), inset 0 1px 0 rgba(245, 158, 11, 0.25) !important;
+    background: linear-gradient(160deg, rgba(32, 18, 7, 0.92), rgba(16, 9, 3, 0.96)) !important;
   }
 
-  [data-theme="amethyst_royal"] .app-ambient {
-    background:
-      radial-gradient(circle at 50% 0%, rgba(168, 85, 247, 0.24) 0%, rgba(192, 132, 252, 0.12) 40%, transparent 65%),
-      #0C0514;
+  /* 5. CRIMSON VELOCITY (Supercar Cockpit / Matte Carbon Weave / Scarlet Bevels) */
+  [data-theme="crimson_velocity"] {
+    --radius: 8px;
   }
-  [data-theme="amethyst_royal"] .home-hero {
-    border-color: rgba(168, 85, 247, 0.35);
-    box-shadow: 0 0 40px rgba(168, 85, 247, 0.25), inset 0 1px 0 rgba(168, 85, 247, 0.2);
-    background: linear-gradient(160deg, rgba(24, 11, 38, 0.9), rgba(12, 5, 20, 0.95));
+  [data-theme="crimson_velocity"] .home-hero,
+  [data-theme="crimson_velocity"] .home-search-shell,
+  [data-theme="crimson_velocity"] .artist-discovery,
+  [data-theme="crimson_velocity"] .artist-showcase-card {
+    border-radius: 8px !important;
   }
-
-  [data-theme="emerald_aurora"] .app-ambient {
-    background:
-      radial-gradient(circle at 30% 0%, rgba(16, 185, 129, 0.22) 0%, rgba(52, 211, 153, 0.1) 45%, transparent 65%),
-      radial-gradient(circle at 80% 60%, rgba(6, 95, 70, 0.15), transparent 45%),
-      #030C07;
-  }
-  [data-theme="emerald_aurora"] .home-hero {
-    border-color: rgba(16, 185, 129, 0.3);
-    box-shadow: 0 0 35px rgba(16, 185, 129, 0.2), inset 0 1px 0 rgba(16, 185, 129, 0.15);
-    background: linear-gradient(160deg, rgba(7, 25, 15, 0.9), rgba(3, 12, 7, 0.95));
-  }
-
   [data-theme="crimson_velocity"] .app-ambient {
     background:
-      radial-gradient(circle at 50% 0%, rgba(239, 68, 68, 0.22) 0%, rgba(248, 113, 113, 0.1) 45%, transparent 65%),
-      #0A0303;
+      radial-gradient(circle at 50% 0%, rgba(239, 68, 68, 0.25) 0%, rgba(248, 113, 113, 0.12) 45%, transparent 65%),
+      repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.015), rgba(255, 255, 255, 0.015) 2px, transparent 2px, transparent 6px),
+      #0A0202;
   }
   [data-theme="crimson_velocity"] .home-hero {
-    border-color: rgba(239, 68, 68, 0.35);
-    box-shadow: 0 0 35px rgba(239, 68, 68, 0.22), inset 0 1px 0 rgba(239, 68, 68, 0.2);
-    background: linear-gradient(160deg, rgba(26, 8, 8, 0.9), rgba(10, 3, 3, 0.95));
+    border: 1px solid rgba(239, 68, 68, 0.4) !important;
+    box-shadow: 0 0 35px rgba(239, 68, 68, 0.25), inset 0 1px 0 rgba(239, 68, 68, 0.3) !important;
+    background: linear-gradient(160deg, rgba(30, 8, 8, 0.94), rgba(12, 3, 3, 0.96)) !important;
   }
 
+  /* 6. AMETHYST ROYAL (Imperial Velvet / Ultraviolet Gemstone Facets) */
+  [data-theme="amethyst_royal"] {
+    --radius: 20px;
+  }
+  [data-theme="amethyst_royal"] .app-ambient {
+    background:
+      radial-gradient(circle at 50% 0%, rgba(168, 85, 247, 0.28) 0%, rgba(192, 132, 252, 0.14) 40%, transparent 65%),
+      #0D0416;
+  }
+  [data-theme="amethyst_royal"] .home-hero {
+    border: 1px solid rgba(168, 85, 247, 0.4) !important;
+    box-shadow: 0 0 45px rgba(168, 85, 247, 0.28), inset 0 1px 0 rgba(168, 85, 247, 0.3) !important;
+    background: linear-gradient(160deg, rgba(28, 12, 45, 0.92), rgba(14, 5, 24, 0.96)) !important;
+  }
+
+  /* 7. EMERALD AURORA (Nordic Polar Sky / Boreal Mint Shimmer) */
+  [data-theme="emerald_aurora"] {
+    --radius: 20px;
+  }
+  [data-theme="emerald_aurora"] .app-ambient {
+    background:
+      radial-gradient(circle at 35% 0%, rgba(16, 185, 129, 0.26) 0%, rgba(52, 211, 153, 0.12) 45%, transparent 65%),
+      radial-gradient(circle at 80% 60%, rgba(6, 95, 70, 0.18), transparent 45%),
+      #020A05;
+  }
+  [data-theme="emerald_aurora"] .home-hero {
+    border: 1px solid rgba(16, 185, 129, 0.35) !important;
+    box-shadow: 0 0 35px rgba(16, 185, 129, 0.22), inset 0 1px 0 rgba(16, 185, 129, 0.25) !important;
+    background: linear-gradient(160deg, rgba(8, 30, 18, 0.92), rgba(3, 14, 8, 0.96)) !important;
+  }
+
+  /* 8. OCEANIC ABYSS (Deep Trench / Bioluminescent Aqua Wave) */
+  [data-theme="oceanic_abyss"] {
+    --radius: 20px;
+  }
   [data-theme="oceanic_abyss"] .app-ambient {
     background:
-      radial-gradient(circle at 50% 100%, rgba(6, 182, 212, 0.24) 0%, rgba(45, 212, 191, 0.12) 40%, transparent 65%),
-      #030D14;
+      radial-gradient(circle at 50% 100%, rgba(6, 182, 212, 0.28) 0%, rgba(45, 212, 191, 0.14) 40%, transparent 65%),
+      #020A10;
   }
   [data-theme="oceanic_abyss"] .home-hero {
-    border-color: rgba(6, 182, 212, 0.3);
-    box-shadow: 0 0 35px rgba(6, 182, 212, 0.22), inset 0 1px 0 rgba(6, 182, 212, 0.15);
-    background: linear-gradient(160deg, rgba(7, 26, 38, 0.9), rgba(3, 13, 20, 0.95));
+    border: 1px solid rgba(6, 182, 212, 0.35) !important;
+    box-shadow: 0 0 35px rgba(6, 182, 212, 0.25), inset 0 1px 0 rgba(6, 182, 212, 0.25) !important;
+    background: linear-gradient(160deg, rgba(8, 30, 45, 0.92), rgba(3, 14, 22, 0.96)) !important;
   }
 
+  /* 9. MATCHA ZEN (Organic Japanese Bamboo / Calming Slate / Soft Pebble Curves) */
+  [data-theme="matcha_zen"] {
+    --radius: 24px;
+  }
+  [data-theme="matcha_zen"] .home-hero,
+  [data-theme="matcha_zen"] .home-search-shell,
+  [data-theme="matcha_zen"] .artist-discovery,
+  [data-theme="matcha_zen"] .artist-showcase-card {
+    border-radius: 24px !important;
+  }
   [data-theme="matcha_zen"] .app-ambient {
     background:
-      radial-gradient(circle at 50% 0%, rgba(132, 204, 22, 0.18) 0%, rgba(163, 230, 53, 0.08) 45%, transparent 65%),
-      #0C0D08;
+      radial-gradient(circle at 50% 0%, rgba(132, 204, 22, 0.2) 0%, rgba(163, 230, 53, 0.1) 45%, transparent 65%),
+      #0B0D07;
   }
   [data-theme="matcha_zen"] .home-hero {
-    border-color: rgba(132, 204, 22, 0.25);
-    box-shadow: 0 0 30px rgba(132, 204, 22, 0.18), inset 0 1px 0 rgba(132, 204, 22, 0.12);
-    background: linear-gradient(160deg, rgba(22, 24, 15, 0.9), rgba(12, 13, 8, 0.95));
+    border: 1px solid rgba(132, 204, 22, 0.3) !important;
+    box-shadow: 0 0 30px rgba(132, 204, 22, 0.18), inset 0 1px 0 rgba(132, 204, 22, 0.2) !important;
+    background: linear-gradient(160deg, rgba(24, 28, 16, 0.92), rgba(12, 14, 8, 0.96)) !important;
   }
 
+  /* 10. COTTON CANDY (Dream Pop / Sugar Frosted Glass 32px / Pastel Cloud Pink & Lilac) */
+  [data-theme="cotton_candy"] {
+    --radius: 30px;
+  }
+  [data-theme="cotton_candy"] .home-hero,
+  [data-theme="cotton_candy"] .home-search-shell,
+  [data-theme="cotton_candy"] .artist-discovery,
+  [data-theme="cotton_candy"] .artist-showcase-card {
+    border-radius: 30px !important;
+    backdrop-filter: blur(28px) !important;
+  }
   [data-theme="cotton_candy"] .app-ambient {
     background:
-      radial-gradient(circle at 75% 0%, rgba(236, 72, 153, 0.22) 0%, rgba(129, 140, 248, 0.15) 50%, transparent 70%),
-      radial-gradient(circle at 20% 90%, rgba(244, 114, 182, 0.12), transparent 40%),
-      #110814;
+      radial-gradient(circle at 75% 0%, rgba(236, 72, 153, 0.25) 0%, rgba(129, 140, 248, 0.18) 50%, transparent 70%),
+      radial-gradient(circle at 20% 90%, rgba(244, 114, 182, 0.14), transparent 40%),
+      #120716;
   }
   [data-theme="cotton_candy"] .home-hero {
-    border-color: rgba(236, 72, 153, 0.35);
-    box-shadow: 0 0 40px rgba(236, 72, 153, 0.25), 0 0 20px rgba(129, 140, 248, 0.15);
-    background: linear-gradient(160deg, rgba(28, 15, 33, 0.9), rgba(17, 8, 20, 0.95));
+    border: 1px solid rgba(236, 72, 153, 0.4) !important;
+    box-shadow: 0 0 45px rgba(236, 72, 153, 0.28), 0 0 20px rgba(129, 140, 248, 0.18) !important;
+    background: linear-gradient(160deg, rgba(32, 16, 38, 0.92), rgba(18, 8, 22, 0.96)) !important;
   }
 
+  /* 11. TITANIUM LUXURY (Bang & Olufsen / Porsche Design Platinum Studio Precision) */
+  [data-theme="titanium_luxury"] {
+    --radius: 12px;
+  }
+  [data-theme="titanium_luxury"] .home-hero,
+  [data-theme="titanium_luxury"] .home-search-shell,
+  [data-theme="titanium_luxury"] .artist-discovery,
+  [data-theme="titanium_luxury"] .artist-showcase-card {
+    border-radius: 12px !important;
+  }
   [data-theme="titanium_luxury"] .app-ambient {
     background:
-      radial-gradient(circle at 50% 0%, rgba(226, 232, 240, 0.14) 0%, rgba(148, 163, 184, 0.06) 45%, transparent 65%),
-      #0B0C0E;
+      radial-gradient(circle at 50% 0%, rgba(226, 232, 240, 0.16) 0%, rgba(148, 163, 184, 0.08) 45%, transparent 65%),
+      #0A0B0E;
   }
   [data-theme="titanium_luxury"] .home-hero {
-    border-color: rgba(226, 232, 240, 0.25);
-    box-shadow: 0 0 30px rgba(226, 232, 240, 0.15), inset 0 1px 0 rgba(226, 232, 240, 0.2);
-    background: linear-gradient(160deg, rgba(21, 23, 28, 0.9), rgba(11, 12, 14, 0.95));
+    border: 1px solid rgba(226, 232, 240, 0.3) !important;
+    box-shadow: 0 0 30px rgba(226, 232, 240, 0.18), inset 0 1px 0 rgba(226, 232, 240, 0.28) !important;
+    background: linear-gradient(160deg, rgba(24, 26, 32, 0.92), rgba(12, 13, 16, 0.96)) !important;
+  }
+
+  /* 12. ACID CYBERPUNK (High-Voltage Electric Lime Cyber Matrix) */
+  [data-theme="acid_cyberpunk"] {
+    --radius: 18px;
+  }
+  [data-theme="acid_cyberpunk"] .app-ambient {
+    background:
+      radial-gradient(circle at 50% 0%, rgba(200, 240, 75, 0.2) 0%, rgba(34, 197, 94, 0.1) 45%, transparent 70%),
+      #080808;
+  }
+  [data-theme="acid_cyberpunk"] .home-hero {
+    border: 1px solid rgba(200, 240, 75, 0.35) !important;
+    box-shadow: 0 0 35px rgba(200, 240, 75, 0.25), inset 0 1px 0 rgba(200, 240, 75, 0.2) !important;
+    background: linear-gradient(160deg, rgba(18, 20, 14, 0.92), rgba(10, 10, 10, 0.96)) !important;
+  }
+
+  /* 13. ORIGINAL MINIMALIST (Pure Pitch Black Studio Classic) */
+  [data-theme="original_minimalist"] {
+    --radius: 16px;
+  }
+  [data-theme="original_minimalist"] .app-ambient {
+    background: #080808;
+  }
+  [data-theme="original_minimalist"] .home-hero {
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    box-shadow: 0 15px 30px rgba(0, 0, 0, 0.5) !important;
+    background: rgba(12, 12, 14, 0.9) !important;
   }
 
   .artist-showcase-card {

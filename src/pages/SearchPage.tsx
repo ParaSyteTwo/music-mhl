@@ -490,21 +490,25 @@ export default function SearchPage() {
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-      className="px-3.5 sm:px-8 pt-0.5 sm:pt-4 pb-3 sm:pb-6 max-w-5xl mx-auto"
+      className={`px-3.5 sm:px-8 pb-3 sm:pb-6 max-w-5xl mx-auto flex flex-col ${
+        showEmpty
+          ? 'pt-3 sm:pt-8 min-h-[calc(100vh-var(--player-height)-var(--nav-height)-var(--sat)-var(--sab)-24px)] justify-center'
+          : 'pt-2 sm:pt-4'
+      }`}
     >
-      <section className={`home-hero ${showEmpty ? 'home-hero-expanded' : ''} px-3.5 py-2.5 sm:p-6 mb-2.5 sm:mb-4`}>
+      <section className={`home-hero ${showEmpty ? 'home-hero-expanded' : ''} px-4 py-3 sm:p-6 mb-3 sm:mb-4`}>
         <div className="home-hero-orb home-hero-orb-one" aria-hidden="true" />
         <div className="home-hero-orb home-hero-orb-two" aria-hidden="true" />
         <div className="relative z-10 text-center">
-          <h1 className="text-base sm:text-2xl md:text-3xl font-bold tracking-tight text-[#F5F5F0]">
+          <h1 className="text-lg sm:text-2xl md:text-3xl font-bold tracking-tight text-[#F5F5F0]">
             {t('heroTitle')}
           </h1>
-          <p className="mx-auto mt-0.5 max-w-md text-[11px] sm:text-sm text-[#A0A09A]">
+          <p className="mx-auto mt-1 max-w-md text-xs sm:text-sm text-[#A0A09A]">
             {t('heroSubtitle')}
           </p>
         </div>
 
-        <div className="home-search-shell relative z-10 mt-2 sm:mt-5">
+        <div className="home-search-shell relative z-10 mt-2.5 sm:mt-5">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#85857E]" />
           <input
             ref={inputRef}
@@ -515,7 +519,7 @@ export default function SearchPage() {
             onKeyDown={handleKeyDown}
             onFocus={() => setInputFocused(true)}
             onBlur={() => setTimeout(() => setInputFocused(false), 200)}
-            className="w-full pl-10 pr-10 py-2 sm:py-3.5 rounded-2xl bg-transparent text-xs sm:text-sm text-[#F5F5F0] placeholder:text-[#6E6E68] focus:outline-none"
+            className="w-full pl-10 pr-10 py-2.5 sm:py-3.5 rounded-2xl bg-transparent text-xs sm:text-sm text-[#F5F5F0] placeholder:text-[#6E6E68] focus:outline-none"
             autoComplete="off"
             autoCorrect="off"
             spellCheck="false"
@@ -558,7 +562,7 @@ export default function SearchPage() {
       )}
 
       {showEmpty && (
-        <section className="artist-discovery mb-2 sm:mb-6">
+        <section className="artist-discovery mb-1 sm:mb-6">
           <div className="flex items-center justify-between gap-2 mb-2 sm:mb-3 px-0.5">
             <div className="text-left">
               <div className="inline-flex items-center gap-1.5 text-[9px] sm:text-[9.5px] uppercase tracking-[0.2em] text-[#A6C955] font-semibold">
@@ -590,10 +594,10 @@ export default function SearchPage() {
                   whileTap={{ scale: 0.96 }}
                   transition={{ duration: 0.15 }}
                   onClick={() => handleSuggestionClick(artist.name)}
-                  className="artist-showcase-card group relative flex flex-col items-center justify-center p-1.5 sm:p-2.5 rounded-xl sm:rounded-2xl bg-white/[0.025] hover:bg-white/[0.055] border border-white/[0.06] text-center overflow-hidden min-h-[62px] sm:min-h-[88px]"
+                  className="artist-showcase-card group relative flex flex-col items-center justify-center p-2 sm:p-2.5 rounded-xl sm:rounded-2xl bg-white/[0.025] hover:bg-white/[0.055] border border-white/[0.06] text-center overflow-hidden min-h-[66px] sm:min-h-[88px]"
                 >
                   <div
-                    className="relative mb-1 w-7 h-7 sm:w-11 sm:h-11 flex items-center justify-center rounded-full text-[10px] sm:text-xs font-black text-[#080808] transition-transform duration-200 group-hover:scale-105 shadow-md flex-shrink-0"
+                    className="relative mb-1 w-8 h-8 sm:w-11 sm:h-11 flex items-center justify-center rounded-full text-[10.5px] sm:text-xs font-black text-[#080808] transition-transform duration-200 group-hover:scale-105 shadow-md flex-shrink-0"
                     style={{
                       background: `linear-gradient(135deg, ${artist.primary}, ${artist.secondary})`,
                       boxShadow: `0 3px 10px ${artist.glow}`,
@@ -601,7 +605,7 @@ export default function SearchPage() {
                   >
                     {artistMonogram(artist.name)}
                   </div>
-                  <span className="text-[10px] sm:text-xs font-semibold text-[#F5F5F0] group-hover:text-[var(--accent-primary)] transition-colors truncate max-w-full px-0.5 leading-tight">
+                  <span className="text-[10.5px] sm:text-xs font-semibold text-[#F5F5F0] group-hover:text-[var(--accent-primary)] transition-colors truncate max-w-full px-0.5 leading-tight">
                     {artist.name}
                   </span>
                   {genreLabel && (
