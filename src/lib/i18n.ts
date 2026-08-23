@@ -285,6 +285,12 @@ const translations: Record<Lang, Record<string, string>> = {
     longAudioBlocked: 'Audio largo o podcast detectado (>20 min). Las descargas largas están desactivadas para proteger el rendimiento y la batería. Actívalas en Ajustes ➔ Opciones Avanzadas.',
     longAudioWarning: '⚠️ Audio de larga duración (>20 min). Puede generar un consumo elevado y calentamiento en dispositivos de baja potencia.',
     invalidMediaUrl: 'El enlace no corresponde a una canción o vídeo individual reproducible.',
+    downloadFormatTitle: 'Formato de Audio',
+    downloadFormatHelp: 'Elige entre máxima fidelidad de audio o máxima compatibilidad con equipos y coches antiguos.',
+    downloadFormatQuality: 'Modo Calidad (M4A / AAC)',
+    downloadFormatQualityDesc: 'Máxima nitidez y fidelidad original sin re-compresión. Ideal para móvil, PC y auriculares.',
+    downloadFormatCompatibility: 'Modo Compatibilidad (MP3 320k)',
+    downloadFormatCompatibilityDesc: 'Formato universal compatible con 100% de radios de coche antiguas, altavoces USB y pendrives.',
   },
   en: {
     loading: 'Loading...',
@@ -560,6 +566,12 @@ const translations: Record<Lang, Record<string, string>> = {
     longAudioBlocked: 'Long audio or podcast detected (>20 min). Long downloads are disabled by default. Enable them in Settings ➔ Advanced Options.',
     longAudioWarning: '⚠️ Long audio file (>20 min). May cause high CPU usage and heating on lower-end devices.',
     invalidMediaUrl: 'The link does not correspond to an individual playable song or video.',
+    downloadFormatTitle: 'Audio Format',
+    downloadFormatHelp: 'Choose between maximum audio fidelity or universal compatibility with older car stereos and speakers.',
+    downloadFormatQuality: 'Quality Mode (M4A / AAC)',
+    downloadFormatQualityDesc: 'Maximum clarity and original fidelity without re-compression. Ideal for phone, PC, and headphones.',
+    downloadFormatCompatibility: 'Compatibility Mode (MP3 320k)',
+    downloadFormatCompatibilityDesc: 'Universal format compatible with 100% of older car stereos, USB speakers, and flash drives.',
   },
 };
 

@@ -375,17 +375,26 @@ public class YtDlpPlugin extends Plugin {
                     ? sourceUrl
                     : "https://www.youtube.com/watch?v=" + videoId;
 
-                String fileName = "audio_" + System.currentTimeMillis() + ".m4a";
+                String format = call.getString("format", "m4a");
+                boolean isMp3 = "mp3".equalsIgnoreCase(format);
+                String fileName = "audio_" + System.currentTimeMillis() + (isMp3 ? ".mp3" : ".m4a");
 
                 // Descargar al caché privado (no visible para otras apps)
                 File outputFile = new File(cacheDir, fileName);
                 String outputPath = outputFile.getAbsolutePath();
 
                 YoutubeDLRequest request = new YoutubeDLRequest(url);
-                request.addOption("-f", "bestaudio[ext=m4a]/bestaudio/best");
-                request.addOption("-x");
-                request.addOption("--audio-format", "m4a");
-                request.addOption("--audio-quality", "0");
+                if (isMp3) {
+                    request.addOption("-f", "bestaudio/best");
+                    request.addOption("-x");
+                    request.addOption("--audio-format", "mp3");
+                    request.addOption("--audio-quality", "320K");
+                } else {
+                    request.addOption("-f", "bestaudio[ext=m4a]/bestaudio/best");
+                    request.addOption("-x");
+                    request.addOption("--audio-format", "m4a");
+                    request.addOption("--audio-quality", "0");
+                }
                 request.addOption("-o", outputPath);
                 request.addOption("--no-playlist");
                 request.addOption("--no-part");               // sin archivos .part (menos I/O)
@@ -517,8 +526,9 @@ public class YtDlpPlugin extends Plugin {
             File tempAudio = null;
             File tempCover = null;
             try {
+                boolean isMp3 = fileName.toLowerCase().endsWith(".mp3");
                 // Escribir audio base64 a archivo temporal
-                tempAudio = File.createTempFile("untagged", ".m4a", getContext().getCacheDir());
+                tempAudio = File.createTempFile("untagged", isMp3 ? ".mp3" : ".m4a", getContext().getCacheDir());
                 byte[] audioBytes = Base64.decode(base64Data, Base64.NO_WRAP);
                 try (FileOutputStream fos = new FileOutputStream(tempAudio)) {
                     fos.write(audioBytes);
@@ -537,12 +547,12 @@ public class YtDlpPlugin extends Plugin {
                     } catch (Exception ignored) {}
                 }
 
-                // Tag usando jaudiotagger
+                // Tag usando jaudiotagger (MP3 ID3v2.3 o M4A MP4Tag)
                 try {
                     org.jaudiotagger.audio.AudioFile audioFile = org.jaudiotagger.audio.AudioFileIO.read(tempAudio);
                     org.jaudiotagger.tag.Tag tag = audioFile.getTag();
                     if (tag == null) {
-                        tag = new org.jaudiotagger.tag.mp4.Mp4Tag();
+                        tag = isMp3 ? new org.jaudiotagger.tag.id3.ID3v23Tag() : new org.jaudiotagger.tag.mp4.Mp4Tag();
                         audioFile.setTag(tag);
                     }
                     if (title != null && !title.isEmpty()) tag.setField(org.jaudiotagger.tag.FieldKey.TITLE, title);
@@ -565,13 +575,13 @@ public class YtDlpPlugin extends Plugin {
                     }
                     org.jaudiotagger.audio.AudioFileIO.write(audioFile);
                 } catch (Exception e) {
-                    Log.w(TAG, "Failed to tag M4A with jaudiotagger", e);
+                    Log.w(TAG, "Failed to tag audio with jaudiotagger", e);
                 }
 
                 // Guardar en MediaStore
                 ContentValues values = new ContentValues();
                 values.put(MediaStore.Audio.Media.DISPLAY_NAME, fileName);
-                values.put(MediaStore.Audio.Media.MIME_TYPE, "audio/mp4");
+                values.put(MediaStore.Audio.Media.MIME_TYPE, isMp3 ? "audio/mpeg" : "audio/mp4");
                 values.put(MediaStore.Audio.Media.RELATIVE_PATH, "Music/MHL Music");
                 values.put(MediaStore.Audio.Media.IS_PENDING, 1);
                 if (title != null && !title.isEmpty()) values.put(MediaStore.Audio.Media.TITLE, title);

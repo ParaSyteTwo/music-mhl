@@ -98,8 +98,8 @@ export const createDownloadSlice: StateCreator<
             toast.warning(storeText(get().uiLanguageMode, 'longAudioWarning'), { duration: 6000 });
           }
 
-          const maxAttempts = 3;
-          const resolvedFileName = buildDownloadFileName(track, 'm4a');
+          const maxAttempts = 3;          const fmt = get().downloadAudioFormat || 'm4a';
+          const resolvedFileName = buildDownloadFileName(track, fmt);
           const nativeContext = await getDeviceContext().catch(() => null);
           const lyricsTarget = get().lyricsTargetLanguage;
           const lyricsLanguage = lyricsTarget === 'system'
@@ -164,6 +164,7 @@ export const createDownloadSlice: StateCreator<
                   queries,
                   cleanSourceUrl ?? null,
                   track.duration ?? 0,
+                  fmt,
                 ),
                 supplementalDataPromise,
               ]);
@@ -172,7 +173,7 @@ export const createDownloadSlice: StateCreator<
 
               updateDl({ progress: 70 });
 
-              const fileName = buildDownloadFileName(track, 'm4a');
+              const fileName = buildDownloadFileName(track, fmt);
               const filePath = outputDir + '/' + fileName;
               
               const writeResult = await api.tag_and_save_m4a(
@@ -241,7 +242,7 @@ export const createDownloadSlice: StateCreator<
               const [audioBuffer, [trackMeta, lyricsResult]] = await Promise.all([
                 downloadTrackAudio(track, (progress) => {
                   updateDl({ progress });
-                }, resolvedVideoId, cleanSourceUrl),
+                }, resolvedVideoId, cleanSourceUrl, fmt),
                 supplementalDataPromise,
               ]);
               updateDl({ progress: 80 });

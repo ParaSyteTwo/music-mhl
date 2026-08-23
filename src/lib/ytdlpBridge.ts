@@ -45,7 +45,7 @@ interface YtDlpPluginInterface {
   update(): Promise<{ success: boolean; status: string }>;
   getVersion(): Promise<{ success: boolean; version: string }>;
   search(options: { query: string; limit?: number; source?: 'youtube_music' | 'youtube'; enrich?: boolean }): Promise<{ success: boolean; results: YtDlpSearchResult[] }>;
-  downloadAudio(options: { videoId?: string; sourceUrl?: string; expectedDuration?: number }): Promise<{ success: boolean; data: string; size: number; fileName?: string }>;
+  downloadAudio(options: { videoId?: string; sourceUrl?: string; expectedDuration?: number; format?: 'm4a' | 'mp3' }): Promise<{ success: boolean; data: string; size: number; fileName?: string }>;
   saveTaggedAudioToMusic(options: { fileName: string; data: string }): Promise<{ success: boolean; uri: string }>;
   tagAndSaveM4A(options: TagAndSaveOptions): Promise<{ success: boolean; uri: string }>;
   addListener(eventName: 'downloadProgress', listenerFunc: (event: YtDlpProgressEvent) => void): Promise<PluginListenerHandle>;
@@ -62,35 +62,26 @@ export async function initYtDlp(): Promise<boolean> {
   if (!Capacitor.isNativePlatform()) return false;
   if (initialized) return true;
   if (initializing) return initializing;
-
   initializing = (async () => {
     try {
-      await YtDlp.initialize();
-      initialized = true;
-      if (import.meta.env.DEV) console.log('[YtDlp] Initialized successfully');
-      return true;
-    } catch (e) {
-      console.error('[YtDlp] Init failed:', e);
+      const r = await YtDlp.initialize();
+      initialized = r.success;
+      return initialized;
+    } catch {
       return false;
     } finally {
       initializing = null;
     }
   })();
-
   return initializing;
 }
 
 export async function searchYouTubeNative(
   query: string,
-  limit = 10,
-  options: { source?: 'youtube_music' | 'youtube'; enrich?: boolean } = {},
+  limit = 5,
+  options?: { source?: 'youtube_music' | 'youtube'; enrich?: boolean },
 ): Promise<YtDlpSearchResult[]> {
-  if (import.meta.env.DEV) console.log('[ytdlpBridge.searchYouTubeNative] Searching:', query, 'initialized:', initialized);
-  if (!initialized) {
-    if (import.meta.env.DEV) console.log('[ytdlpBridge.searchYouTubeNative] Not initialized, initializing...');
-    await initYtDlp();
-  }
-  if (import.meta.env.DEV) console.log('[ytdlpBridge.searchYouTubeNative] Calling YtDlp.search()...');
+  if (!initialized) await initYtDlp();
   try {
     const result = await YtDlp.search({ query, limit, ...options });
     if (import.meta.env.DEV) console.log('[ytdlpBridge.searchYouTubeNative] Search result:', result);
@@ -103,7 +94,7 @@ export async function searchYouTubeNative(
 
 export async function downloadMp3Native(
   videoId: string | null,
-  opts?: { sourceUrl?: string; expectedDuration?: number },
+  opts?: { sourceUrl?: string; expectedDuration?: number; format?: 'm4a' | 'mp3' },
 ): Promise<ArrayBuffer> {
   if (!initialized) await initYtDlp();
 
@@ -111,6 +102,7 @@ export async function downloadMp3Native(
     ...(videoId ? { videoId } : {}),
     ...(opts?.sourceUrl ? { sourceUrl: opts.sourceUrl } : {}),
     ...(opts?.expectedDuration ? { expectedDuration: opts.expectedDuration } : {}),
+    ...(opts?.format ? { format: opts.format } : {}),
   });
 
   if (!result || !result.data) {

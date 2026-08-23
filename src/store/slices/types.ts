@@ -1,4 +1,4 @@
-import { Track, Download } from '@/types/music';
+import { Track, Download, DownloadAudioFormat } from '@/types/music';
 import { UiLanguageMode, LyricsTargetLanguage } from '@/lib/language';
 import { EditionPreference } from '@/lib/download/candidateResolver';
 import { AppThemeId } from '@/lib/themes/themeCatalog';
@@ -79,6 +79,7 @@ export interface SettingsSlice {
   editionPreference: EditionPreference;
   autoDownload: boolean;
   allowLongAudioDownloads: boolean;
+  downloadAudioFormat: DownloadAudioFormat;
   ytDlpVersion: string | null;
   ytDlpUpdateAvailable: boolean;
   ytDlpUpdating: boolean;
@@ -98,6 +99,7 @@ export interface SettingsSlice {
   setEditionPreference: (v: EditionPreference) => void;
   setAutoDownload: (v: boolean) => void;
   setAllowLongAudioDownloads: (v: boolean) => void;
+  setDownloadAudioFormat: (fmt: DownloadAudioFormat) => void;
   setYtDlpVersion: (version: string | null) => void;
   setYtDlpUpdateAvailable: (v: boolean) => void;
   setYtDlpUpdating: (v: boolean) => void;

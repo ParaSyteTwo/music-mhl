@@ -94,6 +94,16 @@ describe('useMusicStore', () => {
 
       expect(useMusicStore.getState().resolutionProfile).toBe('economy');
     });
+
+    it('defaults downloadAudioFormat to m4a and allows switching to mp3', () => {
+      const store = useMusicStore.getState();
+
+      expect(store.downloadAudioFormat).toBe('m4a');
+      store.setDownloadAudioFormat('mp3');
+      expect(useMusicStore.getState().downloadAudioFormat).toBe('mp3');
+      store.setDownloadAudioFormat('m4a');
+      expect(useMusicStore.getState().downloadAudioFormat).toBe('m4a');
+    });
   });
 
   describe('Player Controls - playTrack', () => {

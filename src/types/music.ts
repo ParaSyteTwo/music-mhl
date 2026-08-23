@@ -1,4 +1,5 @@
 export type TrackEdition = 'explicit' | 'clean' | 'unknown';
+export type DownloadAudioFormat = 'm4a' | 'mp3';
 
 export interface Track {
   id: string;

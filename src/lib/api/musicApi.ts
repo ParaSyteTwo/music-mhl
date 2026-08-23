@@ -767,6 +767,7 @@ export async function downloadTrackAudio(
   onProgress?: (progress: number) => void,
   videoIdOverride?: string,
   sourceUrlOverride?: string,
+  format: 'm4a' | 'mp3' = 'm4a',
 ): Promise<ArrayBuffer> {
   let resolvedVideoId = videoIdOverride;
   const cleanSourceUrl = sourceUrlOverride && !sourceUrlOverride.includes('spotify.com') ? sourceUrlOverride : undefined;
@@ -798,6 +799,7 @@ export async function downloadTrackAudio(
       [],
       cleanSourceUrl ?? null,
       track.duration ?? 0,
+      format,
     );
     if (!result.success) throw new Error(result.error || 'Error descargando audio');
     onProgress?.(85);
@@ -814,6 +816,7 @@ export async function downloadTrackAudio(
         return await downloadMp3Native(null, {
           sourceUrl: cleanSourceUrl,
           expectedDuration: track.duration,
+          format,
         });
       } catch {
         // La fuente curada puede estar temporalmente caída; usar YouTube como respaldo.
@@ -837,7 +840,7 @@ export async function downloadTrackAudio(
     }
     onProgress?.(10);
     try {
-      return await downloadMp3Native(resolvedVideoId, { expectedDuration: track.duration });
+      return await downloadMp3Native(resolvedVideoId, { expectedDuration: track.duration, format });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'No se pudo descargar';
       if (/403|forbidden|rate.?limit/i.test(message)) throw new DownloadFailure('rate_limit', message);

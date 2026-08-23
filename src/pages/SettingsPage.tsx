@@ -66,6 +66,7 @@ export default function SettingsPage() {
     editionPreference, setEditionPreference,
     autoDownload, setAutoDownload,
     allowLongAudioDownloads, setAllowLongAudioDownloads,
+    downloadAudioFormat, setDownloadAudioFormat,
     appTheme, setAppTheme,
   } = useMusicStore();
 
@@ -394,6 +395,63 @@ export default function SettingsPage() {
                   onChange={setAllowLongAudioDownloads}
                   label={t('allowLongAudioDownloads')}
                 />
+              </div>
+            </div>
+
+            {/* Formato de Audio / Modo Calidad vs Compatibilidad */}
+            <div className="p-4 rounded-2xl bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.06)] space-y-3">
+              <div>
+                <p className="text-sm font-semibold text-[#F5F5F0]">{t('downloadFormatTitle')}</p>
+                <p className="text-xs text-[#9E9E98] mt-0.5">{t('downloadFormatHelp')}</p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-white/[0.06]">
+                <button
+                  type="button"
+                  onClick={() => setDownloadAudioFormat('m4a')}
+                  className={`p-3 rounded-xl border text-left transition-all ${
+                    (downloadAudioFormat || 'm4a') === 'm4a'
+                      ? 'border-[var(--accent-primary)] bg-[var(--accent-primary)]/10 shadow-sm ring-1 ring-[var(--accent-primary)]/30'
+                      : 'border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.05]'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <span className={`text-xs font-bold ${(downloadAudioFormat || 'm4a') === 'm4a' ? 'text-[var(--accent-primary)]' : 'text-[#F5F5F0]'}`}>
+                      💎 {t('downloadFormatQuality')}
+                    </span>
+                    {(downloadAudioFormat || 'm4a') === 'm4a' && (
+                      <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-[var(--accent-primary)] text-[#18181A]">
+                        ACTIVO
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-[#8E8E88] leading-tight">
+                    {t('downloadFormatQualityDesc')}
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setDownloadAudioFormat('mp3')}
+                  className={`p-3 rounded-xl border text-left transition-all ${
+                    downloadAudioFormat === 'mp3'
+                      ? 'border-[var(--accent-primary)] bg-[var(--accent-primary)]/10 shadow-sm ring-1 ring-[var(--accent-primary)]/30'
+                      : 'border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.05]'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <span className={`text-xs font-bold ${downloadAudioFormat === 'mp3' ? 'text-[var(--accent-primary)]' : 'text-[#F5F5F0]'}`}>
+                      🚗 {t('downloadFormatCompatibility')}
+                    </span>
+                    {downloadAudioFormat === 'mp3' && (
+                      <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-[var(--accent-primary)] text-[#18181A]">
+                        ACTIVO
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-[#8E8E88] leading-tight">
+                    {t('downloadFormatCompatibilityDesc')}
+                  </p>
+                </button>
               </div>
             </div>
 

@@ -46,6 +46,9 @@ export const createSettingsSlice: StateCreator<
   allowLongAudioDownloads: false,
   setAllowLongAudioDownloads: (v) => set({ allowLongAudioDownloads: v }),
 
+  downloadAudioFormat: 'm4a',
+  setDownloadAudioFormat: (fmt) => set({ downloadAudioFormat: fmt }),
+
   preferredPlayerPackage: null,
   setPreferredPlayerPackage: (pkg) => set({ preferredPlayerPackage: pkg }),
 

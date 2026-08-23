@@ -421,38 +421,74 @@ class Bridge:
             audio_bytes = base64.b64decode(audio_b64)
             target_path.write_bytes(audio_bytes)
             
-            from mutagen.mp4 import MP4, MP4Cover
-            
-            audio = MP4(str(target_path))
-            if title: audio["\xa9nam"] = title
-            if artist: audio["\xa9ART"] = artist
-            if album: audio["\xa9alb"] = album
-            if album_artist: audio["aART"] = album_artist
-            if composer: audio["\xa9wrt"] = composer
-            if genre: audio["\xa9gen"] = genre
-            if year: audio["\xa9day"] = str(year)
-            
-            trkn_num = int(track_number) if track_number not in (None, '') else 0
-            trkn_tot = int(track_total) if track_total not in (None, '') else 0
-            if trkn_num > 0 or trkn_tot > 0:
-                audio["trkn"] = [(trkn_num, trkn_tot)]
-                
-            disc_num = int(disc_number) if disc_number not in (None, '') else 0
-            disc_tot = int(disc_total) if disc_total not in (None, '') else 0
-            if disc_num > 0 or disc_tot > 0:
-                audio["disk"] = [(disc_num, disc_tot)]
-
-            if lyrics: audio["\xa9lyr"] = lyrics
-            
-            if cover_url:
+            if target_path.suffix.lower() == '.mp3':
+                from mutagen.id3 import ID3, TIT2, TPE1, TALB, TPE2, TCOM, TCON, TYER, TRCK, TPOS, USLT, APIC, ID3NoHeaderError
                 try:
-                    res = requests.get(cover_url, timeout=10)
-                    if res.ok:
-                        audio["covr"] = [MP4Cover(res.content, imageformat=MP4Cover.FORMAT_JPEG)]
-                except Exception:
-                    pass
+                    audio = ID3(str(target_path))
+                except ID3NoHeaderError:
+                    audio = ID3()
+                if title: audio.add(TIT2(encoding=3, text=title))
+                if artist: audio.add(TPE1(encoding=3, text=artist))
+                if album: audio.add(TALB(encoding=3, text=album))
+                if album_artist: audio.add(TPE2(encoding=3, text=album_artist))
+                if composer: audio.add(TCOM(encoding=3, text=composer))
+                if genre: audio.add(TCON(encoding=3, text=genre))
+                if year: audio.add(TYER(encoding=3, text=str(year)))
+                
+                trkn_num = int(track_number) if track_number not in (None, '') else 0
+                trkn_tot = int(track_total) if track_total not in (None, '') else 0
+                if trkn_num > 0 or trkn_tot > 0:
+                    audio.add(TRCK(encoding=3, text=f"{trkn_num}/{trkn_tot}" if trkn_tot else str(trkn_num)))
                     
-            audio.save()
+                disc_num = int(disc_number) if disc_number not in (None, '') else 0
+                disc_tot = int(disc_total) if disc_total not in (None, '') else 0
+                if disc_num > 0 or disc_tot > 0:
+                    audio.add(TPOS(encoding=3, text=f"{disc_num}/{disc_tot}" if disc_tot else str(disc_num)))
+
+                if lyrics: audio.add(USLT(encoding=3, lang='eng', desc='', text=lyrics))
+                
+                if cover_url:
+                    try:
+                        res = requests.get(cover_url, timeout=10)
+                        if res.ok:
+                            audio.add(APIC(encoding=3, mime='image/jpeg', type=3, desc='Cover', data=res.content))
+                    except Exception:
+                        pass
+                        
+                audio.save(str(target_path), v2_version=3)
+            else:
+                from mutagen.mp4 import MP4, MP4Cover
+                
+                audio = MP4(str(target_path))
+                if title: audio["\xa9nam"] = title
+                if artist: audio["\xa9ART"] = artist
+                if album: audio["\xa9alb"] = album
+                if album_artist: audio["aART"] = album_artist
+                if composer: audio["\xa9wrt"] = composer
+                if genre: audio["\xa9gen"] = genre
+                if year: audio["\xa9day"] = str(year)
+                
+                trkn_num = int(track_number) if track_number not in (None, '') else 0
+                trkn_tot = int(track_total) if track_total not in (None, '') else 0
+                if trkn_num > 0 or trkn_tot > 0:
+                    audio["trkn"] = [(trkn_num, trkn_tot)]
+                    
+                disc_num = int(disc_number) if disc_number not in (None, '') else 0
+                disc_tot = int(disc_total) if disc_total not in (None, '') else 0
+                if disc_num > 0 or disc_tot > 0:
+                    audio["disk"] = [(disc_num, disc_tot)]
+
+                if lyrics: audio["\xa9lyr"] = lyrics
+                
+                if cover_url:
+                    try:
+                        res = requests.get(cover_url, timeout=10)
+                        if res.ok:
+                            audio["covr"] = [MP4Cover(res.content, imageformat=MP4Cover.FORMAT_JPEG)]
+                    except Exception:
+                        pass
+                        
+                audio.save()
             return {'success': True, 'size': target_path.stat().st_size}
         except Exception as e:
             return {'success': False, 'error': f'tagging failed: {str(e)}'}
@@ -604,6 +640,7 @@ class Bridge:
         queries: list,
         source_url: str | None = None,
         expected_duration: int | float = 0,
+        audio_format: str = 'm4a',
     ) -> dict:
         """
         Descarga audio y retorna bytes en base64 + metadata al frontend.
@@ -617,18 +654,18 @@ class Bridge:
         if not video_id and not source_url:
             return {'success': False, 'error': 'candidate_invalid: resolved videoId required'}
 
-        ext = 'm4a'
+        is_mp3 = str(audio_format).lower() == 'mp3'
+        ext = 'mp3' if is_mp3 else 'm4a'
         tmpdir = tempfile.mkdtemp(prefix='mhl_')
         tmppath = os.path.join(tmpdir, f'audio.{ext}')
 
         try:
             input_url = source_url or f'https://www.youtube.com/watch?v={video_id}'
+            format_opts = ['-f', 'bestaudio/best', '-x', '--audio-format', 'mp3', '--audio-quality', '320K'] if is_mp3 else ['-f', 'bestaudio[ext=m4a]/bestaudio/best', '-x', '--audio-format', 'm4a', '--audio-quality', '0']
             args = [
                 _bin('yt-dlp.exe'),
                 input_url,
-                '-f', 'bestaudio[ext=m4a]/bestaudio/best',
-                '-x', '--audio-format', 'm4a',
-                '--audio-quality', '0',
+                *format_opts,
                 '-o', tmppath,
                 '--no-playlist', '--force-overwrites',
                 '--ffmpeg-location', _bin('ffmpeg.exe'),
