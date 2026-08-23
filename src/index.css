@@ -344,6 +344,11 @@
   [data-theme="solar_amber"] {
     --radius: 18px;
   }
+  [data-theme="solar_amber"] h1,
+  [data-theme="solar_amber"] h2 {
+    font-family: Georgia, 'DM Sans', serif !important;
+    letter-spacing: -0.02em;
+  }
   [data-theme="solar_amber"] .app-ambient {
     background:
       radial-gradient(circle at 50% 0%, rgba(245, 158, 11, 0.25) 0%, rgba(217, 119, 6, 0.12) 45%, transparent 70%),
@@ -359,6 +364,12 @@
   /* 5. CRIMSON VELOCITY (Supercar Cockpit / Matte Carbon Weave / Scarlet Bevels) */
   [data-theme="crimson_velocity"] {
     --radius: 8px;
+  }
+  [data-theme="crimson_velocity"] h1,
+  [data-theme="crimson_velocity"] h2 {
+    font-style: italic;
+    font-weight: 800;
+    letter-spacing: -0.02em;
   }
   [data-theme="crimson_velocity"] .home-hero,
   [data-theme="crimson_velocity"] .home-search-shell,
@@ -381,6 +392,11 @@
   /* 6. AMETHYST ROYAL (Imperial Velvet / Ultraviolet Gemstone Facets) */
   [data-theme="amethyst_royal"] {
     --radius: 20px;
+  }
+  [data-theme="amethyst_royal"] h1,
+  [data-theme="amethyst_royal"] h2 {
+    letter-spacing: 0.06em;
+    font-weight: 700;
   }
   [data-theme="amethyst_royal"] .app-ambient {
     background:

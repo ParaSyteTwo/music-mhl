@@ -187,15 +187,15 @@ export default function SettingsPage() {
       <h1 className="text-lg sm:text-2xl font-semibold tracking-tighter mb-1 sm:mb-2">{t('settings')}</h1>
       <p className="text-xs sm:text-sm text-[#666660] mb-6 sm:mb-8">{t('appSettingsSubtitle')}</p>
 
-      {/* Apariencia & Temas (Desplegable Coherente) */}
-      <section className="mb-8">
+      {/* Apariencia & Temas (Desplegable Coherente con ADN Único) */}
+      <section className="mb-6">
         <button
           type="button"
           onClick={() => setShowThemes(!showThemes)}
           className="w-full flex items-center justify-between gap-3 p-4 rounded-2xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] hover:border-[rgba(255,255,255,0.12)] transition-all group text-left shadow-sm"
         >
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-8 h-8 rounded-xl bg-[var(--accent-primary)]/10 border border-[var(--accent-primary)]/20 flex items-center justify-center flex-shrink-0 transition-colors duration-300">
+            <div className="w-9 h-9 rounded-xl bg-[var(--accent-primary)]/10 border border-[var(--accent-primary)]/20 flex items-center justify-center flex-shrink-0 transition-colors duration-300 shadow-sm">
               <Palette className="w-4 h-4 text-[var(--accent-primary)]" />
             </div>
             <div className="min-w-0">
@@ -223,8 +223,8 @@ export default function SettingsPage() {
         </button>
 
         {showThemes && (
-          <div className="mt-3 p-4 rounded-2xl bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.06)] animate-in slide-in-from-top-2 fade-in duration-200">
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-3">
+          <div className="mt-3 p-3.5 sm:p-4 rounded-2xl bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.06)] animate-in slide-in-from-top-2 fade-in duration-200">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-3">
               {Object.values(APP_THEMES).map((theme) => {
                 const isActive = (appTheme || 'original_minimalist') === theme.id;
                 return (
@@ -240,12 +240,18 @@ export default function SettingsPage() {
                   >
                     {/* Top ambient banner with theme gradient */}
                     <div 
-                      className="w-full h-1 rounded-full mb-2.5 opacity-80 group-hover:opacity-100 transition-opacity"
+                      className="w-full h-1.5 rounded-full mb-2 opacity-85 group-hover:opacity-100 transition-opacity"
                       style={{ background: theme.gradient }}
                     />
+                    
                     <div className="flex items-center justify-between gap-2 mb-1.5">
                       <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="text-base sm:text-lg flex-shrink-0">{theme.emoji}</span>
+                        <div 
+                          className="w-7 h-7 rounded-lg flex items-center justify-center text-sm flex-shrink-0 shadow-sm border border-white/10"
+                          style={{ background: theme.bgSurface }}
+                        >
+                          {theme.emoji}
+                        </div>
                         <span className="text-[8px] font-mono tracking-wider px-1.5 py-0.5 rounded bg-white/[0.06] text-[#A0A098] uppercase font-bold truncate">
                           {theme.badge}
                         </span>
@@ -260,10 +266,22 @@ export default function SettingsPage() {
                         ))}
                       </div>
                     </div>
-                    <p className={`text-xs font-bold leading-tight mt-1 ${isActive ? 'text-[var(--accent-primary)]' : 'text-[#F5F5F0]'}`}>
+
+                    <p className={`text-xs font-bold leading-tight mt-0.5 ${isActive ? 'text-[var(--accent-primary)]' : 'text-[#F5F5F0]'}`}>
                       {t(theme.nameKey)}
                     </p>
-                    <p className="text-[10px] text-[#8E8E88] mt-1 leading-tight line-clamp-2">
+                    
+                    {/* Unique Signature feature & Font tags */}
+                    <div className="flex flex-wrap gap-1 mt-1.5 mb-1">
+                      <span className="text-[7.5px] font-semibold px-1.5 py-0.5 rounded-md bg-white/[0.05] text-[#D0D0C8] border border-white/[0.05] truncate max-w-full">
+                        {theme.signatureFx}
+                      </span>
+                      <span className="text-[7.5px] font-mono px-1.5 py-0.5 rounded-md bg-white/[0.03] text-[#8E8E88] truncate max-w-full">
+                        Aa {theme.font}
+                      </span>
+                    </div>
+
+                    <p className="text-[9.5px] text-[#8E8E88] leading-tight line-clamp-2 mt-0.5">
                       {t(theme.descKey)}
                     </p>
                   </button>
@@ -274,9 +292,10 @@ export default function SettingsPage() {
         )}
       </section>
 
-      <section className="mb-8">
-        <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">{t('language')}</h2>
-        <div className="p-4 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)]">
+      {/* Idioma */}
+      <section className="mb-6">
+        <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-2.5">{t('language')}</h2>
+        <div className="p-3.5 sm:p-4 rounded-2xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)]">
           <div className="grid grid-cols-3 gap-2">
             {([
               ['system', t('languageSystem')],
@@ -287,9 +306,9 @@ export default function SettingsPage() {
                 key={mode}
                 type="button"
                 onClick={() => setUiLanguageMode(mode)}
-                className={`px-3 py-2 rounded-lg text-xs font-semibold transition-colors ${
+                className={`px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${
                   uiLanguageMode === mode
-                    ? 'bg-[#C8F04B] text-[#18181A]'
+                    ? 'bg-[var(--accent-primary)] text-[#18181A]'
                     : 'bg-[rgba(255,255,255,0.04)] text-[#B0B0B0] hover:text-[#F5F5F0]'
                 }`}
               >
@@ -297,138 +316,128 @@ export default function SettingsPage() {
               </button>
             ))}
           </div>
-          <p className="text-xs text-[#666660] mt-3">{t('languageHelp')}</p>
         </div>
       </section>
 
-      {/* Búsqueda — toggle anime (off por default) */}
-      <section className="mb-8">
-        <h2 className="text-xs font-mono uppercase tracking-widest text-[#9E9E98] mb-3">{t('animeToggleTitle')}</h2>
-        <div className="p-4 rounded-2xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] hover:border-[rgba(255,255,255,0.1)] transition-colors">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-[#F5F5F0]">{t('animeToggleTitle')}</p>
-              <p className="text-xs text-[#9E9E98] mt-0.5">{t('animeToggleDescription')}</p>
-            </div>
-            <ToggleSwitch
-              checked={animeSearchEnabled}
-              onChange={setAnimeSearchEnabled}
-              label={t('animeToggleTitle')}
-            />
-          </div>
-        </div>
-      </section>
-
-      {/* Descarga automática */}
-      <section className="mb-8">
-        <h2 className="text-xs font-mono uppercase tracking-widest text-[#9E9E98] mb-3">{t('autoDownload')}</h2>
-        <div className="p-4 rounded-2xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] hover:border-[rgba(255,255,255,0.1)] transition-colors">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-[#F5F5F0]">{t('autoDownload')}</p>
-              <p className="text-xs text-[#9E9E98] mt-0.5">{t('autoDownloadDesc')}</p>
-            </div>
-            <ToggleSwitch
-              checked={autoDownload}
-              onChange={setAutoDownload}
-              label={t('autoDownload')}
-            />
-          </div>
-        </div>
-      </section>
-
-      
-      <section className="mb-8">
+      {/* Opciones Avanzadas Accordion (Contiene Anime, Descarga Auto, Resolución y Letras) */}
+      <section className="mb-6">
         <button
           onClick={() => setShowAdvanced(!showAdvanced)}
-          className="flex items-center gap-2 text-xs font-mono uppercase tracking-widest text-[#9E9E98] hover:text-[#C8F04B] transition-colors mb-3 group"
+          className="w-full flex items-center justify-between gap-3 p-4 rounded-2xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] hover:border-[rgba(255,255,255,0.12)] transition-all group text-left shadow-sm"
         >
-          {showAdvanced ? (
-            <ChevronDown className="w-4 h-4 text-[#C8F04B]" />
-          ) : (
-            <ChevronRight className="w-4 h-4 text-[#9E9E98] group-hover:text-[#C8F04B]" />
-          )}
-          <span>{t('advancedOptions')}</span>
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center flex-shrink-0 group-hover:border-[var(--accent-primary)]/30 transition-colors">
+              <Zap className="w-4 h-4 text-[#A0A098] group-hover:text-[var(--accent-primary)] transition-colors" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-[#F5F5F0]">{t('advancedOptions')}</p>
+              <p className="text-xs text-[#9E9E98] mt-0.5">Anime, descargas automáticas, resolución y letras</p>
+            </div>
+          </div>
+          <div className="flex-shrink-0">
+            {showAdvanced ? (
+              <ChevronDown className="w-4 h-4 text-[var(--accent-primary)]" />
+            ) : (
+              <ChevronRight className="w-4 h-4 text-[#9E9E98] group-hover:text-[#F5F5F0] transition-colors" />
+            )}
+          </div>
         </button>
+
         {showAdvanced && (
-          <div className="space-y-8 animate-in slide-in-from-top-2 fade-in duration-200">
-            <section>
-              <h2 className="text-xs font-mono uppercase tracking-widest text-[#9E9E98] mb-3">{t('candidateResolutionSettings')}</h2>
-              <div className="p-4 rounded-2xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] space-y-4">
-                <div className="flex items-center justify-between gap-4">
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold text-[#F5F5F0]">{t('autoCandidateResolution')}</p>
-                    <p className="text-xs text-[#9E9E98] mt-0.5">{t('autoCandidateResolutionHelp')}</p>
-                  </div>
-                  <ToggleSwitch
-                    checked={autoCandidateResolution}
-                    onChange={setAutoCandidateResolution}
-                    label={t('autoCandidateResolution')}
-                  />
+          <div className="mt-3 space-y-4 animate-in slide-in-from-top-2 fade-in duration-200">
+            {/* Búsqueda Anime */}
+            <div className="p-4 rounded-2xl bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.06)]">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-[#F5F5F0]">{t('animeToggleTitle')}</p>
+                  <p className="text-xs text-[#9E9E98] mt-0.5">{t('animeToggleDescription')}</p>
                 </div>
-                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/[0.06]">
-                  {(['adaptive', 'economy'] as const).map((profile) => (
-                    <button key={profile} type="button" onClick={() => setResolutionProfile(profile)} className={`px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${resolutionProfile === profile ? 'bg-[#C8F04B] text-[#18181A]' : 'bg-[rgba(255,255,255,0.04)] text-[#B0B0B0] hover:text-[#F5F5F0]'}`}>
-                      {t(profile === 'adaptive' ? 'resolutionAdaptive' : 'resolutionEconomy')}
+                <ToggleSwitch
+                  checked={animeSearchEnabled}
+                  onChange={setAnimeSearchEnabled}
+                  label={t('animeToggleTitle')}
+                />
+              </div>
+            </div>
+
+            {/* Descarga Automática */}
+            <div className="p-4 rounded-2xl bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.06)]">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-[#F5F5F0]">{t('autoDownload')}</p>
+                  <p className="text-xs text-[#9E9E98] mt-0.5">{t('autoDownloadDesc')}</p>
+                </div>
+                <ToggleSwitch
+                  checked={autoDownload}
+                  onChange={setAutoDownload}
+                  label={t('autoDownload')}
+                />
+              </div>
+            </div>
+
+            {/* Resolución de Candidatos */}
+            <div className="p-4 rounded-2xl bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.06)] space-y-4">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-[#F5F5F0]">{t('autoCandidateResolution')}</p>
+                  <p className="text-xs text-[#9E9E98] mt-0.5">{t('autoCandidateResolutionHelp')}</p>
+                </div>
+                <ToggleSwitch
+                  checked={autoCandidateResolution}
+                  onChange={setAutoCandidateResolution}
+                  label={t('autoCandidateResolution')}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/[0.06]">
+                {(['adaptive', 'economy'] as const).map((profile) => (
+                  <button key={profile} type="button" onClick={() => setResolutionProfile(profile)} className={`px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${resolutionProfile === profile ? 'bg-[var(--accent-primary)] text-[#18181A]' : 'bg-[rgba(255,255,255,0.04)] text-[#B0B0B0] hover:text-[#F5F5F0]'}`}>
+                    {t(profile === 'adaptive' ? 'resolutionAdaptive' : 'resolutionEconomy')}
+                  </button>
+                ))}
+              </div>
+              <div>
+                <p className="text-xs text-[#9E9E98] mb-2">{t('cellularResolutionPolicy')}</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {(['off', 'light', 'full'] as const).map((policy) => (
+                    <button key={policy} type="button" onClick={() => setCellularResolutionPolicy(policy)} className={`px-2 py-2 rounded-xl text-xs font-medium transition-colors ${cellularResolutionPolicy === policy ? 'bg-[var(--accent-primary)] text-[#18181A]' : 'bg-[rgba(255,255,255,0.04)] text-[#B0B0B0] hover:text-[#F5F5F0]'}`}>
+                      {t(`resolutionCellular${policy[0].toUpperCase()}${policy.slice(1)}`)}
                     </button>
                   ))}
                 </div>
-                <div>
-                  <p className="text-xs text-[#9E9E98] mb-2">{t('cellularResolutionPolicy')}</p>
-                  <div className="grid grid-cols-3 gap-2">
-                    {(['off', 'light', 'full'] as const).map((policy) => (
-                      <button key={policy} type="button" onClick={() => setCellularResolutionPolicy(policy)} className={`px-2 py-2 rounded-xl text-xs font-medium transition-colors ${cellularResolutionPolicy === policy ? 'bg-[#C8F04B] text-[#18181A]' : 'bg-[rgba(255,255,255,0.04)] text-[#B0B0B0] hover:text-[#F5F5F0]'}`}>
-                        {t(`resolutionCellular${policy[0].toUpperCase()}${policy.slice(1)}`)}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <p className="text-xs text-[#9E9E98] mb-2">{t('editionPreference')}</p>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    {(['catalog', 'explicit', 'clean', 'ask'] as const).map((preference) => (
-                      <button key={preference} type="button" onClick={() => setEditionPreference(preference)} className={`px-2 py-2 rounded-xl text-xs font-medium transition-colors ${editionPreference === preference ? 'bg-[#C8F04B] text-[#18181A]' : 'bg-[rgba(255,255,255,0.04)] text-[#B0B0B0] hover:text-[#F5F5F0]'}`}>
-                        {t(`editionPreference${preference[0].toUpperCase()}${preference.slice(1)}`)}
-                      </button>
-                    ))}
-                  </div>
-                </div>
               </div>
-            </section>
+            </div>
 
-            <section>
-              <h2 className="text-xs font-mono uppercase tracking-widest text-[#9E9E98] mb-3">Detalle de Letras (Avanzado)</h2>
-              <div className="p-4 rounded-2xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] space-y-4">
-                <div className="flex items-center justify-between gap-4">
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold text-[#F5F5F0]">{t('lyricsOriginal')}</p>
-                    <p className="text-xs text-[#9E9E98] mt-0.5">{t('lyricsOriginalHelp')}</p>
-                  </div>
-                  <ToggleSwitch checked={lyricOriginal} onChange={setLyricOriginal} label={t('lyricsOriginal')} />
+            {/* Detalle de Letras */}
+            <div className="p-4 rounded-2xl bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.06)] space-y-4">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-[#F5F5F0]">{t('lyricsOriginal')}</p>
+                  <p className="text-xs text-[#9E9E98] mt-0.5">{t('lyricsOriginalHelp')}</p>
                 </div>
-                <div className="flex items-center justify-between gap-4 pt-2 border-t border-white/[0.06]">
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold text-[#F5F5F0]">{t('lyricsRomanization')}</p>
-                    <p className="text-xs text-[#9E9E98] mt-0.5">{t('lyricsRomanizationHelp')}</p>
-                  </div>
-                  <ToggleSwitch checked={lyricRomanization} onChange={setLyricRomanization} label={t('lyricsRomanization')} />
-                </div>
-                <div className="flex items-center justify-between gap-4 pt-2 border-t border-white/[0.06]">
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold text-[#F5F5F0]">{t('lyricsLatinOnly')}</p>
-                    <p className="text-xs text-[#9E9E98] mt-0.5">{t('lyricsLatinOnlyHelp')}</p>
-                  </div>
-                  <ToggleSwitch checked={lyricLatinOnly} onChange={setLyricLatinOnly} label={t('lyricsLatinOnly')} />
-                </div>
-                <div className="flex items-center justify-between gap-4 pt-2 border-t border-white/[0.06]">
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold text-[#F5F5F0]">{t('lyricsTranslation')}</p>
-                    <p className="text-xs text-[#9E9E98] mt-0.5">{t('lyricsTranslationHelp')}</p>
-                  </div>
-                  <ToggleSwitch checked={lyricTranslation} onChange={setLyricTranslation} label={t('lyricsTranslation')} />
-                </div>
+                <ToggleSwitch checked={lyricOriginal} onChange={setLyricOriginal} label={t('lyricsOriginal')} />
               </div>
-            </section>
+              <div className="flex items-center justify-between gap-4 pt-2 border-t border-white/[0.06]">
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-[#F5F5F0]">{t('lyricsRomanization')}</p>
+                  <p className="text-xs text-[#9E9E98] mt-0.5">{t('lyricsRomanizationHelp')}</p>
+                </div>
+                <ToggleSwitch checked={lyricRomanization} onChange={setLyricRomanization} label={t('lyricsRomanization')} />
+              </div>
+              <div className="flex items-center justify-between gap-4 pt-2 border-t border-white/[0.06]">
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-[#F5F5F0]">{t('lyricsLatinOnly')}</p>
+                  <p className="text-xs text-[#9E9E98] mt-0.5">{t('lyricsLatinOnlyHelp')}</p>
+                </div>
+                <ToggleSwitch checked={lyricLatinOnly} onChange={setLyricLatinOnly} label={t('lyricsLatinOnly')} />
+              </div>
+              <div className="flex items-center justify-between gap-4 pt-2 border-t border-white/[0.06]">
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-[#F5F5F0]">{t('lyricsTranslation')}</p>
+                  <p className="text-xs text-[#9E9E98] mt-0.5">{t('lyricsTranslationHelp')}</p>
+                </div>
+                <ToggleSwitch checked={lyricTranslation} onChange={setLyricTranslation} label={t('lyricsTranslation')} />
+              </div>
+            </div>
 
             {/* Letras */}
             <section>
