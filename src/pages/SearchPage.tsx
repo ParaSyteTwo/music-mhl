@@ -80,6 +80,8 @@ export default function SearchPage() {
     cellularResolutionPolicy,
     editionPreference,
     autoDownload,
+    setDirectTrack,
+    clearSearch,
   } = useMusicStore(useShallow((s) => ({
     searchQuery: s.searchQuery,
     searchResults: s.searchResults,
@@ -102,6 +104,8 @@ export default function SearchPage() {
     cellularResolutionPolicy: s.cellularResolutionPolicy,
     editionPreference: s.editionPreference,
     autoDownload: s.autoDownload,
+    setDirectTrack: s.setDirectTrack,
+    clearSearch: s.clearSearch,
   })));
 
   const [query, setQuery] = useState(searchQuery);
@@ -280,14 +284,13 @@ export default function SearchPage() {
 
   const handleDirectUrl = useCallback(async (rawUrl: string) => {
     const trimmed = rawUrl.trim();
-    if (!trimmed || isSearching) return;
+    if (!trimmed) return;
 
     if (isUnsupportedCollectionUrl(trimmed)) {
       toast.error('Pega el enlace de una canción o pista individual', { id: 'url-resolve' });
       return;
     }
 
-    setIsSearching(true);
     toast.loading(t('resolvingUrl'), { id: 'url-resolve' });
     try {
       const resolvedTrack = await resolveTrackFromUrl(trimmed);
@@ -296,8 +299,7 @@ export default function SearchPage() {
           t('urlResolved', { title: resolvedTrack.title, artist: resolvedTrack.artist }),
           { id: 'url-resolve' }
         );
-        setSearchResults([resolvedTrack]);
-        setSearchQuery(resolvedTrack.title);
+        setDirectTrack(resolvedTrack);
         if (resolvedTrack.youtubeId) {
           const key = candidateTrackKey(resolvedTrack);
           setBestCandidates((cur) => ({ ...cur, [key]: { videoId: resolvedTrack.youtubeId! } }));
@@ -315,12 +317,11 @@ export default function SearchPage() {
       } else {
         toast.error(t('noResults'), { id: 'url-resolve' });
       }
-    } catch {
+    } catch (err) {
+      console.error('Error resolving URL:', err);
       toast.error(t('noResults'), { id: 'url-resolve' });
-    } finally {
-      setIsSearching(false);
     }
-  }, [autoDownload, isSearching, startDownload, startDownloadWithSourceUrl, startDownloadWithVideoId, t]);
+  }, [autoDownload, setDirectTrack, startDownload, startDownloadWithSourceUrl, startDownloadWithVideoId, t]);
 
   const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
     const pastedText = e.clipboardData.getData('text').trim();
@@ -577,7 +578,7 @@ export default function SearchPage() {
             <Loader2 className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#C8F04B] animate-spin" />
           ) : query ? (
             <button
-              onMouseDown={(e) => { e.preventDefault(); setQuery(''); performSearch(''); }}
+              onMouseDown={(e) => { e.preventDefault(); setQuery(''); clearSearch(); }}
               className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-white/[0.08] hover:bg-white/[0.14] flex items-center justify-center transition-colors"
               aria-label={t('clearSearch')}
             >

@@ -18,6 +18,8 @@ const storeState = {
   downloads: [],
   mostDownloadedArtists: [],
   animeSearchEnabled: false,
+  setDirectTrack: vi.fn(),
+  clearSearch: vi.fn(),
 };
 const translate = (key: string) => key;
 

@@ -87,4 +87,27 @@ export const createSearchSlice: StateCreator<
       if (requestId === searchRequestId) set({ isLoadingMore: false });
     }
   },
+
+  setDirectTrack: (track) => {
+    set({
+      searchQuery: track.title,
+      searchResults: [track],
+      isSearching: false,
+      hasMoreResults: false,
+      isLoadingMore: false,
+      searchOffset: 0,
+    });
+  },
+
+  clearSearch: () => {
+    set({
+      searchQuery: '',
+      searchResults: [],
+      isSearching: false,
+      isLoadingMore: false,
+      searchOffset: 0,
+      hasMoreResults: true,
+    });
+    document.title = 'MHL Music';
+  },
 });

@@ -32,6 +32,8 @@ export interface SearchSlice {
 
   performSearch: (query: string) => Promise<void>;
   loadMoreResults: () => Promise<void>;
+  setDirectTrack: (track: Track) => void;
+  clearSearch: () => void;
 }
 
 export interface DownloadSlice {

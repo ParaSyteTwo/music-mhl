@@ -278,6 +278,30 @@ describe('useMusicStore', () => {
       expect(useMusicStore.getState().searchQuery).toBe('new');
       expect(useMusicStore.getState().searchResults[0]?.id).toBe('new');
     });
+
+    it('sets direct track and clears search correctly', () => {
+      const mockTrack = {
+        id: 'yt_test1234567',
+        title: 'Solo Leveling Rap',
+        artist: 'Kronno Zomber',
+        album: 'Kronno Zomber',
+        duration: 210,
+        cover: 'https://i.ytimg.com/vi/test1234567/hqdefault.jpg',
+        youtubeId: 'test1234567',
+        sourceUrl: 'https://youtu.be/test1234567',
+      };
+
+      useMusicStore.getState().setDirectTrack(mockTrack);
+      expect(useMusicStore.getState().searchQuery).toBe('Solo Leveling Rap');
+      expect(useMusicStore.getState().searchResults).toHaveLength(1);
+      expect(useMusicStore.getState().searchResults[0].id).toBe('yt_test1234567');
+      expect(useMusicStore.getState().isSearching).toBe(false);
+
+      useMusicStore.getState().clearSearch();
+      expect(useMusicStore.getState().searchQuery).toBe('');
+      expect(useMusicStore.getState().searchResults).toHaveLength(0);
+      expect(useMusicStore.getState().isSearching).toBe(false);
+    });
   });
 
   describe('Language Settings', () => {
