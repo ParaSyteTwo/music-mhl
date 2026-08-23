@@ -71,6 +71,7 @@ export default function SettingsPage() {
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'done' | 'skipped' | 'error'>('idle');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showThemes, setShowThemes] = useState(false);
+  const [showDefaultPlayer, setShowDefaultPlayer] = useState(false);
   const [audioPlayers, setAudioPlayers] = useState<AudioPlayer[]>([]);
   const [loadingPlayers, setLoadingPlayers] = useState(false);
   const appUpdateStatus = useAppUpdateStore((state) => state.status);
@@ -632,59 +633,86 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      {/* Reproductor predeterminado — solo Android */}
+      {/* Reproductor predeterminado — solo Android (Desplegable Acordeón) */}
       {isAndroid && (
-        <section className="mb-8">
-          <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">{t('defaultPlayer')}</h2>
-          <div className="p-4 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] space-y-3">
-            <p className="text-xs text-[#666660]">
-              {t('defaultPlayerHelp')}
-            </p>
+        <section className="mb-6">
+          <button
+            type="button"
+            onClick={() => setShowDefaultPlayer(!showDefaultPlayer)}
+            className="w-full flex items-center justify-between gap-3 p-4 rounded-2xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] hover:border-[rgba(255,255,255,0.12)] transition-all group text-left shadow-sm"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-9 h-9 rounded-xl bg-[var(--accent-primary)]/10 border border-[var(--accent-primary)]/20 flex items-center justify-center flex-shrink-0 transition-colors duration-300 shadow-sm">
+                <Music2 className="w-4 h-4 text-[var(--accent-primary)]" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-sm font-semibold text-[#F5F5F0]">{t('defaultPlayer')}</p>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-white/[0.06] text-[#A0A098] font-medium truncate">
+                    {preferredPlayerPackage
+                      ? (audioPlayers.find((p) => p.packageName === preferredPlayerPackage)?.label || preferredPlayerPackage)
+                      : t('askAlways')}
+                  </span>
+                </div>
+                <p className="text-xs text-[#9E9E98] mt-0.5 truncate">{t('defaultPlayerHelp')}</p>
+              </div>
+            </div>
+            <div className="flex-shrink-0">
+              {showDefaultPlayer ? (
+                <ChevronDown className="w-4 h-4 text-[var(--accent-primary)]" />
+              ) : (
+                <ChevronRight className="w-4 h-4 text-[#9E9E98] group-hover:text-[#F5F5F0] transition-colors" />
+              )}
+            </div>
+          </button>
 
-            {loadingPlayers ? (
-              <p className="text-xs text-[#444]">{t('loadingPlayers')}</p>
-            ) : audioPlayers.length === 0 ? (
-              <p className="text-xs text-[#444]">{t('noAudioPlayers')}</p>
-            ) : (
-              <div className="space-y-2">
-                {/* Opción "Preguntar siempre" */}
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="defaultPlayer"
-                    checked={preferredPlayerPackage === null}
-                    onChange={() => setPreferredPlayerPackage(null)}
-                    className="accent-[#C8F04B]"
-                  />
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-lg bg-[rgba(255,255,255,0.06)] flex items-center justify-center flex-shrink-0">
-                      <Music2 className="w-4 h-4 text-[#666660]" />
-                    </div>
-                    <span className="text-sm text-[#F5F5F0]">{t('askAlways')}</span>
-                  </div>
-                </label>
-
-                {/* Lista de reproductores instalados */}
-                {audioPlayers.map((player) => (
-                  <label key={player.packageName} className="flex items-center gap-3 cursor-pointer">
+          {showDefaultPlayer && (
+            <div className="mt-3 p-4 rounded-2xl bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.06)] space-y-3 animate-in slide-in-from-top-2 fade-in duration-200">
+              {loadingPlayers ? (
+                <p className="text-xs text-[#666] py-2">{t('loadingPlayers')}</p>
+              ) : audioPlayers.length === 0 ? (
+                <p className="text-xs text-[#666] py-2">{t('noAudioPlayers')}</p>
+              ) : (
+                <div className="space-y-2">
+                  {/* Opción "Preguntar siempre" */}
+                  <label className="flex items-center gap-3 p-2.5 rounded-xl bg-white/[0.02] hover:bg-white/[0.05] border border-white/[0.04] cursor-pointer transition-colors">
                     <input
                       type="radio"
                       name="defaultPlayer"
-                      checked={preferredPlayerPackage === player.packageName}
-                      onChange={() => setPreferredPlayerPackage(player.packageName)}
-                      className="accent-[#C8F04B]"
+                      checked={preferredPlayerPackage === null}
+                      onChange={() => setPreferredPlayerPackage(null)}
+                      className="accent-[var(--accent-primary)]"
                     />
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-lg bg-[rgba(200,240,75,0.08)] flex items-center justify-center flex-shrink-0">
-                        <Music2 className="w-4 h-4 text-[#C8F04B]" />
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-7 h-7 rounded-lg bg-white/[0.06] flex items-center justify-center flex-shrink-0">
+                        <Music2 className="w-3.5 h-3.5 text-[#A0A098]" />
                       </div>
-                      <span className="text-sm text-[#F5F5F0]">{player.label}</span>
+                      <span className="text-xs font-semibold text-[#F5F5F0] truncate">{t('askAlways')}</span>
                     </div>
                   </label>
-                ))}
-              </div>
-            )}
-          </div>
+
+                  {/* Lista de reproductores instalados */}
+                  {audioPlayers.map((player) => (
+                    <label key={player.packageName} className="flex items-center gap-3 p-2.5 rounded-xl bg-white/[0.02] hover:bg-white/[0.05] border border-white/[0.04] cursor-pointer transition-colors">
+                      <input
+                        type="radio"
+                        name="defaultPlayer"
+                        checked={preferredPlayerPackage === player.packageName}
+                        onChange={() => setPreferredPlayerPackage(player.packageName)}
+                        className="accent-[var(--accent-primary)]"
+                      />
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-7 h-7 rounded-lg bg-[var(--accent-primary)]/10 flex items-center justify-center flex-shrink-0">
+                          <Music2 className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+                        </div>
+                        <span className="text-xs font-semibold text-[#F5F5F0] truncate">{player.label}</span>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </section>
       )}
 

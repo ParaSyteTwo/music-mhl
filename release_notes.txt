@@ -1,11 +1,12 @@
-MHL Music 1.5.1 Beta 9 (Ajustes Limpios en Avanzado & ADN Visual Único)
+MHL Music 1.5.1 Beta 10 (Reproductor Predeterminado Plegable en Ajustes)
 
-MHL Music 1.5.1 Beta 9 organiza la pantalla de Ajustes agrupando todas las opciones técnicas y secundarias dentro de un acordeón desplegable 'Opciones Avanzadas', eliminando selectores confusos como la edición de versión de tema, y dotando a cada uno de los 13 temas de icono, tipografía, shaders y badges únicos.
+MHL Music 1.5.1 Beta 10 convierte la sección de 'Reproductor predeterminado' en Android en un menú desplegable tipo acordeón compacto y ordenado, evitando que ocupe espacio vertical prolongado.
 
 ✨ **Novedades de la Versión**
 
-- **Ajustes Minimalistas y Ordenados:** Todas las configuraciones avanzadas (anime, descargas automáticas, resolución y letras) reunidas dentro del desplegable 'Opciones Avanzadas'.
-- **Eliminación de la Edición de Versión:** Simplificado el flujo de resolución sin selectores redundantes.
+- **Reproductor Predeterminado Plegable:** Selector de reproductor externo compacto en Android con indicador del reproductor activo y desplegable fluido.
+- **Ajustes 100% Organizados:** Menú avanzado limpio y opciones técnicas secundarias plegadas por defecto.
+- **13 Mundos Visuales con ADN Único:** Tipografías, bordes geométricos e iconos específicos para cada tema.
 - **ADN Visual y Tipográfico por Tema:** 13 temas con iconos dedicados, tipografías personalizadas (JetBrains Mono para Matrix, Syne Italic para Vaporwave, Georgia para Solar, etc.), y badges de funciones exclusivas.
 - **Selector Acordeón Fluido:** Desplegable de Apariencia con banner de gradiente y paleta de acentos.
 - **Selector Desplegable Acordeón:** Apariencia limpia y ordenada en Ajustes.
