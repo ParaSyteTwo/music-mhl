@@ -350,6 +350,10 @@ public class YtDlpPlugin extends Plugin {
             call.reject("Missing videoId or sourceUrl parameter");
             return;
         }
+        if (videoId != null && !videoId.isEmpty() && !videoId.matches("^[a-zA-Z0-9_-]+$")) {
+            call.reject("Invalid videoId format");
+            return;
+        }
         if (sourceUrl != null && !sourceUrl.isEmpty() && !isAllowedAnimeThemesAudioUrl(sourceUrl)) {
             call.reject("Unsupported sourceUrl");
             return;

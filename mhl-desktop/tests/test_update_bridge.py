@@ -76,3 +76,28 @@ def test_apply_desktop_update_downloads_and_spawns_helper(monkeypatch):
         import shutil
         shutil.rmtree(test_tmp, ignore_errors=True)
 
+
+def test_open_file_blocks_dangerous_executables(tmp_path, monkeypatch):
+    bridge = Bridge()
+    fake_exe = tmp_path / 'payload.exe'
+    fake_exe.write_text('MZ dummy executable', encoding='utf-8')
+
+    res = bridge.open_file(str(fake_exe))
+    assert res['success'] is False
+    assert 'Security check' in res['error']
+
+
+def test_open_file_allows_safe_media_files(tmp_path, monkeypatch):
+    bridge = Bridge()
+    fake_mp3 = tmp_path / 'song.mp3'
+    fake_mp3.write_text('ID3 dummy audio', encoding='utf-8')
+
+    mock_startfile = MagicMock()
+    monkeypatch.setattr('os.startfile', mock_startfile, raising=False)
+
+    res = bridge.open_file(str(fake_mp3))
+    assert res['success'] is True
+    if sys.platform == 'win32':
+        assert mock_startfile.called
+
+

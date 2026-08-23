@@ -859,7 +859,7 @@ class Bridge:
         return ""
 
     def open_file(self, file_path: str) -> dict:
-        """Abre un archivo (o carpeta) usando la aplicación por defecto del sistema."""
+        """Abre un archivo de audio/carpeta descargada usando la aplicación por defecto del sistema."""
         try:
             import os
             target_path = Path(file_path).resolve()
@@ -870,7 +870,16 @@ class Bridge:
                     target_path = alt_path
                 else:
                     return {'success': False, 'error': 'File not found'}
-                
+
+            # Validar que no sea un ejecutable o script malicioso
+            if target_path.is_file():
+                allowed_extensions = {
+                    '.mp3', '.m4a', '.wav', '.flac', '.ogg', '.opus', '.aac',
+                    '.lrc', '.txt', '.json', '.jpg', '.jpeg', '.png', '.webp', '.svg',
+                }
+                if target_path.suffix.lower() not in allowed_extensions:
+                    return {'success': False, 'error': 'Security check: File extension not allowed'}
+
             # Solo para Windows
             os.startfile(str(target_path))
             return {"success": True}
