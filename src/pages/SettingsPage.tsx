@@ -65,6 +65,7 @@ export default function SettingsPage() {
     cellularResolutionPolicy, setCellularResolutionPolicy,
     editionPreference, setEditionPreference,
     autoDownload, setAutoDownload,
+    allowLongAudioDownloads, setAllowLongAudioDownloads,
     appTheme, setAppTheme,
   } = useMusicStore();
 
@@ -372,6 +373,26 @@ export default function SettingsPage() {
                   checked={autoDownload}
                   onChange={setAutoDownload}
                   label={t('autoDownload')}
+                />
+              </div>
+            </div>
+
+            {/* Podcasts y Audios Extensos */}
+            <div className="p-4 rounded-2xl bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.06)] space-y-3">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-semibold text-[#F5F5F0]">{t('allowLongAudioDownloads')}</p>
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                      Térmico / CPU
+                    </span>
+                  </div>
+                  <p className="text-xs text-[#9E9E98] mt-1">{t('allowLongAudioDownloadsHelp')}</p>
+                </div>
+                <ToggleSwitch
+                  checked={allowLongAudioDownloads}
+                  onChange={setAllowLongAudioDownloads}
+                  label={t('allowLongAudioDownloads')}
                 />
               </div>
             </div>

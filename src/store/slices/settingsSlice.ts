@@ -43,6 +43,9 @@ export const createSettingsSlice: StateCreator<
   autoDownload: true,
   setAutoDownload: (v) => set({ autoDownload: v }),
 
+  allowLongAudioDownloads: false,
+  setAllowLongAudioDownloads: (v) => set({ allowLongAudioDownloads: v }),
+
   preferredPlayerPackage: null,
   setPreferredPlayerPackage: (pkg) => set({ preferredPlayerPackage: pkg }),
 

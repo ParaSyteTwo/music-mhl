@@ -79,6 +79,10 @@ export const createDownloadSlice: StateCreator<
 
           updateDl({ status: 'downloading', progress: 5 });
 
+          if (track.isLongAudio || (track.duration && track.duration > 1200)) {
+            toast.warning(storeText(get().uiLanguageMode, 'longAudioWarning'), { duration: 6000 });
+          }
+
           const maxAttempts = 3;
           const resolvedFileName = buildDownloadFileName(track, 'm4a');
           const nativeContext = await getDeviceContext().catch(() => null);

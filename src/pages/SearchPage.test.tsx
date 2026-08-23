@@ -18,6 +18,7 @@ const storeState = {
   downloads: [],
   mostDownloadedArtists: [],
   animeSearchEnabled: false,
+  allowLongAudioDownloads: false,
   setDirectTrack: vi.fn(),
   clearSearch: vi.fn(),
 };

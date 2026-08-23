@@ -107,5 +107,28 @@ describe('urlResolver', () => {
       expect(track?.cover).toBe('https://i.ytimg.com/vi/abc12345678/hqdefault.jpg');
       expect(track?.youtubeId).toBe('abc12345678');
     });
+
+    it('detects long audio / podcasts from title and flags isLongAudio and isPodcast', async () => {
+      global.fetch = vi.fn().mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          title: 'The Daily Tech Podcast - Episodio 142 (Full Concert & Discussion)',
+          author_name: 'TechPod',
+          thumbnail_url: 'https://i.ytimg.com/vi/pod12345678/hqdefault.jpg',
+        }),
+      });
+
+      vi.mocked(searchDeezer).mockResolvedValueOnce([]);
+
+      const track = await resolveTrackFromUrl('https://www.youtube.com/watch?v=pod12345678');
+      expect(track).not.toBeNull();
+      expect(track?.isLongAudio).toBe(true);
+      expect(track?.isPodcast).toBe(true);
+    });
+
+    it('rejects channel or user profile URLs', async () => {
+      const track = await resolveTrackFromUrl('https://www.youtube.com/@TheBestMusicChannel');
+      expect(track).toBeNull();
+    });
   });
 });

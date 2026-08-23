@@ -280,6 +280,11 @@ const translations: Record<Lang, Record<string, string>> = {
     theme_titanium_luxury_desc: 'Platino plateado y minimalismo de estudio de lujo',
     theme_original_minimalist: 'MHL Minimalista Clásico',
     theme_original_minimalist_desc: 'El diseño original puro con acentos lima MHL',
+    allowLongAudioDownloads: 'Descargar podcasts y audios largos (>20 min)',
+    allowLongAudioDownloadsHelp: 'Permite procesar audios de más de 20 minutos. (Aviso: procesar audios de larga duración puede elevar el uso de CPU y la temperatura en dispositivos de gama baja).',
+    longAudioBlocked: 'Audio largo o podcast detectado (>20 min). Las descargas largas están desactivadas para proteger el rendimiento y la batería. Actívalas en Ajustes ➔ Opciones Avanzadas.',
+    longAudioWarning: '⚠️ Audio de larga duración (>20 min). Puede generar un consumo elevado y calentamiento en dispositivos de baja potencia.',
+    invalidMediaUrl: 'El enlace no corresponde a una canción o vídeo individual reproducible.',
   },
   en: {
     loading: 'Loading...',
@@ -550,6 +555,11 @@ const translations: Record<Lang, Record<string, string>> = {
     theme_titanium_luxury_desc: 'Platinum silver and luxury studio minimalism',
     theme_original_minimalist: 'MHL Classic Minimalist',
     theme_original_minimalist_desc: 'The pure classic original MHL lime aesthetic',
+    allowLongAudioDownloads: 'Download podcasts & long audios (>20 min)',
+    allowLongAudioDownloadsHelp: 'Allows processing audios over 20 minutes. (Warning: processing long audio files may increase CPU usage and temperature on low-end devices).',
+    longAudioBlocked: 'Long audio or podcast detected (>20 min). Long downloads are disabled by default. Enable them in Settings ➔ Advanced Options.',
+    longAudioWarning: '⚠️ Long audio file (>20 min). May cause high CPU usage and heating on lower-end devices.',
+    invalidMediaUrl: 'The link does not correspond to an individual playable song or video.',
   },
 };
 

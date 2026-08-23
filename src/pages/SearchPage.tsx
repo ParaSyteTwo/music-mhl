@@ -80,6 +80,7 @@ export default function SearchPage() {
     cellularResolutionPolicy,
     editionPreference,
     autoDownload,
+    allowLongAudioDownloads,
     setDirectTrack,
     clearSearch,
   } = useMusicStore(useShallow((s) => ({
@@ -104,6 +105,7 @@ export default function SearchPage() {
     cellularResolutionPolicy: s.cellularResolutionPolicy,
     editionPreference: s.editionPreference,
     autoDownload: s.autoDownload,
+    allowLongAudioDownloads: s.allowLongAudioDownloads,
     setDirectTrack: s.setDirectTrack,
     clearSearch: s.clearSearch,
   })));
@@ -295,6 +297,16 @@ export default function SearchPage() {
     try {
       const resolvedTrack = await resolveTrackFromUrl(trimmed);
       if (resolvedTrack) {
+        // Validación de podcasts / audios extensos (>20 min)
+        if ((resolvedTrack.isLongAudio || resolvedTrack.isPodcast) && !allowLongAudioDownloads) {
+          toast.error(t('longAudioBlocked'), { id: 'url-resolve', duration: 7000 });
+          return;
+        }
+
+        if (resolvedTrack.isLongAudio) {
+          toast.warning(t('longAudioWarning'), { duration: 6000 });
+        }
+
         toast.success(
           t('urlResolved', { title: resolvedTrack.title, artist: resolvedTrack.artist }),
           { id: 'url-resolve' }
@@ -321,7 +333,7 @@ export default function SearchPage() {
       console.error('Error resolving URL:', err);
       toast.error(t('noResults'), { id: 'url-resolve' });
     }
-  }, [autoDownload, setDirectTrack, startDownload, startDownloadWithSourceUrl, startDownloadWithVideoId, t]);
+  }, [allowLongAudioDownloads, autoDownload, setDirectTrack, startDownload, startDownloadWithSourceUrl, startDownloadWithVideoId, t]);
 
   const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
     const pastedText = e.clipboardData.getData('text').trim();

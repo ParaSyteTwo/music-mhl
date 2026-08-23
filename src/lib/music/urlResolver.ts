@@ -10,7 +10,7 @@ export function isUnsupportedCollectionUrl(input: string): boolean {
   const trimmed = input.trim();
   return (
     (/[?&]list=/i.test(trimmed) && !/[?&]v=/i.test(trimmed)) ||
-    /open\.spotify\.com\/(?:[a-zA-Z0-9_-]+\/)?(album|playlist|show|episode)\//i.test(trimmed) ||
+    /open\.spotify\.com\/(?:[a-zA-Z0-9_-]+\/)?(album|playlist)\//i.test(trimmed) ||
     /soundcloud\.com\/[^/]+\/sets\//i.test(trimmed)
   );
 }
@@ -106,9 +106,59 @@ function createTimeoutSignal(ms: number): AbortSignal | undefined {
   return undefined;
 }
 
+function normalizeForMatching(str: string): string {
+  return str.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+export function isPodcastOrEpisodeUrl(urlStr: string): boolean {
+  const trimmed = urlStr.trim().toLowerCase();
+  return (
+    trimmed.includes('spotify.com/episode/') ||
+    trimmed.includes('spotify.com/show/') ||
+    trimmed.includes('podcast') ||
+    trimmed.includes('ivoox.com') ||
+    trimmed.includes('podcasts.apple.com')
+  );
+}
+
+export function isNonPlayableMediaUrl(urlStr: string): boolean {
+  const trimmed = urlStr.trim().toLowerCase();
+  return (
+    trimmed.includes('youtube.com/@') ||
+    trimmed.includes('youtube.com/channel/') ||
+    trimmed.includes('youtube.com/c/') ||
+    trimmed.includes('youtube.com/user/') ||
+    trimmed.includes('spotify.com/user/') ||
+    trimmed.includes('soundcloud.com/you/')
+  );
+}
+
+function detectLongAudioFromTitle(title: string): boolean {
+  const lower = title.toLowerCase();
+  return (
+    lower.includes('podcast') ||
+    lower.includes('episodio') ||
+    lower.includes('full album') ||
+    lower.includes('álbum completo') ||
+    lower.includes('discografia') ||
+    lower.includes('1 hour') ||
+    lower.includes('2 hour') ||
+    lower.includes('3 hour') ||
+    lower.includes('1 hora') ||
+    lower.includes('2 horas') ||
+    lower.includes('mega mix') ||
+    lower.includes('session mix') ||
+    lower.includes('concierto completo') ||
+    lower.includes('full concert') ||
+    lower.includes('live stream')
+  );
+}
+
 export async function resolveTrackFromUrl(url: string): Promise<Track | null> {
   const trimmed = url.trim().replace(/^[<"']+|[>"']+$/g, '');
-  if (!isDirectMediaUrl(trimmed)) return null;
+  if (!isDirectMediaUrl(trimmed) || isNonPlayableMediaUrl(trimmed)) return null;
+
+  const isPodcastLink = isPodcastOrEpisodeUrl(trimmed);
 
   try {
     // 1. YouTube & YouTube Music & Shorts & Embeds
@@ -133,14 +183,27 @@ export async function resolveTrackFromUrl(url: string): Promise<Track | null> {
       const parsed = cleanVideoTitle(rawTitle);
       const searchArtist = parsed.artist || uploader;
       const searchTitle = parsed.title;
+      const isLongByTitle = detectLongAudioFromTitle(rawTitle);
 
-      // Buscar en Deezer/iTunes para enriquecer carátula HD y metadatos de estudio
+      // Buscar en Deezer/iTunes para enriquecer carátula HD y metadatos de estudio oficiales
       let matchedTrack: Track | null = null;
       try {
         const query = `${searchArtist} ${searchTitle}`.trim();
-        const results = await searchDeezer(query, 0, 5);
+        const results = await searchDeezer(query, 0, 8);
         if (results.length > 0) {
-          matchedTrack = results[0];
+          const targetTitleNorm = normalizeForMatching(searchTitle);
+          const targetArtistNorm = normalizeForMatching(searchArtist);
+
+          // Buscar coincidencia exacta o fuerte de título y artista
+          const exact = results.find((cand) => {
+            const candTitleNorm = normalizeForMatching(cand.canonicalTitle || cand.title);
+            const candArtistNorm = normalizeForMatching(cand.artist);
+            const titleMatch = candTitleNorm.includes(targetTitleNorm) || targetTitleNorm.includes(candTitleNorm);
+            const artistMatch = candArtistNorm.includes(targetArtistNorm) || targetArtistNorm.includes(candArtistNorm) || targetArtistNorm === 'youtube';
+            return titleMatch && artistMatch;
+          });
+
+          matchedTrack = exact || results[0];
         }
       } catch {
         // fallback
@@ -152,6 +215,8 @@ export async function resolveTrackFromUrl(url: string): Promise<Track | null> {
           id: `yt_${videoId}`,
           youtubeId: videoId,
           sourceUrl: trimmed,
+          isLongAudio: (matchedTrack.duration > 1200) || isLongByTitle || isPodcastLink,
+          isPodcast: isPodcastLink || isLongByTitle,
         };
       }
 
@@ -170,17 +235,19 @@ export async function resolveTrackFromUrl(url: string): Promise<Track | null> {
         edition: 'unknown',
         youtubeId: videoId,
         sourceUrl: trimmed,
+        isLongAudio: isLongByTitle || isPodcastLink,
+        isPodcast: isPodcastLink || isLongByTitle,
       };
     }
 
-    // 2. Spotify Track URL
+    // 2. Spotify Track / Episode URL
     const spotifyTrackId = extractSpotifyTrackId(trimmed);
-    if (spotifyTrackId) {
+    if (spotifyTrackId || isPodcastLink) {
       let oembedTitle = '';
       try {
         const res = await fetch(
           `https://open.spotify.com/oembed?url=${encodeURIComponent(trimmed)}`,
-          { signal: AbortSignal.timeout(6000) }
+          { signal: createTimeoutSignal(6000) }
         );
         if (res.ok) {
           const data = (await res.json()) as { title?: string };
@@ -196,14 +263,34 @@ export async function resolveTrackFromUrl(url: string): Promise<Track | null> {
         const title = parts[0]?.trim() || oembedTitle;
         const artist = parts[1]?.trim() || '';
         const query = artist ? `${artist} ${title}` : title;
+        const isLongByTitle = detectLongAudioFromTitle(oembedTitle);
 
         const results = await searchDeezer(query, 0, 5);
         if (results.length > 0) {
           return {
             ...results[0],
             sourceUrl: trimmed,
+            isLongAudio: (results[0].duration > 1200) || isLongByTitle || isPodcastLink,
+            isPodcast: isPodcastLink || isLongByTitle,
           };
         }
+
+        return {
+          id: `sp_${spotifyTrackId || crypto.randomUUID()}`,
+          title,
+          canonicalTitle: title,
+          artist: artist || 'Spotify',
+          album: artist || 'Spotify',
+          canonicalAlbum: artist || 'Spotify',
+          duration: 0,
+          cover: '',
+          preview: '',
+          isrc: '',
+          edition: 'unknown',
+          sourceUrl: trimmed,
+          isLongAudio: isLongByTitle || isPodcastLink,
+          isPodcast: isPodcastLink || isLongByTitle,
+        };
       }
     }
 

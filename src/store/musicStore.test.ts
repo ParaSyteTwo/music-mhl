@@ -313,6 +313,12 @@ describe('useMusicStore', () => {
       useMusicStore.getState().setUiLanguageMode('en');
       expect(useMusicStore.getState().uiLanguageMode).toBe('en');
     });
+
+    it('manages allowLongAudioDownloads toggle', () => {
+      expect(useMusicStore.getState().allowLongAudioDownloads).toBe(false);
+      useMusicStore.getState().setAllowLongAudioDownloads(true);
+      expect(useMusicStore.getState().allowLongAudioDownloads).toBe(true);
+    });
   });
 
   describe('Downloads', () => {

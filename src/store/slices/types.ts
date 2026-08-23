@@ -78,6 +78,7 @@ export interface SettingsSlice {
   cellularResolutionPolicy: CellularResolutionPolicy;
   editionPreference: EditionPreference;
   autoDownload: boolean;
+  allowLongAudioDownloads: boolean;
   ytDlpVersion: string | null;
   ytDlpUpdateAvailable: boolean;
   ytDlpUpdating: boolean;
@@ -96,6 +97,7 @@ export interface SettingsSlice {
   setCellularResolutionPolicy: (v: CellularResolutionPolicy) => void;
   setEditionPreference: (v: EditionPreference) => void;
   setAutoDownload: (v: boolean) => void;
+  setAllowLongAudioDownloads: (v: boolean) => void;
   setYtDlpVersion: (version: string | null) => void;
   setYtDlpUpdateAvailable: (v: boolean) => void;
   setYtDlpUpdating: (v: boolean) => void;

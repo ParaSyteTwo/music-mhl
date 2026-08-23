@@ -15,6 +15,8 @@ export interface Track {
   sourceUrl?: string;
   isrc?: string;
   edition?: TrackEdition;
+  isLongAudio?: boolean;
+  isPodcast?: boolean;
 }
 
 export interface Download {
