@@ -262,7 +262,7 @@ export default function SearchPage() {
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
   const suggestedSearches = useMemo(
-    () => buildAffinityPool(mostDownloadedArtists, 12, {
+    () => buildAffinityPool(mostDownloadedArtists, 18, {
       rotation: artistRotation,
       exclude: artistExclusions,
     }),
@@ -814,26 +814,48 @@ export default function SearchPage() {
                           )}
                         </div>
                         <div className="absolute top-2 right-2 flex items-center gap-1">
-                          {isNativeProduct && bestCandidate && !downloaded && (
+                          <button
+                            onClick={(e) => {
+                              if (downloading || downloaded) return;
+                              if (isNativeProduct && bestCandidate) {
+                                void handleBestDownloadClick(e, track);
+                              } else {
+                                handleDownloadClick(e, track);
+                              }
+                            }}
+                            onMouseEnter={() => { if (!downloading && !downloaded) handleDownloadPrefetch(track); }}
+                            onTouchStart={() => { if (!downloading && !downloaded) handleDownloadPrefetch(track); }}
+                            disabled={downloading || bestResolving}
+                            className={`p-2 rounded-lg transition-all shadow-md flex items-center justify-center ${
+                              downloading
+                                ? 'bg-black/60 text-[#C8F04B]'
+                                : downloaded
+                                  ? 'bg-[#C8F04B]/20 text-[#C8F04B]'
+                                  : isNativeProduct && bestCandidate
+                                    ? 'bg-[#C8F04B] text-[#18181A] hover:bg-[#d4f56a] hover:scale-105'
+                                    : 'bg-black/60 text-white hover:bg-black/80'
+                            }`}
+                            title={downloaded ? t('downloadComplete') : isNativeProduct && bestCandidate ? t('downloadBestMatch') : t('downloadMp3')}
+                          >
+                            {downloading || bestResolving ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : downloaded ? (
+                              <CheckCircle className="w-4 h-4 text-[#C8F04B]" />
+                            ) : isNativeProduct && bestCandidate ? (
+                              <Zap className="w-4 h-4 fill-current" />
+                            ) : (
+                              <Download className="w-4 h-4" />
+                            )}
+                          </button>
+                          {isNativeProduct && !downloaded && !downloading && (
                             <button
-                              onClick={(e) => { if (!downloading && !bestResolving) void handleBestDownloadClick(e, track); }}
-                              disabled={downloading || bestResolving}
-                              className="p-2 rounded-lg bg-[#C8F04B] text-[#18181A] hover:bg-[#d4f56a] transition-colors disabled:opacity-60"
-                              title={t('downloadBestMatch')}
+                              onClick={(e) => { e.stopPropagation(); setPickerTrack(track); }}
+                              className="p-1.5 rounded-lg bg-black/40 text-[#8E8E88] hover:text-white hover:bg-black/70 transition-colors"
+                              title={t('chooseExactSong')}
                             >
-                              {bestResolving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                              <RefreshCw className="w-3 h-3" />
                             </button>
                           )}
-                          <button
-                            onClick={(e) => { if (!downloading) handleDownloadClick(e, track); }}
-                            onMouseEnter={() => { if (!downloading) handleDownloadPrefetch(track); }}
-                            onTouchStart={() => { if (!downloading) handleDownloadPrefetch(track); }}
-                            disabled={downloading}
-                            className="p-2 rounded-lg bg-black/60 text-white hover:bg-black/80 transition-colors"
-                            title={t('downloadMp3')}
-                          >
-                            {downloading ? <Loader2 className="w-4 h-4 animate-spin" /> : downloaded ? <CheckCircle className="w-4 h-4 text-[#C8F04B]" /> : <Download className="w-4 h-4" />}
-                          </button>
                         </div>
                       </div>
                       <span className="absolute bottom-1.5 right-1.5 text-[10px] tabular-nums bg-black/70 text-white px-1.5 py-0.5 rounded">
@@ -931,28 +953,50 @@ export default function SearchPage() {
                     <span className="text-[10px] text-[#444] tabular-nums flex-shrink-0">
                       {formatDuration(track.duration)}
                     </span>
-                    {isNativeProduct && bestCandidate && !downloaded && (
+                    <div className="flex items-center gap-1 flex-shrink-0">
                       <button
-                        onClick={(e) => { if (!downloading && !bestResolving) void handleBestDownloadClick(e, track); }}
+                        onClick={(e) => {
+                          if (downloading || downloaded) return;
+                          if (isNativeProduct && bestCandidate) {
+                            void handleBestDownloadClick(e, track);
+                          } else {
+                            handleDownloadClick(e, track);
+                          }
+                        }}
+                        onMouseEnter={() => { if (!downloading && !downloaded) handleDownloadPrefetch(track); }}
+                        onTouchStart={() => { if (!downloading && !downloaded) handleDownloadPrefetch(track); }}
                         disabled={downloading || bestResolving}
-                        className="p-2.5 rounded-xl transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center text-[#18181A] bg-[#C8F04B] active:bg-[#d4f56a] disabled:opacity-60"
-                        title={t('downloadBestMatch')}
+                        className={`p-2.5 rounded-xl transition-all min-w-[44px] min-h-[44px] flex items-center justify-center shadow-sm active:scale-95 ${
+                          downloading
+                            ? 'text-[#C8F04B] cursor-wait bg-white/[0.04]'
+                            : downloaded
+                              ? 'text-[#C8F04B] bg-[#C8F04B]/10'
+                              : isNativeProduct && bestCandidate
+                                ? 'bg-[#C8F04B] text-[#18181A] active:bg-[#d4f56a]'
+                                : 'text-[#8E8E88] hover:text-[#C8F04B] active:text-[#C8F04B] bg-white/[0.04]'
+                        }`}
+                        title={downloaded ? t('downloadComplete') : isNativeProduct && bestCandidate ? t('downloadBestMatch') : t('downloadMp3')}
                       >
-                        {bestResolving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Zap className="w-5 h-5" />}
+                        {downloading || bestResolving ? (
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                        ) : downloaded ? (
+                          <CheckCircle className="w-5 h-5" />
+                        ) : isNativeProduct && bestCandidate ? (
+                          <Zap className="w-5 h-5 fill-current" />
+                        ) : (
+                          <Download className="w-5 h-5" />
+                        )}
                       </button>
-                    )}
-                    <button
-                      onClick={(e) => { if (!downloading) handleDownloadClick(e, track); }}
-                      onMouseEnter={() => { if (!downloading) handleDownloadPrefetch(track); }}
-                      onTouchStart={() => { if (!downloading) handleDownloadPrefetch(track); }}
-                      disabled={downloading}
-                      className={`p-2.5 -mr-1 rounded-xl transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center ${
-                        downloading ? 'text-[#C8F04B] cursor-wait' : downloaded ? 'text-[#C8F04B]' : 'text-[#666660] hover:text-[#C8F04B] active:text-[#C8F04B] hover:bg-[rgba(200,240,75,0.1)]'
-                      }`}
-                      title={t('downloadMp3')}
-                    >
-                      {downloading ? <Loader2 className="w-5 h-5 animate-spin" /> : downloaded ? <CheckCircle className="w-5 h-5" /> : <Download className="w-5 h-5" />}
-                    </button>
+                      {isNativeProduct && !downloaded && !downloading && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setPickerTrack(track); }}
+                          className="p-2 rounded-xl text-[#70706B] hover:text-[#F5F5F0] transition-colors"
+                          title={t('chooseExactSong')}
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
                   </motion.div>
                 );
               })}

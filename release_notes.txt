@@ -1,19 +1,15 @@
-MHL Music 1.5.1 Beta 11 (Corrección Crítica de Ajustes & Suite de Tests Robusta)
+MHL Music 1.5.1 (Release Oficial: 13 Mundos Visuales, Cuadrícula 2-Col, Descarga Unificada & 18 Artistas)
 
-MHL Music 1.5.1 Beta 11 soluciona el fallo en la pantalla de Ajustes restaurando la importación de iconos y añadiendo tests unitarios integrales para garantizar estabilidad total.
+MHL Music 1.5.1 es la versión oficial definitiva con personalización estética extrema, cuadrícula de temas en 2 columnas, botón de descarga inteligente unificado, tipografías Google Fonts dedicadas por estilo y 18 artistas sugeridos en el explorador.
 
-✨ **Novedades de la Versión**
+✨ **Principales Novedades de la Versión 1.5.1**
 
-- **Corrección Crítica en Ajustes:** Solucionado el error de renderizado en la sección de opciones avanzadas.
-- **Reproductor Predeterminado Plegable:** Selector de reproductor externo compacto en Android con indicador del reproductor activo y desplegable fluido.
-- **Suite de Tests Blindada:** 239/239 pruebas automáticas pasando al 100%.
-- **13 Mundos Visuales con ADN Único:** Tipografías, bordes geométricos e iconos específicos para cada tema.
-- **ADN Visual y Tipográfico por Tema:** 13 temas con iconos dedicados, tipografías personalizadas (JetBrains Mono para Matrix, Syne Italic para Vaporwave, Georgia para Solar, etc.), y badges de funciones exclusivas.
-- **Selector Acordeón Fluido:** Desplegable de Apariencia con banner de gradiente y paleta de acentos.
-- **Selector Desplegable Acordeón:** Apariencia limpia y ordenada en Ajustes.
-- **Selector Acordeón Fluido:** Desplegable de Apariencia con banner de gradiente y paleta de acentos.
-- **Pantalla de Búsqueda 100% Cero-Scroll:** Cuadrícula de 12 artistas optimizada ergonómicamente.
-- **Nuevo Isotipo Oficial HD:** Auriculares de estudio en relieve 3D sin texto.
+- **Selector de Temas en 2 Columnas:** Cuadrícula de 2 columnas ('grid-cols-2') compacta y balanceada en Ajustes, con iconos de aplicación estilizados, badges de efectos visuales y swatches de color.
+- **Acción de Descarga Inteligente Unificada:** Integración completa de la descarga de mejor coincidencia verificada ('Zap') y descarga manual en un único botón inteligente y reactivo.
+- **13 Tipografías Radicales por Tema:** Inyección de familias tipográficas reales con Google Fonts (JetBrains Mono, Syne, Space Grotesk, Playfair Display, Orbitron, Cinzel, Outfit, Quicksand, Fredoka, etc.) que transforman por completo toda la interfaz al cambiar de tema.
+- **18 Artistas Sugeridos en Búsqueda:** Cuadrícula expandida de 6 filas de 3 artistas en móviles (18 artistas con avatares de monograma y géneros musicales).
+- **Ajustes 100% Organizados:** Acordeones colapsables elegantes para Apariencia & Temas, Opciones avanzadas (anime, auto-descarga, resolución, letras) y Reproductor predeterminado.
+- **13 Estilos Visuales Completos:**
   1. ⚡ *Acid Cyberpunk* (Neón Lima Eléctrico)
   2. 🌌 *OLED Sapphire* (Azul Cobalto Láser)
   3. 🌸 *Vaporwave Sunset* (Degradado Retro Magenta & Naranja)
@@ -27,10 +23,6 @@ MHL Music 1.5.1 Beta 11 soluciona el fallo en la pantalla de Ajustes restaurando
   11. 🛸 *Matrix Terminal* (Fósforo Verde CRT Hacker)
   12. 🪙 *Titanium Luxury* (Platino Plateado de Lujo)
   13. 🎧 *MHL Minimalista Clásico* (El clásico original puro)
-- **4 Líneas de Artistas (12 en total):** Cuadrícula simétrica optimizada para móviles.
-- **Catálogo de +1.500 Artistas y Afinidad de Descarga:** Recomendaciones inteligentes que aprenden de tus gustos musicales.
-- **Pantalla de Búsqueda sin Scroll:** Todo cabe de forma equilibrada y elegante en la pantalla de inicio sin desbordes verticales en móviles.
-- **Tipografía Limpia y Natural:** Encabezados desahogados sin fuentes comprimidas artificialmente.
 
 🚀 **Rendimiento Extremo & Fluidez**
 
@@ -44,6 +36,4 @@ MHL Music 1.5.1 Beta 11 soluciona el fallo en la pantalla de Ajustes restaurando
 - **Limpieza Visual de Estados Vacíos:** Eliminación de iconos y bloques redundantes para una experiencia limpia y fluida.
 - **Blindaje contra Errores de Red:** Protección en la vista de descargas con limitación de texto para prevenir roturas visuales.
 - **Paridad Lingüística Completa:** 100% de los textos, etiquetas y géneros traducidos con total naturalidad en Español e Inglés.
-
-
-
+- **Estabilidad y Cobertura Total:** 239/239 pruebas unitarias automáticas pasando al 100%.

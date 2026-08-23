@@ -224,8 +224,8 @@ export default function SettingsPage() {
         </button>
 
         {showThemes && (
-          <div className="mt-3 p-3.5 sm:p-4 rounded-2xl bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.06)] animate-in slide-in-from-top-2 fade-in duration-200">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-3">
+          <div className="mt-3 p-3 sm:p-4 rounded-2xl bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.06)] animate-in slide-in-from-top-2 fade-in duration-200">
+            <div className="grid grid-cols-2 gap-2 sm:gap-3">
               {Object.values(APP_THEMES).map((theme) => {
                 const isActive = (appTheme || 'original_minimalist') === theme.id;
                 return (
@@ -233,7 +233,7 @@ export default function SettingsPage() {
                     key={theme.id}
                     type="button"
                     onClick={() => setAppTheme(theme.id)}
-                    className={`group relative flex flex-col p-3 rounded-xl border text-left transition-all overflow-hidden active:scale-95 ${
+                    className={`group relative flex flex-col p-2.5 sm:p-3 rounded-xl border text-left transition-all overflow-hidden active:scale-95 min-w-0 ${
                       isActive
                         ? 'border-[var(--accent-primary)] bg-white/[0.08] shadow-lg shadow-[var(--accent-glow)] ring-1 ring-[var(--accent-primary)]/50'
                         : 'border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.05] hover:border-white/[0.12]'
@@ -241,19 +241,19 @@ export default function SettingsPage() {
                   >
                     {/* Top ambient banner with theme gradient */}
                     <div 
-                      className="w-full h-1.5 rounded-full mb-2 opacity-85 group-hover:opacity-100 transition-opacity"
+                      className="w-full h-1 sm:h-1.5 rounded-full mb-2 opacity-85 group-hover:opacity-100 transition-opacity flex-shrink-0"
                       style={{ background: theme.gradient }}
                     />
                     
-                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                    <div className="flex items-center justify-between gap-1.5 mb-1.5 w-full">
                       <div className="flex items-center gap-1.5 min-w-0">
                         <div 
-                          className="w-7 h-7 rounded-lg flex items-center justify-center text-sm flex-shrink-0 shadow-sm border border-white/10"
+                          className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center text-xs sm:text-sm flex-shrink-0 shadow-sm border border-white/10"
                           style={{ background: theme.bgSurface }}
                         >
                           {theme.emoji}
                         </div>
-                        <span className="text-[8px] font-mono tracking-wider px-1.5 py-0.5 rounded bg-white/[0.06] text-[#A0A098] uppercase font-bold truncate">
+                        <span className="text-[7.5px] sm:text-[8px] font-mono tracking-wider px-1 sm:px-1.5 py-0.5 rounded bg-white/[0.06] text-[#A0A098] uppercase font-bold truncate">
                           {theme.badge}
                         </span>
                       </div>
@@ -261,28 +261,28 @@ export default function SettingsPage() {
                         {theme.swatch.map((color, idx) => (
                           <span
                             key={idx}
-                            className="w-2.5 h-2.5 rounded-full border border-black/40 shadow-sm flex-shrink-0"
+                            className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full border border-black/40 shadow-sm flex-shrink-0"
                             style={{ backgroundColor: color }}
                           />
                         ))}
                       </div>
                     </div>
 
-                    <p className={`text-xs font-bold leading-tight mt-0.5 ${isActive ? 'text-[var(--accent-primary)]' : 'text-[#F5F5F0]'}`}>
+                    <p className={`text-xs font-bold leading-tight mt-0.5 truncate w-full ${isActive ? 'text-[var(--accent-primary)]' : 'text-[#F5F5F0]'}`}>
                       {t(theme.nameKey)}
                     </p>
                     
                     {/* Unique Signature feature & Font tags */}
-                    <div className="flex flex-wrap gap-1 mt-1.5 mb-1">
-                      <span className="text-[7.5px] font-semibold px-1.5 py-0.5 rounded-md bg-white/[0.05] text-[#D0D0C8] border border-white/[0.05] truncate max-w-full">
+                    <div className="flex flex-col gap-0.5 mt-1.5 mb-1 w-full min-w-0">
+                      <span className="text-[7px] sm:text-[8px] font-semibold px-1 py-0.5 rounded bg-white/[0.05] text-[#D0D0C8] border border-white/[0.05] truncate w-full">
                         {theme.signatureFx}
                       </span>
-                      <span className="text-[7.5px] font-mono px-1.5 py-0.5 rounded-md bg-white/[0.03] text-[#8E8E88] truncate max-w-full">
+                      <span className="text-[7px] sm:text-[8px] font-mono px-1 py-0.5 rounded bg-white/[0.03] text-[#8E8E88] truncate w-full">
                         Aa {theme.font}
                       </span>
                     </div>
 
-                    <p className="text-[9.5px] text-[#8E8E88] leading-tight line-clamp-2 mt-0.5">
+                    <p className="text-[9px] sm:text-[9.5px] text-[#8E8E88] leading-tight line-clamp-2 mt-0.5 hidden sm:block">
                       {t(theme.descKey)}
                     </p>
                   </button>
