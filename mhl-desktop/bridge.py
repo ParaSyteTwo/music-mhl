@@ -18,7 +18,7 @@ from urllib.parse import quote_plus, urlparse
 # CREATE_NO_WINDOW para evitar popup de consola en Windows
 CREATE_NO_WINDOW = 0x08000000 if sys.platform == 'win32' else 0
 
-APP_VERSION = '1.5.5'
+APP_VERSION = '1.5.6-beta.1'
 
 import requests
 
@@ -957,6 +957,10 @@ Start-Sleep -Seconds 1
 # Si sigue corriendo por alguna razón, forzar término
 Stop-Process -Id $pidToWait -Force -ErrorAction SilentlyContinue
 
+# Terminar procesos secundarios huérfanos que puedan bloquear ejecutables (yt-dlp, ffmpeg)
+Get-Process -Name 'yt-dlp', 'ffmpeg' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Start-Sleep -Milliseconds 500
+
 # Extraer contenido en subcarpeta temporal
 $extractDir = Join-Path (Split-Path $archivePath) 'extracted'
 if (Test-Path -LiteralPath $extractDir) { Remove-Item -LiteralPath $extractDir -Recurse -Force }
@@ -969,8 +973,20 @@ if (Test-Path -LiteralPath $configPath) {
     Copy-Item -LiteralPath $configPath -Destination $configBackup -Force
 }
 
-# Copiar archivos a la carpeta de la aplicación
-Copy-Item -Path (Join-Path $extractDir '*') -Destination $targetAppDir -Recurse -Force
+# Copiar archivos a la carpeta de la aplicación con reintentos
+$copied = $false
+for ($attempt = 0; $attempt -lt 5; $attempt++) {
+    try {
+        Copy-Item -Path (Join-Path $extractDir '*') -Destination $targetAppDir -Recurse -Force
+        $copied = $true
+        break
+    } catch {
+        Start-Sleep -Seconds 1
+    }
+}
+if (-not $copied) {
+    robocopy $extractDir $targetAppDir /E /IS /IT /NP /R:3 /W:1 | Out-Null
+}
 
 # Restaurar o asegurar configuración .NET
 if (Test-Path -LiteralPath $configBackup) {

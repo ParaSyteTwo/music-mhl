@@ -22,9 +22,11 @@ vi.mock('@capacitor/core', () => ({
 }));
 
 import {
+  applyDesktopUpdate,
   cancelAndroidUpdateDownload,
   downloadAndroidUpdate,
   getInstalledAppIdentity,
+  getInstalledDesktopIdentity,
   inspectDownloadedApk,
   installAndroidUpdate,
 } from './appUpdaterBridge';
@@ -142,6 +144,48 @@ describe('app updater bridge', () => {
     })).resolves.toMatchObject({
       success: false,
       error: { code: 'INSTALL_PERMISSION_REQUIRED' },
+    });
+  });
+
+  describe('desktop update bridge', () => {
+    it('returns baseline 1.0.0 for legacy pywebview runtime without get_app_info', async () => {
+      // @ts-expect-error simulate pywebview without get_app_info
+      window.pywebview = { api: {} };
+      const identity = await getInstalledDesktopIdentity();
+      expect(identity.success).toBe(true);
+      if (identity.success) {
+        expect(identity.data.versionName).toBe('1.0.0');
+      }
+      // @ts-expect-error cleanup
+      delete window.pywebview;
+    });
+
+    it('returns actual version when get_app_info is provided', async () => {
+      // @ts-expect-error simulate pywebview with get_app_info
+      window.pywebview = {
+        api: {
+          get_app_info: vi.fn().mockResolvedValue({ success: true, version: '1.5.4', frozen: true, app_dir: 'C:\\app' }),
+        },
+      };
+      const identity = await getInstalledDesktopIdentity();
+      expect(identity.success).toBe(true);
+      if (identity.success) {
+        expect(identity.data.versionName).toBe('1.5.4');
+      }
+      // @ts-expect-error cleanup
+      delete window.pywebview;
+    });
+
+    it('falls back to window.open when apply_desktop_update is not available on legacy pywebview', async () => {
+      const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+      // @ts-expect-error simulate pywebview without apply_desktop_update
+      window.pywebview = { api: {} };
+      const result = await applyDesktopUpdate('https://github.com/test.zip', '1.5.5');
+      expect(result.success).toBe(true);
+      expect(openSpy).toHaveBeenCalledWith('https://github.com/test.zip', '_blank');
+      openSpy.mockRestore();
+      // @ts-expect-error cleanup
+      delete window.pywebview;
     });
   });
 });

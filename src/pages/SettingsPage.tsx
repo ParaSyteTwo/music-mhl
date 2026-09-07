@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Settings, Folder, RefreshCw, CheckCircle2, FolderOpen, X, Music2, ChevronDown, ChevronRight, Palette, Zap } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { toast } from 'sonner';
 import { useMusicStore } from '@/store/musicStore';
 import { useI18n } from '@/lib/useI18n';
 import type { LyricsTargetLanguage, UiLanguageMode } from '@/lib/language';
@@ -340,7 +341,7 @@ export default function SettingsPage() {
             </div>
             <div>
               <p className="text-sm font-semibold text-[#F5F5F0]">{t('advancedOptions')}</p>
-              <p className="text-xs text-[#9E9E98] mt-0.5">Anime, descargas automáticas, resolución y letras</p>
+              <p className="text-xs text-[#9E9E98] mt-0.5">{t('advancedOptionsSubtitle')}</p>
             </div>
           </div>
           <div className="flex-shrink-0">
@@ -391,7 +392,7 @@ export default function SettingsPage() {
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-semibold text-[#F5F5F0]">{t('allowLongAudioDownloads')}</p>
                     <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                      Térmico / CPU
+                      {t('thermalCpu')}
                     </span>
                   </div>
                   <p className="text-xs text-[#9E9E98] mt-1">{t('allowLongAudioDownloadsHelp')}</p>
@@ -426,7 +427,7 @@ export default function SettingsPage() {
                     </span>
                     {(downloadAudioFormat || 'm4a') === 'm4a' && (
                       <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-[var(--accent-primary)] text-[#18181A]">
-                        ACTIVO
+                        {t('formatActive')}
                       </span>
                     )}
                   </div>
@@ -450,7 +451,7 @@ export default function SettingsPage() {
                     </span>
                     {downloadAudioFormat === 'mp3' && (
                       <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-[var(--accent-primary)] text-[#18181A]">
-                        ACTIVO
+                        {t('formatActive')}
                       </span>
                     )}
                   </div>
@@ -559,7 +560,7 @@ export default function SettingsPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-base font-semibold text-[#F5F5F0]">yt-dlp</span>
-                        <span className="text-xs font-mono text-[#8A8A8A]">{ytDlpVersion ?? 'cargando…'}</span>
+                        <span className="text-xs font-mono text-[#8A8A8A]">{ytDlpVersion ?? t('loading')}</span>
                       </div>
                       <p className="text-xs text-[#8A8A8A] mt-0.5">{t('downloadEngineHelp')}</p>
                       {ytDlpUpdateAvailable && (
@@ -598,10 +599,10 @@ export default function SettingsPage() {
 
             {/* Backup Section */}
             <section>
-              <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">{t('backupRestore') || 'BACKUP & RESTORE'}</h2>
+              <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">{t('backupRestore')}</h2>
               <div className="p-4 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] flex flex-col gap-4">
                 <p className="text-xs text-[#8A8A8A]">
-                  {t('backupDesc') || 'Exporta tu historial de descargas para restaurarlo en otro dispositivo. Esto solo guarda la lista de canciones, no los archivos de audio.'}
+                  {t('backupDesc')}
                 </p>
                 <div className="flex gap-2">
                   <button
@@ -620,11 +621,11 @@ export default function SettingsPage() {
                     }}
                     className="flex-1 py-2 rounded-md bg-[#232325] text-xs font-semibold text-[#F5F5F0] border border-[rgba(255,255,255,0.05)] hover:bg-[#2A2A2D]"
                   >
-                    {t('exportBackup') || 'Exportar JSON'}
+                    {t('exportBackup')}
                   </button>
                   <label className="flex-1 cursor-pointer">
                     <div className="w-full text-center py-2 rounded-md bg-[#C8F04B] text-xs font-semibold text-[#18181A] hover:bg-[#d4f56a]">
-                      {t('importBackup') || 'Importar JSON'}
+                      {t('importBackup')}
                     </div>
                     <input
                       type="file"
@@ -642,10 +643,10 @@ export default function SettingsPage() {
                               localStorage.setItem('mhl-store', data);
                               window.location.reload();
                             } else {
-                              alert(t('invalidBackup') || 'El archivo no tiene el formato correcto.');
+                              toast.error(t('invalidBackup'));
                             }
                           } catch {
-                            alert(t('invalidBackup') || 'El archivo está corrupto.');
+                            toast.error(t('corruptBackup'));
                           }
                         };
                         reader.readAsText(file);

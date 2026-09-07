@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.5.6-beta.1 - 2026-09-05
+
+**MHL Music 1.5.6-beta.1 (Paridad Bilingüe Total & Resiliencia de Actualizaciones)**
+
+🛠 **Correcciones y Estabilidad**
+- **Actualizador Multiversión Sin Fricción:** Detección de versiones previas en instalaciones de escritorio antiguas que carecían de los métodos modernos del bridge nativo (`get_app_info` / `apply_desktop_update`), ofreciendo fallback inmediato al navegador oficial para descarga directa.
+- **Desbloqueo de Archivos en Windows:** El asistente de actualización `update_runner.ps1` ahora cierra de forma limpia procesos secundarios en segundo plano (`yt-dlp.exe`, `ffmpeg.exe`) antes de extraer nuevos binarios, agregando reintentos escalonados y fallback a `robocopy` para evitar errores de archivo bloqueado.
+- **Lógica de Comparación SemVer 2.0:** Normalización del orden de precedencia de versiones para tratar pre-releases (`-beta`, `-rc`) con máxima rigurosidad, asegurando que las versiones estables y betas se reconozcan en el orden correcto.
+
+✨ **Experiencia de Usuario e Internacionalización (i18n)**
+- **Paridad Bilingüe al 100% (EN / ES):** Localización completa del botón dinámico "Ver más" (`showMore`) en el área de descargas, los avisos de fallback a catálogo de reserva en búsquedas, los avisos de límite de tasa, y la validación de enlaces externos.
+- **Diálogos de Ajustes y Notificaciones:** Sustitución de alertas genéricas del navegador por notificaciones estilizadas y traducidas al restaurar o respaldar configuraciones, junto a la localización de badges de rendimiento y formato de audio activo.
+- **Servicio en Primer Plano Android:** Las notificaciones nativas de descarga en Android ahora adaptan automáticamente su título y descripción al idioma seleccionado por el usuario.
+
+🛡️ **Seguridad y Contrato de Actualización**
+- **Verificación de Identidad Android:** `versionCode 67`, firmado con el certificado oficial de MHL Music y acompañado de su manifiesto canónico `MHL-Music-Android.json`.
+
 ## v1.5.5 - 2026-08-23
 
 **MHL Music 1.5.5 (Blindaje de Seguridad y Resiliencia Extrema)**

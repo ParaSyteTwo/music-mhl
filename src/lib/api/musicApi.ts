@@ -11,9 +11,27 @@ import {
   type RawDownloadCandidate,
 } from '@/lib/download/candidateResolver';
 
+import { translate } from '@/lib/i18n';
+import { resolveEffectiveLanguage, type UiLanguageMode } from '@/lib/language';
+
 export type { DownloadCandidate } from '@/lib/download/candidateResolver';
 
 export { looksAnimeLike };
+
+function getApiText(key: string): string {
+  try {
+    let mode: UiLanguageMode | undefined;
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('mhl-store');
+      if (stored) {
+        mode = JSON.parse(stored)?.state?.uiLanguageMode;
+      }
+    }
+    return translate(resolveEffectiveLanguage(mode || 'system'), key);
+  } catch {
+    return translate('es', key);
+  }
+}
 
 interface PyWebViewApi {
   anime_search?: (query: string, limit: number) => Promise<{ success: boolean; error?: string; results?: Anime[] }>
@@ -223,7 +241,7 @@ export async function searchDeezer(query: string, offset = 0, limit = 25): Promi
         console.log('[Search] Fallback to iTunes API');
         if (typeof window !== 'undefined') {
           import('sonner').then(({ toast }) => {
-            toast.info('Buscando en catálogo de respaldo...', { id: 'itunes-fallback' });
+            toast.info(getApiText('searchFallbackCatalog'), { id: 'itunes-fallback' });
           });
         }
         tracks = deduplicateTracks(await searchITunes(normalizedQuery, limit));
@@ -236,7 +254,7 @@ export async function searchDeezer(query: string, offset = 0, limit = 25): Promi
       console.log('[Search] Fallback to iTunes API on error');
       if (typeof window !== 'undefined') {
         import('sonner').then(({ toast }) => {
-          toast.info('Conexión inestable, usando catálogo de respaldo...', { id: 'itunes-fallback' });
+          toast.info(getApiText('searchUnstableFallback'), { id: 'itunes-fallback' });
         });
       }
       const tracks = deduplicateTracks(await searchITunes(normalizedQuery, limit));
@@ -618,7 +636,7 @@ async function fetchDownloadCandidates(
         source: 'youtube_music',
         depth: expanded || options.depth === 'deep' ? 'deep' : 'light',
       });
-      if (!result.success) throw new Error(result.error || 'Error obteniendo candidatos');
+      if (!result.success) throw new Error(result.error || getApiText('errorGettingCandidates'));
       let rawCandidates = result.candidates as RawDownloadCandidate[];
       let finalCandidates = resolveDownloadCandidates(
         track,
@@ -801,7 +819,7 @@ export async function downloadTrackAudio(
       track.duration ?? 0,
       format,
     );
-    if (!result.success) throw new Error(result.error || 'Error descargando audio');
+    if (!result.success) throw new Error(result.error || getApiText('errorDownloadingAudio'));
     onProgress?.(85);
     onProgress?.(95);
     return decodeBase64ArrayBuffer(result.data_b64 as string);

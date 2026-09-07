@@ -53,15 +53,50 @@ interface AppUpdateState {
   dismissCurrentBuild: () => void;
 }
 
-function compareSemver(a: string, b: string): number {
-  const pa = a.split('.').map((n) => parseInt(n, 10) || 0);
-  const pb = b.split('.').map((n) => parseInt(n, 10) || 0);
-  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-    const na = pa[i] ?? 0;
-    const nb = pb[i] ?? 0;
+export function compareSemver(a: string, b: string): number {
+  const cleanA = a.trim().replace(/^v/i, '');
+  const cleanB = b.trim().replace(/^v/i, '');
+  if (cleanA === cleanB) return 0;
+
+  const [coreA, ...prA] = cleanA.split('-');
+  const [coreB, ...prB] = cleanB.split('-');
+
+  const numsA = coreA.split('.').map((n) => parseInt(n, 10) || 0);
+  const numsB = coreB.split('.').map((n) => parseInt(n, 10) || 0);
+
+  for (let i = 0; i < Math.max(numsA.length, numsB.length); i++) {
+    const na = numsA[i] ?? 0;
+    const nb = numsB[i] ?? 0;
     if (na > nb) return 1;
     if (na < nb) return -1;
   }
+
+  const preStrA = prA.join('-');
+  const preStrB = prB.join('-');
+
+  if (!preStrA && preStrB) return 1;
+  if (preStrA && !preStrB) return -1;
+
+  if (preStrA && preStrB) {
+    const partsA = preStrA.split('.');
+    const partsB = preStrB.split('.');
+    for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
+      const pA = partsA[i];
+      const pB = partsB[i];
+      if (pA === undefined) return -1;
+      if (pB === undefined) return 1;
+      const numA = /^\d+$/.test(pA) ? parseInt(pA, 10) : null;
+      const numB = /^\d+$/.test(pB) ? parseInt(pB, 10) : null;
+      if (numA !== null && numB !== null) {
+        if (numA > numB) return 1;
+        if (numA < numB) return -1;
+      } else {
+        const cmp = pA.localeCompare(pB);
+        if (cmp !== 0) return cmp > 0 ? 1 : -1;
+      }
+    }
+  }
+
   return 0;
 }
 

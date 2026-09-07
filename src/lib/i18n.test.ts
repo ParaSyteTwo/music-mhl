@@ -40,4 +40,36 @@ describe('i18n language resolution', () => {
       artist: 'Artist',
     })).toBe('Downloaded: Song - Artist');
   });
+
+  it('translates showMore correctly in English and Spanish', () => {
+    expect(translate('es', 'showMore', { count: 4 })).toBe('Ver 4 más');
+    expect(translate('en', 'showMore', { count: 4 })).toBe('Show 4 more');
+  });
+
+  it('translates newly added notification and popup keys in both languages', () => {
+    const keys = [
+      'searchFallbackCatalog',
+      'searchUnstableFallback',
+      'errorGettingCandidates',
+      'errorDownloadingAudio',
+      'pasteFromClipboard',
+      'pasteLink',
+      'advancedOptionsSubtitle',
+      'thermalCpu',
+      'formatActive',
+      'corruptBackup',
+      'rateLimitCooldown',
+      'foregroundDownloading',
+      'downloadFailed',
+      'themeFetchError',
+    ];
+
+    for (const key of keys) {
+      const esVal = translate('es', key, { seconds: 5 });
+      const enVal = translate('en', key, { seconds: 5 });
+      expect(esVal).not.toBe(key);
+      expect(enVal).not.toBe(key);
+      expect(esVal).not.toBe(enVal);
+    }
+  });
 });

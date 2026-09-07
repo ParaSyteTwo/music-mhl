@@ -213,10 +213,10 @@ export default function SearchPage() {
       setAnimeThemes(response.themes);
     } else {
       setAnimeThemes([]);
-      const errMsg = response.error ?? 'Unknown themes fetch error';
+      const errMsg = response.error ?? t('themeFetchError');
       toast.error(errMsg);
     }
-  }, []);
+  }, [t]);
 
   const handleAnimeModeToggle = useCallback(() => {
     const trimmed = query.trim();
@@ -251,11 +251,11 @@ export default function SearchPage() {
             toast(t('animeThemesDeadVideo'));
             if (response.track) setPickerTrack(response.track);
           } else {
-            toast.error(response.error ?? 'Download failed');
+            toast.error(response.error ?? t('downloadFailed'));
           }
         })
         .catch((error) => {
-          const message = error instanceof Error ? error.message : 'Download failed';
+          const message = error instanceof Error ? error.message : t('downloadFailed');
           toast.error(message);
         })
         .finally(() => {
@@ -289,7 +289,7 @@ export default function SearchPage() {
     if (!trimmed) return;
 
     if (isUnsupportedCollectionUrl(trimmed)) {
-      toast.error('Pega el enlace de una canción o pista individual', { id: 'url-resolve' });
+      toast.error(t('invalidMediaUrl'), { id: 'url-resolve' });
       return;
     }
 
@@ -613,8 +613,8 @@ export default function SearchPage() {
               type="button"
               onClick={handlePasteFromClipboard}
               className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-[#6E6E68] hover:text-[#C8F04B] hover:bg-white/[0.06] transition-colors"
-              title="Pegar enlace del portapapeles"
-              aria-label="Pegar enlace"
+              title={t('pasteFromClipboard')}
+              aria-label={t('pasteLink')}
             >
               <Clipboard className="w-3.5 h-3.5" />
             </button>

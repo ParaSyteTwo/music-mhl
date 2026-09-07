@@ -353,7 +353,7 @@ export async function getInstalledDesktopIdentity(): Promise<AppUpdateResult<Ins
           success: true,
           data: {
             platform: 'desktop',
-            versionName: res.version || '1.5.5',
+            versionName: res.version || '1.0.0',
             frozen: !!res.frozen,
             appDir: res.app_dir || '',
           },
@@ -364,7 +364,7 @@ export async function getInstalledDesktopIdentity(): Promise<AppUpdateResult<Ins
       success: true,
       data: {
         platform: 'desktop',
-        versionName: '1.5.5',
+        versionName: isPyWebView ? '1.0.0' : '1.5.5',
         frozen: false,
         appDir: '',
       },
@@ -388,12 +388,27 @@ export async function applyDesktopUpdate(
     const isPyWebView = typeof window !== 'undefined' && 'pywebview' in window;
     const pyWindow = typeof window !== 'undefined' ? (window as PyWebViewDesktopWindow) : undefined;
     const api = pyWindow?.pywebview?.api;
-    if (!isPyWebView || !api?.apply_desktop_update) {
+    if (!isPyWebView) {
       return {
         success: false,
         error: {
           code: 'UNSUPPORTED_PLATFORM',
           detail: 'Desktop auto-updater is only available in pywebview desktop runtime.',
+        },
+      };
+    }
+
+    if (!api?.apply_desktop_update) {
+      // Legacy desktop build (< 1.5.4): redirigir a descarga manual en navegador
+      if (typeof window !== 'undefined') {
+        window.open(url, '_blank');
+        return { success: true, data: { started: true } };
+      }
+      return {
+        success: false,
+        error: {
+          code: 'UNSUPPORTED_PLATFORM',
+          detail: 'Desktop update method unavailable on this version. Please download from GitHub.',
         },
       };
     }

@@ -5,9 +5,10 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { useMusicStore } from "@/store/musicStore";
 import { useI18n } from "@/lib/useI18n";
+import { translate } from "@/lib/i18n";
 import { useAppUpdateStore } from "@/store/appUpdateStore";
 import { getDeviceContext } from "@/lib/deviceContext";
-import { setNativeLocale } from "@/lib/language";
+import { resolveEffectiveLanguage, setNativeLocale } from "@/lib/language";
 
 const SearchPage = lazy(() => import("./pages/SearchPage"));
 const DownloadsPage = lazy(() => import("./pages/DownloadsPage"));
@@ -70,7 +71,8 @@ const App = () => {
     return useMusicStore.subscribe((state, prevState) => {
       if (state.activeDownloads > 0 && prevState.activeDownloads === 0) {
         import('@/lib/ytdlpBridge').then(({ startForegroundService }) => {
-          void startForegroundService();
+          const lang = resolveEffectiveLanguage(state.uiLanguageMode);
+          void startForegroundService('MHL Music', translate(lang, 'foregroundDownloading'));
         });
       } else if (state.activeDownloads === 0 && prevState.activeDownloads > 0) {
         import('@/lib/ytdlpBridge').then(({ stopForegroundService }) => {

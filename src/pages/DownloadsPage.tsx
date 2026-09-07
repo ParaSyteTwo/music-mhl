@@ -248,7 +248,7 @@ export default function DownloadsPage() {
                 <button
                   onClick={() => startDownload(dl.track)}
                   className="p-2 text-[#666660] hover:text-[#C8F04B] active:text-[#C8F04B] transition-colors sm:opacity-0 sm:group-hover:opacity-100 min-h-[44px] min-w-[44px] flex items-center justify-center"
-                  title={t('retry') || 'Redescargar'}
+                  title={t('retry')}
                 >
                   <RefreshCw className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                 </button>
@@ -277,7 +277,7 @@ export default function DownloadsPage() {
               onClick={() => setShowAllCompleted(!showAllCompleted)}
               className="mt-2 text-xs text-[#666660] hover:text-[#F5F5F0] transition-colors px-3 py-2 w-full text-center border border-[rgba(255,255,255,0.05)] rounded-lg hover:bg-[rgba(255,255,255,0.02)]"
             >
-              {showAllCompleted ? (t('hide') || 'Ocultar') : `Ver ${completed.length - 2} más...`}
+              {showAllCompleted ? t('hide') : t('showMore', { count: completed.length - 2 })}
             </button>
           )}
         </section>

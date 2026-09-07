@@ -83,7 +83,7 @@ export const createDownloadSlice: StateCreator<
             set((s) => ({
               activeDownloads: Math.max(0, s.activeDownloads - 1),
               downloads: s.downloads.map((download) => download.id === id
-                ? { ...download, status: 'error', error: `rate_limit: espera ${seconds}s antes de reintentar` }
+                ? { ...download, status: 'error', error: storeText(get().uiLanguageMode, 'rateLimitCooldown', { seconds }) }
                 : download),
             }));
             return;

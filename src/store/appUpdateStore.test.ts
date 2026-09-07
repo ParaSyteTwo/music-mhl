@@ -31,7 +31,7 @@ vi.mock('@/lib/githubAndroidRelease', () => ({
   fetchLatestOfficialAndroidRelease: mocks.release,
 }));
 
-import { useAppUpdateStore } from './appUpdateStore';
+import { compareSemver, useAppUpdateStore } from './appUpdateStore';
 
 const installed: InstalledAndroidBuild = {
   packageName: 'com.mhl.music',
@@ -452,5 +452,23 @@ describe('app update store', () => {
 
     expect(mocks.canInstall).toHaveBeenCalledOnce();
     expect(useAppUpdateStore.getState().status).toBe('permissionRequired');
+  });
+
+  describe('compareSemver', () => {
+    it('ranks standard semver versions properly', () => {
+      expect(compareSemver('1.5.5', '1.5.4')).toBe(1);
+      expect(compareSemver('1.5.4', '1.5.5')).toBe(-1);
+      expect(compareSemver('1.5.5', '1.5.5')).toBe(0);
+      expect(compareSemver('v1.5.5', '1.5.5')).toBe(0);
+      expect(compareSemver('2.0.0', '1.9.9')).toBe(1);
+      expect(compareSemver('1.5.5', '1.0.0')).toBe(1);
+    });
+
+    it('ranks stable releases as newer than pre-release builds of the same version', () => {
+      expect(compareSemver('1.5.5', '1.5.5-beta.1')).toBe(1);
+      expect(compareSemver('1.5.5-beta.1', '1.5.5')).toBe(-1);
+      expect(compareSemver('1.5.5-beta.2', '1.5.5-beta.1')).toBe(1);
+      expect(compareSemver('1.5.5-rc.1', '1.5.5-beta.9')).toBe(1);
+    });
   });
 });
