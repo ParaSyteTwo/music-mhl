@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.5.6-beta.2 - 2026-10-06
+
+**MHL Music 1.5.6-beta.2 (Auto-Update Inteligente de yt-dlp en Desktop y Android)**
+
+⚡ **Auto-Actualización y Auto-Healing de yt-dlp**
+- **Detección Reactiva (Auto-Healing Transparente):** Si una búsqueda o descarga de audio falla por cambios de firma de YouTube (HTTP 403, error de extractor, n-sig o "Sign in to confirm you're not a bot"), el motor activa de inmediato una actualización automática de yt-dlp y reintenta la operación de forma transparente sin interrumpir al usuario.
+- **Detección Proactiva:** Verificación periódica al arrancar y en Ajustes que actualiza automáticamente el motor si su versión tiene más de 30 días de antigüedad.
+- **Blindaje Concurrente (Mutex y Circuit Breaker):** Bloqueo global concurrente que evita carreras y estampidas (*thundering herd*) cuando múltiples descargas fallan en paralelo, junto con un cooldown estricto de 12 horas para prevenir bucles infinitos con pistas geo-bloqueadas o privadas.
+- **Aislamiento en Espacio de Usuario (Windows):** `yt-dlp.exe` opera en `%USERPROFILE%\.mhl-music\bin\`, garantizando actualizaciones atómicas sin bloqueos de permisos ni UAC en entornos de instalación restringidos.
+- **Paridad de Ajustes en Desktop y Android:** La sección "Motor de Descargas" en Ajustes ahora está activa y sincronizada en ambas plataformas con indicador de estado, versión y botón de actualización manual.
+
+🛡️ **Seguridad y Contrato de Actualización**
+- **Identidad Android:** `versionCode 68`, `versionName 1.5.6-beta.2`, certificado canónico verificado y sincronización con el manifiesto `MHL-Music-Android.json`.
+
 ## v1.5.6-beta.1 - 2026-09-05
 
 **MHL Music 1.5.6-beta.1 (Paridad Bilingüe Total & Resiliencia de Actualizaciones)**

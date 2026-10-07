@@ -50,6 +50,41 @@ public class YtDlpPlugin extends Plugin {
     private boolean isInitialized = false;
     private final ExecutorService executor = Executors.newFixedThreadPool(4);
 
+    private final Object updateLock = new Object();
+    private long lastAutoUpdateTimestamp = 0;
+    private static final long AUTO_UPDATE_COOLDOWN_MS = 12 * 60 * 60 * 1000L; // 12 hours
+
+    private static final Pattern OUTDATED_PATTERNS = Pattern.compile(
+        "(bot|403|forbidden|extractor|n-sig|cipher|signature|unable to extract)",
+        Pattern.CASE_INSENSITIVE
+    );
+
+    private static boolean isOutdatedYtDlpError(String errorMsg) {
+        if (errorMsg == null || errorMsg.isEmpty()) return false;
+        return OUTDATED_PATTERNS.matcher(errorMsg).find();
+    }
+
+    private boolean tryReactiveAutoUpdate() {
+        long now = System.currentTimeMillis();
+        synchronized (updateLock) {
+            if (now - lastAutoUpdateTimestamp < AUTO_UPDATE_COOLDOWN_MS) {
+                return false;
+            }
+            lastAutoUpdateTimestamp = now;
+            try {
+                Log.i(TAG, "Triggering reactive auto-update for yt-dlp...");
+                YoutubeDL.UpdateStatus status = YoutubeDL.getInstance().updateYoutubeDL(
+                    getContext().getApplicationContext(), YoutubeDL.UpdateChannel.STABLE.INSTANCE
+                );
+                Log.i(TAG, "Reactive auto-update result: " + status);
+                return status == YoutubeDL.UpdateStatus.DONE;
+            } catch (Exception e) {
+                Log.w(TAG, "Reactive auto-update failed: " + e.getMessage());
+                return false;
+            }
+        }
+    }
+
     // (Removed SAF/picker code - using MediaStore-only storage)
 
     /** Extrae velocidad de una línea de yt-dlp, e.g. "at 1.23MiB/s" → "1.2 MB/s" */
@@ -141,28 +176,31 @@ public class YtDlpPlugin extends Plugin {
     @PluginMethod
     public void update(PluginCall call) {
         executor.execute(() -> {
-            try {
-                ensureInitialized();
-                Log.i(TAG, "Updating yt-dlp...");
-                YoutubeDL.UpdateStatus status = YoutubeDL.getInstance().updateYoutubeDL(
-                    getContext(), YoutubeDL.UpdateChannel.STABLE.INSTANCE
-                );
-                String statusStr = status != null ? status.toString() : "DONE";
-                Log.i(TAG, "yt-dlp update result: " + statusStr);
-                String version = YoutubeDL.getInstance().version(getContext());
+            synchronized (updateLock) {
+                try {
+                    ensureInitialized();
+                    Log.i(TAG, "Updating yt-dlp...");
+                    YoutubeDL.UpdateStatus status = YoutubeDL.getInstance().updateYoutubeDL(
+                        getContext().getApplicationContext(), YoutubeDL.UpdateChannel.STABLE.INSTANCE
+                    );
+                    String statusStr = status != null ? status.toString() : "DONE";
+                    Log.i(TAG, "yt-dlp update result: " + statusStr);
+                    String version = YoutubeDL.getInstance().version(getContext().getApplicationContext());
+                    lastAutoUpdateTimestamp = System.currentTimeMillis();
 
-                JSObject result = new JSObject();
-                result.put("success", true);
-                result.put("status", statusStr);
-                result.put("version", version != null ? version : "unknown");
-                bridge.getActivity().runOnUiThread(() -> call.resolve(result));
-            } catch (Exception e) {
-                Log.w(TAG, "yt-dlp update failed: " + e.getMessage(), e);
-                JSObject result = new JSObject();
-                result.put("success", false);
-                result.put("status", "FAILED");
-                result.put("error", e.getMessage());
-                bridge.getActivity().runOnUiThread(() -> call.resolve(result));
+                    JSObject result = new JSObject();
+                    result.put("success", true);
+                    result.put("status", statusStr);
+                    result.put("version", version != null ? version : "unknown");
+                    bridge.getActivity().runOnUiThread(() -> call.resolve(result));
+                } catch (Exception e) {
+                    Log.w(TAG, "yt-dlp update failed: " + e.getMessage(), e);
+                    JSObject result = new JSObject();
+                    result.put("success", false);
+                    result.put("status", "FAILED");
+                    result.put("error", e.getMessage());
+                    bridge.getActivity().runOnUiThread(() -> call.resolve(result));
+                }
             }
         });
     }
@@ -229,7 +267,16 @@ public class YtDlpPlugin extends Plugin {
         request.addOption("--retries", "2");
 
         Log.i(TAG, "Searching: " + query + " limit=" + limit);
-        YoutubeDLResponse response = YoutubeDL.getInstance().execute(request);
+        YoutubeDLResponse response;
+        try {
+            response = YoutubeDL.getInstance().execute(request);
+        } catch (Exception e) {
+            if (isOutdatedYtDlpError(e.getMessage()) && tryReactiveAutoUpdate()) {
+                response = YoutubeDL.getInstance().execute(request);
+            } else {
+                throw e;
+            }
+        }
         String output = response.getOut();
         String errOutput = response.getErr();
         Log.i(TAG, "Search stdout length: " + (output != null ? output.length() : 0));
@@ -320,7 +367,16 @@ public class YtDlpPlugin extends Plugin {
             detailRequest.addOption("--no-playlist");
             detailRequest.addOption("--socket-timeout", "12");
             detailRequest.addOption("--retries", "1");
-            YoutubeDLResponse detailResponse = YoutubeDL.getInstance().execute(detailRequest);
+            YoutubeDLResponse detailResponse;
+            try {
+                detailResponse = YoutubeDL.getInstance().execute(detailRequest);
+            } catch (Exception detailEx) {
+                if (isOutdatedYtDlpError(detailEx.getMessage()) && tryReactiveAutoUpdate()) {
+                    detailResponse = YoutubeDL.getInstance().execute(detailRequest);
+                } else {
+                    throw detailEx;
+                }
+            }
             JSONObject detail = new JSONObject(detailResponse.getOut().trim());
             String detailArtist = metadataText(
                 detail, "artist", "artists", "creator", "creators",
@@ -412,9 +468,7 @@ public class YtDlpPlugin extends Plugin {
                 Log.i(TAG, "Downloading audio for: " + videoId + " -> " + outputPath);
 
                 // Callback de progreso: reporta %, ETA y velocidad en tiempo real al JS bridge
-                YoutubeDLResponse response = YoutubeDL.getInstance().execute(
-                    request,
-                    (String) null,
+                kotlin.jvm.functions.Function3<Float, Long, String, kotlin.Unit> progressCallback =
                     new kotlin.jvm.functions.Function3<Float, Long, String, kotlin.Unit>() {
                         @Override
                         public kotlin.Unit invoke(Float progress, Long etaInSeconds, String line) {
@@ -427,8 +481,18 @@ public class YtDlpPlugin extends Plugin {
                             } catch (Exception ignored) {}
                             return kotlin.Unit.INSTANCE;
                         }
+                    };
+
+                YoutubeDLResponse response;
+                try {
+                    response = YoutubeDL.getInstance().execute(request, (String) null, progressCallback);
+                } catch (Exception e) {
+                    if (isOutdatedYtDlpError(e.getMessage()) && tryReactiveAutoUpdate()) {
+                        response = YoutubeDL.getInstance().execute(request, (String) null, progressCallback);
+                    } else {
+                        throw e;
                     }
-                );
+                }
                 Log.i(TAG, "Download complete stdout: " + (response.getOut() != null ? response.getOut().substring(0, Math.min(200, response.getOut().length())) : "null"));
                 String errOutput = response.getErr();
                 if (errOutput != null && !errOutput.isEmpty()) {

@@ -34,6 +34,9 @@ const App = () => {
       }).pywebview?.api;
       void api?.frontend_ready?.();
       refreshNativeLocale();
+      import('@/lib/ytdlpBridge').then(({ checkAndAutoUpdateYtDlpIfOutdated }) => {
+        void checkAndAutoUpdateYtDlpIfOutdated();
+      });
     };
     refreshNativeLocale();
     markFrontendReady();
@@ -45,9 +48,12 @@ const App = () => {
   useEffect(() => {
     if (Capacitor.isNativePlatform()) {
       // Initialize yt-dlp in background so it's ready for downloads
-      import("@/lib/ytdlpBridge").then(({ initYtDlp }) => {
+      import("@/lib/ytdlpBridge").then(({ initYtDlp, checkAndAutoUpdateYtDlpIfOutdated }) => {
         initYtDlp().then((ok) => {
-          if (ok) console.log('[App] yt-dlp ready');
+          if (ok) {
+            console.log('[App] yt-dlp ready');
+            void checkAndAutoUpdateYtDlpIfOutdated();
+          }
         });
       });
 

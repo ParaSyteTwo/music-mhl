@@ -117,16 +117,75 @@ export async function downloadMp3Native(
   return bytes.buffer;
 }
 
+function isPyWebView(): boolean {
+  return typeof window !== 'undefined' && 'pywebview' in window;
+}
+
+export async function getYtDlpVersion(): Promise<string> {
+  if (isPyWebView()) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const api = (window as any).pywebview?.api;
+      if (api?.ytdlp_get_version) {
+        const res = await api.ytdlp_get_version();
+        if (res?.success && res.version) {
+          return res.version;
+        }
+      }
+    } catch {
+      return 'unknown';
+    }
+  }
+  if (!initialized) await initYtDlp();
+  const r = await YtDlp.getVersion();
+  return r.version;
+}
+
 export async function updateYtDlp(): Promise<string> {
+  if (isPyWebView()) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const api = (window as any).pywebview?.api;
+      if (api?.ytdlp_update) {
+        const res = await api.ytdlp_update();
+        if (res?.success) {
+          return res.status || 'DONE';
+        }
+        return 'FAILED';
+      }
+    } catch {
+      return 'FAILED';
+    }
+  }
   if (!initialized) await initYtDlp();
   const r = await YtDlp.update();
   return r.status;
 }
 
-export async function getYtDlpVersion(): Promise<string> {
-  if (!initialized) await initYtDlp();
-  const r = await YtDlp.getVersion();
-  return r.version;
+export function isYtDlpVersionOutdated(versionStr: string, thresholdDays = 30): boolean {
+  if (!versionStr || versionStr === 'unknown') return false;
+  const match = versionStr.match(/(\d{4})\.(\d{2})\.(\d{2})/);
+  if (!match) return false;
+  const versionDate = new Date(`${match[1]}-${match[2]}-${match[3]}`);
+  if (Number.isNaN(versionDate.getTime())) return false;
+  const ageDays = (Date.now() - versionDate.getTime()) / 86_400_000;
+  return ageDays > thresholdDays;
+}
+
+export async function checkAndAutoUpdateYtDlpIfOutdated(): Promise<boolean> {
+  try {
+    const version = await getYtDlpVersion();
+    if (isYtDlpVersionOutdated(version, 30)) {
+      if (import.meta.env.DEV) console.log(`[yt-dlp] Outdated version detected (${version}). Starting auto-update...`);
+      const status = await updateYtDlp();
+      if (import.meta.env.DEV) console.log(`[yt-dlp] Auto-update finished with status: ${status}`);
+      return status === 'DONE' || status === 'ALREADY_LATEST';
+    }
+    return false;
+  } catch (err) {
+    if (import.meta.env.DEV) console.warn('[yt-dlp] Auto-update check error:', err);
+    return false;
+  }
 }
 
 export async function saveTaggedAudioToMusic(fileName: string, base64Data: string): Promise<string> {

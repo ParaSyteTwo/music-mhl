@@ -18,13 +18,15 @@ from urllib.parse import quote_plus, urlparse
 # CREATE_NO_WINDOW para evitar popup de consola en Windows
 CREATE_NO_WINDOW = 0x08000000 if sys.platform == 'win32' else 0
 
-APP_VERSION = '1.5.6-beta.1'
+APP_VERSION = '1.5.6-beta.2'
 
 import requests
 
 from settings import settings
 
 # ── Binarios yt-dlp / ffmpeg ─────────────────────────────────────────────────
+
+_USER_BIN_DIR = Path.home() / '.mhl-music' / 'bin'
 
 def _assets_dir() -> Path:
     """Funciona tanto en desarrollo como dentro del .exe de PyInstaller."""
@@ -36,8 +38,27 @@ _ASSETS = _assets_dir()
 
 
 def _bin(name: str) -> str:
+    user_bin = _USER_BIN_DIR / name
+    if user_bin.exists():
+        return str(user_bin)
     p = _ASSETS / name
     return str(p) if p.exists() else name
+
+
+_ytdlp_lock = threading.Lock()
+_last_auto_update_time = 0.0
+_AUTO_UPDATE_COOLDOWN = 12 * 3600.0  # 12 horas de cooldown para auto-update reactivo
+
+_YTDLP_OUTDATED_PATTERNS = re.compile(
+    r"(Sign in to confirm you're not a bot|HTTP Error 403: Forbidden|Unable to extract|n-sig extraction failed|player response|Signature extraction failed|ERROR:.*extractor.*|YouTube said:.*confirm you're not a bot|Video unavailable)",
+    re.IGNORECASE
+)
+
+
+def _is_outdated_ytdlp_error(err_text: str) -> bool:
+    if not err_text:
+        return False
+    return bool(_YTDLP_OUTDATED_PATTERNS.search(err_text))
 
 
 def _encode_audio_bytes(value: bytes) -> str:
@@ -356,6 +377,96 @@ class Bridge:
         self._window = None  # asignado por launcher después de create_window
         self._dl_lock = threading.Lock()
 
+    # ── Motor yt-dlp: versión, actualización y auto-healing ─────────────────
+
+    def ytdlp_get_version(self) -> dict:
+        """Devuelve la versión actual del ejecutable yt-dlp."""
+        try:
+            target = _bin('yt-dlp.exe')
+            proc = subprocess.run(
+                [target, '--version'],
+                capture_output=True, text=True,
+                creationflags=CREATE_NO_WINDOW,
+                timeout=10, encoding='utf-8', errors='replace',
+            )
+            if proc.returncode == 0 and proc.stdout.strip():
+                return {'success': True, 'version': proc.stdout.strip()}
+            return {'success': False, 'version': 'unknown', 'error': (proc.stderr or 'Error verificando version').strip()}
+        except Exception as exc:
+            return {'success': False, 'version': 'unknown', 'error': str(exc)}
+
+    def ytdlp_update(self, force: bool = False) -> dict:
+        """
+        Actualiza yt-dlp.exe ejecutando -U de manera atómica con Mutex.
+        Garantiza que el binario viva en el directorio de usuario si el bundle es read-only.
+        """
+        with _ytdlp_lock:
+            try:
+                _USER_BIN_DIR.mkdir(parents=True, exist_ok=True)
+                user_bin = _USER_BIN_DIR / 'yt-dlp.exe'
+                bundled_bin = _ASSETS / 'yt-dlp.exe'
+
+                # Si no existe en el directorio de usuario, copiar el binario base para que sea mutable
+                if not user_bin.exists() and bundled_bin.exists():
+                    try:
+                        shutil.copy2(bundled_bin, user_bin)
+                    except Exception:
+                        pass
+
+                target = str(user_bin) if user_bin.exists() else _bin('yt-dlp.exe')
+
+                proc = subprocess.run(
+                    [target, '-U'],
+                    capture_output=True, text=True,
+                    creationflags=CREATE_NO_WINDOW,
+                    timeout=90, encoding='utf-8', errors='replace',
+                )
+                output = (proc.stdout + '\n' + proc.stderr).strip()
+
+                # Limpiar cualquier residuo .old en Windows
+                old_file = Path(target).with_suffix('.exe.old')
+                if old_file.exists():
+                    try:
+                        old_file.unlink()
+                    except Exception:
+                        pass
+
+                ver_proc = subprocess.run(
+                    [target, '--version'],
+                    capture_output=True, text=True,
+                    creationflags=CREATE_NO_WINDOW,
+                    timeout=10, encoding='utf-8', errors='replace',
+                )
+                ver = ver_proc.stdout.strip() if ver_proc.returncode == 0 else 'unknown'
+
+                status = 'DONE'
+                if 'is up to date' in output or 'up-to-date' in output.lower():
+                    status = 'ALREADY_LATEST'
+                elif proc.returncode != 0:
+                    status = 'FAILED'
+
+                return {
+                    'success': proc.returncode == 0,
+                    'status': status,
+                    'version': ver,
+                    'output': output,
+                }
+            except Exception as exc:
+                return {'success': False, 'status': 'FAILED', 'error': str(exc)}
+
+    def _try_reactive_ytdlp_update(self) -> bool:
+        """
+        Auto-update reactivo cuando una llamada falla con error de extractor/cifrado/403.
+        Respeta circuit breaker con cooldown de 12 horas.
+        """
+        global _last_auto_update_time
+        now = time.time()
+        if (now - _last_auto_update_time) < _AUTO_UPDATE_COOLDOWN:
+            return False
+        _last_auto_update_time = now
+        res = self.ytdlp_update()
+        return bool(res.get('success') and res.get('status') == 'DONE')
+
     # ── Deezer (llamadas directas a api.deezer.com desde Python, sin CORS) ───
 
     def deezer_search(self, query: str, limit: int = 25, offset: int = 0) -> dict:
@@ -549,7 +660,15 @@ class Bridge:
                 timeout=35 if deep else 20, encoding='utf-8', errors='replace',
             )
             if r.returncode != 0:
-                return {'success': False, 'error': (r.stderr or 'yt-dlp search failed').strip()}
+                err_text = (r.stderr or '').strip()
+                if _is_outdated_ytdlp_error(err_text) and self._try_reactive_ytdlp_update():
+                    args[0] = _bin('yt-dlp.exe')
+                    r = subprocess.run(
+                        args, capture_output=True, text=True, creationflags=CREATE_NO_WINDOW,
+                        timeout=35 if deep else 20, encoding='utf-8', errors='replace',
+                    )
+                if r.returncode != 0:
+                    return {'success': False, 'error': (r.stderr or 'yt-dlp search failed').strip()}
             candidates = []
             for line in r.stdout.strip().splitlines():
                 line = line.strip()
@@ -705,8 +824,27 @@ class Bridge:
 
             if proc.returncode != 0 or not os.path.exists(result_path):
                 err_detail = (proc.stderr or '').strip()
-                error_type = 'rate_limit' if re.search(r'403|forbidden|rate.?limit', err_detail, re.I) else 'extraction'
-                return {'success': False, 'error': f'{error_type}: yt-dlp error {proc.returncode}: {err_detail}'}
+                if _is_outdated_ytdlp_error(err_detail) and self._try_reactive_ytdlp_update():
+                    args[0] = _bin('yt-dlp.exe')
+                    proc = subprocess.run(
+                        args,
+                        capture_output=True,
+                        creationflags=CREATE_NO_WINDOW,
+                        timeout=300,
+                        encoding='utf-8',
+                        errors='replace',
+                    )
+                    if os.path.exists(tmppath):
+                        result_path = tmppath
+                    else:
+                        files = list(Path(tmpdir).iterdir())
+                        if files:
+                            result_path = str(files[0])
+
+                if proc.returncode != 0 or not os.path.exists(result_path):
+                    err_detail = (proc.stderr or '').strip()
+                    error_type = 'rate_limit' if re.search(r'403|forbidden|rate.?limit', err_detail, re.I) else 'extraction'
+                    return {'success': False, 'error': f'{error_type}: yt-dlp error {proc.returncode}: {err_detail}'}
 
             if os.path.getsize(result_path) < 16 * 1024:
                 return {'success': False, 'error': 'conversion: output file is too small'}

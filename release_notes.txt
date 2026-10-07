@@ -1,18 +1,15 @@
-# MHL Music 1.5.6-beta.1 (Paridad Bilingüe Total & Resiliencia de Actualizaciones)
+# MHL Music 1.5.6-beta.2 (Auto-Update Inteligente de yt-dlp en Desktop y Android)
 
-Esta versión preliminar (Beta 1 de v1.5.6) audita y repara integralmente el sistema de actualizaciones automáticas desde cualquier nivel de versión previo, garantizando transiciones suaves sin bloqueos de archivos en Windows. Además, alcanza paridad bilingüe (Español / Inglés) en el 100% de la interfaz, toasts, alertas y servicios nativos.
+Esta versión preliminar (Beta 2 de v1.5.6) dota a MHL Music de un sistema de auto-actualización inteligente y auto-healing para su motor de extracción `yt-dlp` en Windows Desktop y Android.
 
 ---
 
-### 🛠 Correcciones y Estabilidad
-- **Actualizador Multiversión Sin Fricción:** Detección de versiones previas en instalaciones de escritorio antiguas que carecían de los métodos modernos del bridge nativo (`get_app_info` / `apply_desktop_update`), ofreciendo fallback inmediato al navegador oficial para descarga directa.
-- **Desbloqueo de Archivos en Windows:** El asistente de actualización `update_runner.ps1` ahora cierra de forma limpia procesos secundarios en segundo plano (`yt-dlp.exe`, `ffmpeg.exe`) antes de extraer nuevos binarios, agregando reintentos escalonados y fallback a `robocopy` para evitar errores de archivo bloqueado.
-- **Lógica de Comparación SemVer 2.0:** Normalización del orden de precedencia de versiones para tratar pre-releases (`-beta`, `-rc`) con máxima rigurosidad, asegurando que las versiones estables y betas se reconozcan en el orden correcto.
-
-### ✨ Experiencia de Usuario e Internacionalización (i18n)
-- **Paridad Bilingüe al 100% (EN / ES):** Localización completa del botón dinámico "Ver más" (`showMore`) en el área de descargas, los avisos de fallback a catálogo de reserva en búsquedas, los avisos de límite de tasa, y la validación de enlaces externos.
-- **Diálogos de Ajustes y Notificaciones:** Sustitución de alertas genéricas del navegador por notificaciones estilizadas y traducidas al restaurar o respaldar configuraciones, junto a la localización de badges de rendimiento y formato de audio activo.
-- **Servicio en Primer Plano Android:** Las notificaciones nativas de descarga en Android ahora adaptan automáticamente su título y descripción al idioma seleccionado por el usuario.
+### ⚡ Auto-Actualización y Auto-Healing de yt-dlp
+- **Detección Reactiva (Auto-Healing Transparente):** Si una búsqueda o descarga de audio falla debido a cambios en las firmas/cifrado de YouTube (HTTP 403, error de extractor, n-sig o "Sign in to confirm you're not a bot"), el motor ejecuta una auto-actualización de yt-dlp y reintenta la operación de inmediato sin fricción para el usuario.
+- **Detección Proactiva:** Al arrancar la aplicación o acceder a Ajustes, si la versión instalada de yt-dlp supera los 30 días de antigüedad, se actualiza automáticamente en segundo plano.
+- **Blindaje Concurrente (Mutex y Circuit Breaker):** Bloqueo global con mutex para eliminar condiciones de carrera y ataques de estampida (*thundering herd*) ante fallos de descargas paralelas, con cooldown estricto de 12 horas para prevenir bucles infinitos en pistas eliminadas o geo-bloqueadas.
+- **Aislamiento en Espacio de Usuario en Windows:** El ejecutable `yt-dlp.exe` se mantiene en `%USERPROFILE%\.mhl-music\bin\`, evitando fallos de permisos UAC al instalar en directorios de solo lectura.
+- **Paridad en Ajustes:** El control del motor yt-dlp ahora está disponible y funcional tanto en Android como en Desktop (Windows).
 
 ### 🛡️ Seguridad y Contrato de Actualización
-- **Verificación de Identidad Android:** `versionCode 67`, firmado con el certificado oficial de MHL Music y acompañado de su manifiesto canónico `MHL-Music-Android.json`.
+- **Identidad Android:** `versionCode 68`, `versionName 1.5.6-beta.2`, certificado oficial verificado y manifiesto `MHL-Music-Android.json`.

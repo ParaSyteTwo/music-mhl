@@ -97,19 +97,13 @@ export default function SettingsPage() {
   const setUpdateChannel = useAppUpdateStore((state) => state.setUpdateChannel);
 
   useEffect(() => {
-    if (!isAndroid) return;
+    if (!isAndroid && !isPyWebView) return;
     (async () => {
       try {
-        const { getYtDlpVersion } = await import('@/lib/ytdlpBridge');
+        const { getYtDlpVersion, isYtDlpVersionOutdated } = await import('@/lib/ytdlpBridge');
         const version = await getYtDlpVersion();
         setYtDlpVersion(version);
-        // Versión en formato YYYY.MM.DD — si tiene más de 60 días sugerimos actualizar
-        const match = version.match(/(\d{4})\.(\d{2})\.(\d{2})/);
-        if (match) {
-          const versionDate = new Date(`${match[1]}-${match[2]}-${match[3]}`);
-          const ageDays = (Date.now() - versionDate.getTime()) / 86_400_000;
-          setYtDlpUpdateAvailable(ageDays > 60);
-        }
+        setYtDlpUpdateAvailable(isYtDlpVersionOutdated(version, 30));
       } catch { /* silencioso */ }
     })();
   }, [setYtDlpVersion, setYtDlpUpdateAvailable]);
@@ -541,8 +535,8 @@ export default function SettingsPage() {
               </div>
             </section>
 
-            {/* yt-dlp — solo visible en Android, con diseño coherente */}
-            {isAndroid && (
+            {/* yt-dlp — visible en Android y Desktop, con diseño coherente */}
+            {(isAndroid || isPyWebView) && (
               <section>
                 <h2 className="text-xs font-semibold uppercase tracking-widest text-[#8A8A8A] mb-2 flex items-center gap-2">
                   {t('downloadEngine')}
