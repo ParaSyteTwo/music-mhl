@@ -144,4 +144,37 @@ describe('letras.com scraper', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
+
+  it('parses dual-script song with .verse inside .lyric-original (Ado - DND case)', () => {
+    const adoHtml = `
+      <div class="lyric-original">
+        <p>
+          <span class="verse"><span>Dreamin' 叶えたいの?</span><span class="romanization">Dreamin' kanaetai no?</span></span><br/>
+          <span class="verse"><span>Come on and do it</span><span class="romanization">Come on and do it</span></span><br/>
+          <span class="verse"><span>俯いてる暇ナイ!</span><span class="romanization">utsuite ru hima nai!</span></span>
+        </p>
+      </div>
+    `
+    expect(__testing.parseLetrasSongPage(adoHtml)).toEqual({
+      original: ["Dreamin' 叶えたいの?", 'Come on and do it', '俯いてる暇ナイ!'],
+      romaji: ["Dreamin' kanaetai no?", 'Come on and do it', 'utsuite ru hima nai!'],
+    })
+  })
+
+  it('parses translation page with .lyric-stackedTranslation (Ado translation case)', () => {
+    const adoTransHtml = `
+      <div class="lyric-translation-right">
+        <div class="lyric-stackedTranslation">
+          <p>
+            <span class="verse">¿Soñando? ¿Quieres hacerlo realidad?<br><span class="romanization"><span>Dreamin' 叶えたいの?</span><br><span>Dreamin' kanaetai no?</span></span></span><br>
+            <span class="verse">Vamos, hazlo<br><span class="romanization"><span>Come on and do it</span><br><span>Come on and do it</span></span></span>
+          </p>
+        </div>
+      </div>
+    `
+    expect(__testing.parseLetrasTranslationPage(adoTransHtml)).toEqual([
+      '¿Soñando? ¿Quieres hacerlo realidad?',
+      'Vamos, hazlo',
+    ])
+  })
 })

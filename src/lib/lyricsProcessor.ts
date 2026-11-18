@@ -135,16 +135,31 @@ async function _getKuroshiro(): Promise<any | null> {
 
 // ─── Romanization ────────────────────────────────────────────────────────────
 
-export async function romanizeLines(lines: string[], _script: Script): Promise<string[]> {
+export async function romanizeLines(lines: string[], script: Script): Promise<string[]> {
   try {
     const output: string[] = []
     for (const line of lines) {
+      if (!line.trim()) {
+        output.push(line)
+        continue
+      }
       const lineScript = detectScript(line)
-      if (lineScript === 'latin') output.push(line)
-      else if (lineScript === 'japanese') output.push((await _romanizeJapanese([line]))[0])
-      else if (lineScript === 'korean') output.push((await _romanizeKorean([line]))[0])
-      else if (lineScript === 'chinese') output.push((await _romanizeChinese([line]))[0])
-      else output.push((await _romanizeOther([line]))[0])
+      if (lineScript === 'latin') {
+        output.push(line)
+      } else if (script === 'japanese' && (lineScript === 'japanese' || lineScript === 'chinese')) {
+        // En canciones japonesas, los ideogramas CJK (\u4E00-\u9FFF) sin kana son kanji japoneses, NO chino
+        output.push((await _romanizeJapanese([line]))[0])
+      } else if (script === 'korean' && lineScript === 'korean') {
+        output.push((await _romanizeKorean([line]))[0])
+      } else if (lineScript === 'japanese') {
+        output.push((await _romanizeJapanese([line]))[0])
+      } else if (lineScript === 'korean') {
+        output.push((await _romanizeKorean([line]))[0])
+      } else if (lineScript === 'chinese') {
+        output.push((await _romanizeChinese([line]))[0])
+      } else {
+        output.push((await _romanizeOther([line]))[0])
+      }
     }
     return output
   } catch { /* silencioso */ }

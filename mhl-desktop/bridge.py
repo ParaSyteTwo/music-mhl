@@ -754,8 +754,10 @@ class Bridge:
 
     def letras_fetch(self, url: str) -> dict:
         parsed = urlparse(url or '')
-        if parsed.scheme != 'https' or parsed.netloc not in {'www.letras.com', 'letras.com'}:
-            return {'success': False, 'error': 'URL de letras.com inválida'}
+        if parsed.scheme != 'https' or parsed.netloc not in {
+            'www.letras.com', 'letras.com', 'genius.com', 'www.genius.com'
+        }:
+            return {'success': False, 'error': 'URL de letras.com o genius.com inválida'}
 
         try:
             response = requests.get(

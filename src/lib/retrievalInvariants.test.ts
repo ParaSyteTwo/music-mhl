@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { __testing, getLyrics, cleanTitleForLyrics, cleanArtistForLyrics } from '@/lib/api/musicApi';
 import { __testing as letrasTesting } from '@/lib/letrasScraper';
-import { buildLRC, processLyrics } from '@/lib/lyricsProcessor';
+import { buildLRC, processLyrics, romanizeLines } from '@/lib/lyricsProcessor';
 
 describe('Data & Content Retrieval Invariant Contract (Gobernanza de Invariantes)', () => {
   beforeEach(() => {
@@ -79,6 +79,38 @@ describe('Data & Content Retrieval Invariant Contract (Gobernanza de Invariantes
       expect(parsedTrans).not.toBeNull();
       expect(parsedTrans).toEqual(['Línea traducida 1', 'Línea traducida 2']);
     });
+
+    it('INVARIANTE 2.3: El parser de Letras.com extrae limpiamente original y romaji de canciones con .verse y .romanization', () => {
+      const htmlDual = `
+        <div class="lyric-original">
+          <p>
+            <span class="verse"><span>Dreamin' 叶えたいの?</span><span class="romanization">Dreamin' kanaetai no?</span></span><br/>
+            <span class="verse"><span>Come on and do it</span><span class="romanization">Come on and do it</span></span><br/>
+            <span class="verse"><span>俯いてる暇ナイ!</span><span class="romanization">utsuite ru hima nai!</span></span>
+          </p>
+        </div>
+      `;
+      const parsed = letrasTesting.parseLetrasSongPage(htmlDual);
+      expect(parsed).not.toBeNull();
+      expect(parsed?.original).toEqual(["Dreamin' 叶えたいの?", 'Come on and do it', '俯いてる暇ナイ!']);
+      expect(parsed?.romaji).toEqual(["Dreamin' kanaetai no?", 'Come on and do it', 'utsuite ru hima nai!']);
+    });
+
+    it('INVARIANTE 2.4: El parser de traducción extrae el texto en español descartando .romanization anidado', () => {
+      const htmlStacked = `
+        <div class="lyric-translation-right">
+          <div class="lyric-stackedTranslation">
+            <p>
+              <span class="verse">¿Soñando? ¿Quieres hacerlo realidad?<br><span class="romanization"><span>Dreamin' 叶えたいの?</span><br><span>Dreamin' kanaetai no?</span></span></span><br>
+              <span class="verse">Vamos, hazlo<br><span class="romanization"><span>Come on and do it</span><br><span>Come on and do it</span></span></span>
+            </p>
+          </div>
+        </div>
+      `;
+      const parsed = letrasTesting.parseLetrasTranslationPage(htmlStacked);
+      expect(parsed).not.toBeNull();
+      expect(parsed).toEqual(['¿Soñando? ¿Quieres hacerlo realidad?', 'Vamos, hazlo']);
+    });
   });
 
   describe('3. Invariantes de Sincronización en Tiempo Real y Capas (LRC Atoms)', () => {
@@ -131,6 +163,16 @@ describe('Data & Content Retrieval Invariant Contract (Gobernanza de Invariantes
       expect(result?.synced).toBeNull();
       expect(result?.plain).toBe('Verso sin tiempo 1\nVerso sin tiempo 2');
     });
+
+    it('INVARIANTE 3.4: romanizeLines en canciones japonesas debe tratar líneas con kanji puro como japonés (no chino)', async () => {
+      // Líneas con kanji puro sin hiragana/katakana no deben ser convertidas a pinyin chino
+      const lines = ['限界突破', '上等! 自分勝手', 'Dreamin'];
+      const romanized = await romanizeLines(lines, 'japanese');
+      // No debe contener pinyin como 'xian jie'
+      expect(romanized[0]).not.toContain('xian');
+      expect(romanized[1]).not.toContain('shang');
+      expect(romanized[2]).toBe('Dreamin');
+    });
   });
 
   describe('4. Invariantes de Limpieza de Metadatos (Data Sanitization)', () => {
@@ -150,6 +192,11 @@ describe('Data & Content Retrieval Invariant Contract (Gobernanza de Invariantes
       expect(cleanArtistForLyrics('Coldplay feat. BTS')).toBe('Coldplay');
       expect(cleanArtistForLyrics('David Guetta ft. Sia')).toBe('David Guetta');
       expect(cleanArtistForLyrics('Solo Artist')).toBe('Solo Artist');
+    });
+
+    it('INVARIANTE 4.3: slugify permite preservar colaboradores para URLs de canciones en Letras.com', () => {
+      expect(letrasTesting.slugify('DND (feat. KUROMI)', true)).toBe('dnd');
+      expect(letrasTesting.slugify('DND (feat. KUROMI)', false)).toBe('dnd-feat-kuromi');
     });
   });
 });
