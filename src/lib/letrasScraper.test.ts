@@ -70,6 +70,40 @@ describe('letras.com scraper', () => {
     ])
   })
 
+  it('parses standard songs without .verse using paragraphs and br breaks', () => {
+    const standardHtml = `
+      <div class="cnt-letra p402_premium">
+        <p>I've been on my own for long enough<br/>Maybe you can show me how to love</p>
+        <p>I'm going through withdrawals<br>You don't even have to do too much</p>
+      </div>
+    `
+    expect(__testing.parseLetrasSongPage(standardHtml)).toEqual({
+      original: [
+        "I've been on my own for long enough",
+        'Maybe you can show me how to love',
+        "I'm going through withdrawals",
+        "You don't even have to do too much",
+      ],
+      romaji: ['', '', '', ''],
+    })
+  })
+
+  it('parses standard translation page with br breaks inside paragraphs', () => {
+    const standardTransHtml = `
+      <div class="lyric-content hasTranslation">
+        <div class="lyric-translation">
+          <div class="lyric-translation-right">
+            <p>He estado solo por mucho tiempo<br/>Tal vez puedas enseñarme a amar</p>
+          </div>
+        </div>
+      </div>
+    `
+    expect(__testing.parseLetrasTranslationPage(standardTransHtml)).toEqual([
+      'He estado solo por mucho tiempo',
+      'Tal vez puedas enseñarme a amar',
+    ])
+  })
+
   it('tries the direct letras.com slug before falling back to search', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const url = String(input)

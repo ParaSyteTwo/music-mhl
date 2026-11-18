@@ -873,6 +873,99 @@ export async function downloadTrackAudio(
 import type { LyricPrefs } from '@/lib/lyricsProcessor'
 export type { LyricPrefs }
 
+export function cleanTitleForLyrics(title: string): string {
+  return title
+    .replace(/\s*\([^)]*(?:feat|ft\.|with|official|remaster|video|audio|deluxe|version|edit|prod\.|remix)[^)]*\)/gi, '')
+    .replace(/\s*\[[^\]]*(?:feat|ft\.|with|official|remaster|video|audio|deluxe|version|edit|prod\.|remix)[^\]]*\]/gi, '')
+    .replace(/\s*[-–—]\s*(?:feat\.|ft\.|official|remastered|remaster|live|radio edit|remix).*$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+export function cleanArtistForLyrics(artist: string): string {
+  // Invariante: Preservación de nombres. Prohibido partir ciegamente por comas, barras o ampersands
+  // para proteger artistas legítimos como AC/DC, Earth, Wind & Fire, Simon & Garfunkel, Tyler, The Creator.
+  // Solo se recortan descriptores explícitos de colaboración secundaria al final del string.
+  return artist
+    .replace(/\s+\b(?:feat\.?|ft\.?)\b.*$/i, '')
+    .trim()
+}
+
+interface LrclibRecord {
+  id?: number
+  trackName?: string
+  artistName?: string
+  duration?: number
+  syncedLyrics?: string
+  plainLyrics?: string
+}
+
+interface PyWebViewLrclibApi {
+  lrclib_fetch?: (url: string) => Promise<{ success?: boolean; status?: number; data?: unknown }>
+}
+
+interface PyWebViewWindowWithLrclib extends Window {
+  pywebview?: {
+    api?: PyWebViewLrclibApi
+  }
+}
+
+let lrclibCooldownUntil = 0
+
+async function fetchLrclibJson<T>(url: string): Promise<T | null> {
+  if (Date.now() < lrclibCooldownUntil) return null
+
+  try {
+    const pyapi = typeof window === 'undefined'
+      ? undefined
+      : (window as PyWebViewWindowWithLrclib).pywebview?.api
+    if (pyapi?.lrclib_fetch) {
+      const result = await pyapi.lrclib_fetch(url)
+      if (result?.status === 429) {
+        lrclibCooldownUntil = Date.now() + 15 * 60 * 1000
+        return null
+      }
+      return result?.success && result.data ? (result.data as T) : null
+    }
+
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 3500)
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        'Lrclib-Client': 'MHLMusic/1.5.6-beta.3 (https://github.com/ParaSyteTwo/music-mhl)',
+        'X-User-Agent': 'MHLMusic/1.5.6-beta.3 (https://github.com/ParaSyteTwo/music-mhl)',
+      },
+    })
+    clearTimeout(timeout)
+    if (res.status === 429) {
+      lrclibCooldownUntil = Date.now() + 15 * 60 * 1000
+      return null
+    }
+    if (!res.ok) return null
+    return (await res.json()) as T
+  } catch {
+    return null
+  }
+}
+
+function isLrclibCandidateFidelityValid(
+  candidate: LrclibRecord,
+  targetTitle: string,
+  targetDuration?: number,
+): boolean {
+  if (!candidate.trackName) return false
+  // 1. Delta de duración: si ambos tienen duración, delta <= 6s para evitar remixes extendidos o acústicos
+  if (targetDuration && candidate.duration) {
+    if (Math.abs(candidate.duration - targetDuration) > 6) return false
+  }
+  // 2. Similitud de título mínima para evitar inyecciones ajenas
+  const normCandidate = normalizeSearchTerm(candidate.trackName)
+  const normTarget = normalizeSearchTerm(targetTitle)
+  if (!normCandidate || !normTarget) return false
+  return normCandidate.includes(normTarget) || normTarget.includes(normCandidate)
+}
+
 export async function getLyrics(
   title: string,
   artist: string,
@@ -891,46 +984,43 @@ export async function getLyrics(
     return { synced: null, plain: null }
   }
 
-  // Fetch LRCLIB y letras.com en paralelo
-  const [lrclibResult, letrasResult] = await Promise.allSettled([
-    _fetchLrclib(title, artist, duration),
-    (async () => {
-      // letras.com solo funciona bien en Android (sin CORS)
-      // En web puede fallar, usamos try/catch
-      try {
-        const { fetchLetrasLyrics } = await import('@/lib/letrasScraper')
-        return await fetchLetrasLyrics(title, artist)
-      } catch {
-        return null
+  // Invariante de Aislamiento: timeout global estricto de 5s para metadatos de letras
+  try {
+    return await withTimeout((async () => {
+      const [lrclibResult, letrasResult] = await Promise.allSettled([
+        _fetchLrclib(title, artist, duration),
+        (async () => {
+          try {
+            const { fetchLetrasLyrics } = await import('@/lib/letrasScraper')
+            return await fetchLetrasLyrics(title, artist)
+          } catch {
+            return null
+          }
+        })(),
+      ])
+
+      const lrclib = lrclibResult.status === 'fulfilled' ? lrclibResult.value : null
+      const letras = letrasResult.status === 'fulfilled' ? letrasResult.value : null
+
+      if (letras?.original && letras.original.length > 0) {
+        const result = await _combineLyrics(letras, lrclib, p)
+        if (result) return result
       }
-    })(),
-  ])
 
-  // Procesar LRCLIB para obtener timestamps y línea original
-  const lrclib = lrclibResult.status === 'fulfilled' ? lrclibResult.value : null
-  const letras = letrasResult.status === 'fulfilled' ? letrasResult.value : null
+      if (lrclib?.syncedLrc || lrclib?.plainLrc) {
+        try {
+          const { processLyrics } = await import('@/lib/lyricsProcessor')
+          return await processLyrics(lrclib.syncedLrc || '', lrclib.plainLrc || '', p)
+        } catch {
+          return { synced: null, plain: null }
+        }
+      }
 
-  // Decidir qué fuentes usar para cada capa
-  // letras.com tiene mejor calidad humana para original + traducción ES
-  // LRCLIB tiene timestamps para sincronización
-
-  if (letras?.original && letras.original.length > 0) {
-    // Tenemos letras.com — combinar con timestamps de LRCLIB
-    const result = await _combineLyrics(letras, lrclib, p)
-    if (result) return result
-  }
-
-  // Fallback a LRCLIB directo con romanización
-  if (lrclib?.syncedLrc || lrclib?.plainLrc) {
-    try {
-      const { processLyrics } = await import('@/lib/lyricsProcessor')
-      return await processLyrics(lrclib.syncedLrc || '', lrclib.plainLrc || '', p)
-    } catch {
       return { synced: null, plain: null }
-    }
+    })(), 5000)
+  } catch {
+    return { synced: null, plain: null }
   }
-
-  return { synced: null, plain: null }
 }
 
 interface LrclibResult {
@@ -939,15 +1029,92 @@ interface LrclibResult {
 }
 
 async function _fetchLrclib(title: string, artist: string, duration?: number): Promise<LrclibResult> {
-  const params = new URLSearchParams({ track_name: title, artist_name: artist })
-  if (duration) params.set('duration', String(Math.round(duration)))
-  const res = await fetch(`https://lrclib.net/api/get?${params}`)
-  if (!res.ok) return { syncedLrc: '', plainLrc: '' }
-  const data = await res.json()
-  return {
-    syncedLrc: data.syncedLyrics || '',
-    plainLrc: data.plainLyrics || '',
+  if (Date.now() < lrclibCooldownUntil) {
+    return { syncedLrc: '', plainLrc: '' }
   }
+
+  const cleanTitle = cleanTitleForLyrics(title)
+  const cleanArtist = cleanArtistForLyrics(artist)
+
+  // 1. Intento exacto /api/get
+  const exactParams = new URLSearchParams({ track_name: title, artist_name: artist })
+  if (duration) exactParams.set('duration', String(Math.round(duration)))
+  const exactData = await fetchLrclibJson<LrclibRecord>(`https://lrclib.net/api/get?${exactParams}`)
+  if (exactData?.syncedLyrics || exactData?.plainLyrics) {
+    return {
+      syncedLrc: exactData.syncedLyrics || '',
+      plainLrc: exactData.plainLyrics || '',
+    }
+  }
+
+  // Si LRCLIB entró en cooldown tras intento 1, abortar de inmediato sin reintentar
+  if (Date.now() < lrclibCooldownUntil) {
+    return { syncedLrc: '', plainLrc: '' }
+  }
+
+  // 2. Intento limpio /api/get sin duración
+  if (cleanTitle !== title || cleanArtist !== artist || duration) {
+    const cleanParams = new URLSearchParams({ track_name: cleanTitle || title, artist_name: cleanArtist || artist })
+    const cleanData = await fetchLrclibJson<LrclibRecord>(`https://lrclib.net/api/get?${cleanParams}`)
+    if (cleanData?.syncedLyrics || cleanData?.plainLyrics) {
+      return {
+        syncedLrc: cleanData.syncedLyrics || '',
+        plainLrc: cleanData.plainLyrics || '',
+      }
+    }
+  }
+
+  if (Date.now() < lrclibCooldownUntil) {
+    return { syncedLrc: '', plainLrc: '' }
+  }
+
+  // 3. Búsqueda estructurada con validación de fidelidad (Anti-Alucinación)
+  const searchParams = new URLSearchParams({ track_name: cleanTitle || title, artist_name: cleanArtist || artist })
+  const searchResults = await fetchLrclibJson<LrclibRecord[]>(`https://lrclib.net/api/search?${searchParams}`)
+  if (Array.isArray(searchResults) && searchResults.length > 0) {
+    const valid = searchResults.filter((r) =>
+      (r.syncedLyrics || r.plainLyrics) && isLrclibCandidateFidelityValid(r, cleanTitle || title, duration)
+    )
+    if (valid.length > 0) {
+      let best = valid[0]
+      if (duration && valid.length > 1) {
+        const targetSec = Math.round(duration)
+        best = valid.reduce((prev, curr) => {
+          const prevDiff = Math.abs((prev.duration || 0) - targetSec)
+          const currDiff = Math.abs((curr.duration || 0) - targetSec)
+          if (curr.syncedLyrics && !prev.syncedLyrics) return curr
+          if (prev.syncedLyrics && !curr.syncedLyrics) return prev
+          return currDiff < prevDiff ? curr : prev
+        }, best)
+      }
+      return {
+        syncedLrc: best.syncedLyrics || '',
+        plainLrc: best.plainLyrics || '',
+      }
+    }
+  }
+
+  if (Date.now() < lrclibCooldownUntil) {
+    return { syncedLrc: '', plainLrc: '' }
+  }
+
+  // 4. Búsqueda libre con validación estricta de fidelidad
+  const queryParams = new URLSearchParams({ q: `${cleanTitle || title} ${cleanArtist || artist}`.trim() })
+  const queryResults = await fetchLrclibJson<LrclibRecord[]>(`https://lrclib.net/api/search?${queryParams}`)
+  if (Array.isArray(queryResults) && queryResults.length > 0) {
+    const valid = queryResults.filter((r) =>
+      (r.syncedLyrics || r.plainLyrics) && isLrclibCandidateFidelityValid(r, cleanTitle || title, duration)
+    )
+    const best = valid.find((r) => r.syncedLyrics) || valid.find((r) => r.plainLyrics)
+    if (best) {
+      return {
+        syncedLrc: best.syncedLyrics || '',
+        plainLrc: best.plainLyrics || '',
+      }
+    }
+  }
+
+  return { syncedLrc: '', plainLrc: '' }
 }
 
 interface LetrasResult {
@@ -1099,6 +1266,10 @@ async function _combineLyrics(
 
 export const __testing = {
   combineLyrics: _combineLyrics,
+  fetchLrclib: _fetchLrclib,
+  cleanTitleForLyrics,
+  cleanArtistForLyrics,
+  fetchLrclibJson,
   buildCandidateQueries,
   buildAndroidCandidateQueries,
   getAndroidPrimaryCandidateLimit,

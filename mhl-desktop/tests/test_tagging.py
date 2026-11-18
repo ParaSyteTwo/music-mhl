@@ -30,7 +30,7 @@ def test_tag_and_save_m4a_sets_all_metadata_atoms():
     mock_mutagen.mp4 = mock_mutagen_mp4
 
     with patch.dict(sys.modules, {"mutagen": mock_mutagen, "mutagen.mp4": mock_mutagen_mp4}):
-        with patch("pathlib.Path", return_value=mock_path_inst):
+        with patch("bridge.Path", return_value=mock_path_inst):
             res = bridge.tag_and_save_m4a(
                 file_path="C:/Music/test_song.m4a",
                 audio_b64=fake_audio_b64,

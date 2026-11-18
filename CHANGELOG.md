@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.5.6-beta.3 - 2026-11-18
+
+**MHL Music 1.5.6-beta.3 (Integración Íntegra de Letras Sincronizadas y Multi-Escritura en M4A/MP3)**
+
+🎵 **Inyección de Letras en Metadatos en Tiempo Real (`©lyr` / `USLT`)**
+- **Letras Sincronizadas Nativas:** Las canciones descargadas en formato M4A (y MP3) ahora integran directamente en sus metadatos (átomo `©lyr` en M4A y marco `USLT` en MP3) las letras sincronizadas en tiempo real con timestamps precisos (`[mm:ss.xx]`), permitiendo su lectura y scroll sincronizado en reproductores modernos sin depender de archivos externos.
+- **Soporte Completo de Capas y Escrituras de Figuras:** El pipeline respeta rigurosamente los ajustes del usuario, combinando en cada segundo sincronizado: texto original (figuras kanji, kana, hanzi, hangul), romanización (romaji) y traducción, o bien forzando solo caracteres latinos (`lyricsLatinOnly`) según las preferencias guardadas.
+- **Identificación de Cliente LRCLIB (Fin de Errores 403):** Se incorporan las cabeceras requeridas `Lrclib-Client` y `X-User-Agent`, evitando bloqueos silenciosos por parte del cortafuegos de LRCLIB.
+- **Búsqueda Escalonada con Sanitización:** Se eliminan los fallos por títulos con ruido (`feat`, `remastered`, `official audio`) y tolerancias rígidas de duración, implementando búsqueda difusa en `/api/search` cuando la coincidencia exacta no existe.
+- **Scraper Universal para Letras.com:** Reestructuración de `parseLetrasSongPage` y `parseLetrasTranslationPage` para parsear letras y traducciones de canciones estándar (`.cnt-letra`, `.lyric-original`, `<p>` con `<br>`) además de las páginas romanizadas.
+- **Proxy Nativo LRCLIB en Desktop:** Nuevo método `lrclib_fetch` en el bridge Python para PyWebView Desktop, asegurando consultas directas sin problemas de CORS ni cabeceras bloqueadas.
+
+🛡️ **Seguridad y Contrato de Actualización**
+- **Identidad Android:** `versionCode 69`, `versionName 1.5.6-beta.3`, certificado canónico verificado y sincronización con el manifiesto `MHL-Music-Android.json`.
+
 ## v1.5.6-beta.2 - 2026-10-06
 
 **MHL Music 1.5.6-beta.2 (Auto-Update Inteligente de yt-dlp en Desktop y Android)**

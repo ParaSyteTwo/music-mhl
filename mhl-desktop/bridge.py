@@ -18,7 +18,7 @@ from urllib.parse import quote_plus, urlparse
 # CREATE_NO_WINDOW para evitar popup de consola en Windows
 CREATE_NO_WINDOW = 0x08000000 if sys.platform == 'win32' else 0
 
-APP_VERSION = '1.5.6-beta.2'
+APP_VERSION = '1.5.6-beta.3'
 
 import requests
 
@@ -542,13 +542,14 @@ class Bridge:
                 target_path = (root / safe_name).resolve()
 
             target_path.parent.mkdir(parents=True, exist_ok=True)
+            temp_path = target_path.with_suffix(target_path.suffix + '.tmp')
             audio_bytes = base64.b64decode(audio_b64)
-            target_path.write_bytes(audio_bytes)
+            temp_path.write_bytes(audio_bytes)
             
             if target_path.suffix.lower() == '.mp3':
                 from mutagen.id3 import ID3, TIT2, TPE1, TALB, TPE2, TCOM, TCON, TYER, TRCK, TPOS, USLT, APIC, ID3NoHeaderError
                 try:
-                    audio = ID3(str(target_path))
+                    audio = ID3(str(temp_path))
                 except ID3NoHeaderError:
                     audio = ID3()
                 if title: audio.add(TIT2(encoding=3, text=title))
@@ -574,16 +575,16 @@ class Bridge:
                 if cover_url:
                     try:
                         res = requests.get(cover_url, timeout=10)
-                        if res.ok:
+                        if res.ok and len(res.content) > 32:
                             audio.add(APIC(encoding=3, mime='image/jpeg', type=3, desc='Cover', data=res.content))
                     except Exception:
                         pass
                         
-                audio.save(str(target_path), v2_version=3)
+                audio.save(str(temp_path), v2_version=3)
             else:
                 from mutagen.mp4 import MP4, MP4Cover
                 
-                audio = MP4(str(target_path))
+                audio = MP4(str(temp_path))
                 if title: audio["\xa9nam"] = title
                 if artist: audio["\xa9ART"] = artist
                 if album: audio["\xa9alb"] = album
@@ -607,14 +608,21 @@ class Bridge:
                 if cover_url:
                     try:
                         res = requests.get(cover_url, timeout=10)
-                        if res.ok:
+                        if res.ok and len(res.content) > 32:
                             audio["covr"] = [MP4Cover(res.content, imageformat=MP4Cover.FORMAT_JPEG)]
                     except Exception:
                         pass
                         
                 audio.save()
+
+            temp_path.replace(target_path)
             return {'success': True, 'size': target_path.stat().st_size}
         except Exception as e:
+            if 'temp_path' in locals():
+                try:
+                    if temp_path.exists(): temp_path.unlink()
+                except Exception:
+                    pass
             return {'success': False, 'error': f'tagging failed: {str(e)}'}
 
     def anime_get_themes(self, anilist_id: int) -> dict:
@@ -762,6 +770,26 @@ class Bridge:
                 return {'success': False, 'error': f'letras.com respondió HTTP {response.status_code}'}
             return {'success': True, 'html': response.text, 'url': response.url}
         except requests.RequestException as exc:
+            return {'success': False, 'error': str(exc)}
+
+    def lrclib_fetch(self, url: str) -> dict:
+        parsed = urlparse(url or '')
+        if parsed.scheme != 'https' or parsed.netloc != 'lrclib.net':
+            return {'success': False, 'error': 'URL de lrclib inválida'}
+
+        try:
+            response = requests.get(
+                url,
+                timeout=12,
+                headers={
+                    'User-Agent': f'MHLMusic/{APP_VERSION} (https://github.com/ParaSyteTwo/music-mhl)',
+                    'Lrclib-Client': f'MHLMusic/{APP_VERSION} (https://github.com/ParaSyteTwo/music-mhl)',
+                },
+            )
+            if not response.ok:
+                return {'success': False, 'status': response.status_code, 'error': f'lrclib respondió HTTP {response.status_code}'}
+            return {'success': True, 'data': response.json()}
+        except Exception as exc:
             return {'success': False, 'error': str(exc)}
 
     def get_raw_audio(

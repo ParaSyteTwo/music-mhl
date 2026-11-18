@@ -108,6 +108,26 @@ Para cada request de feature, estructurar como:
 Format: `<type>: <description>`
 Types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`
 
+## Data & Content Retrieval Invariants Contract
+
+Toda decisión interna sobre obtención de audio, datos/metadatos, letras e imágenes DEBE cumplir los siguientes invariantes deterministas antes de autorizar cualquier release o commit:
+
+1. **Identificación Obligatoria de Red:**
+   - Prohibido realizar llamadas `fetch()` anónimas o sin cabecera de cliente a APIs de terceros (LRCLIB, Deezer, etc.). Deben enviar siempre `Lrclib-Client` y `X-User-Agent` (`MHLMusic/{version}`).
+   - En Desktop, las llamadas de red externas con restricciones de headers o CORS deben pasar a través del puente nativo de Python (`bridge.py`).
+
+2. **Búsqueda Escalonada y Fallback Obligatorio:**
+   - Prohibido depender únicamente de endpoints de coincidencia estricta (`/api/get`).
+   - Todo flujo de obtención debe implementar saneamiento de metadatos (limpieza de `(feat. ...)`, `[Remastered]`, `Remix`, etc.) y fallback a endpoints de búsqueda difusa (`/api/search`).
+
+3. **Invariantes de Letras Sincronizadas y Multi-Escritura (M4A/MP3):**
+   - En M4A, las letras sincronizadas en tiempo real con marcas `[mm:ss.xx]` deben inyectarse directamente en los metadatos (átomo `©lyr`).
+   - Las capas configuradas por el usuario (original/figuras, romaji, traducción) deben preservarse íntegras en cada marca temporal, salvo que `lyricsLatinOnly` esté activado, en cuyo caso las figuras se ocultan y romaji actúa como letra principal.
+   - Los scrapers HTML (como Letras.com) deben soportar tanto canciones romanizadas (clases `.verse`) como canciones estándar (`.cnt-letra`, `.lyric-original`, párrafos `<p>` con `<br>`).
+
+4. **Verificación Automatizada de Invarianza:**
+   - La suite `npm run test:retrieval-invariants` es obligatoria antes de cualquier build o release. Si falla un solo invariante, la release queda bloqueada.
+
 ## Release Artifacts
 
 - Cada release debe generar un ZIP portable de Windows y un APK Android.

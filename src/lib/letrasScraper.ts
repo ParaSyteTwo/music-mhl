@@ -124,17 +124,51 @@ function parseLetrasSongPage(html: string): { original: string[]; romaji: string
 
   const doc = new DOMParser().parseFromString(html, 'text/html')
   const verses = [...doc.querySelectorAll('.lyric-content .verse')]
-  for (const verse of verses) {
-    const romanization = verse.querySelector('.romanization')
-    const clone = verse.cloneNode(true) as Element
-    clone.querySelectorAll('.romanization').forEach((node) => node.remove())
+  if (verses.length > 0) {
+    for (const verse of verses) {
+      const romanization = verse.querySelector('.romanization')
+      const clone = verse.cloneNode(true) as Element
+      clone.querySelectorAll('.romanization').forEach((node) => node.remove())
 
-    const original = cleanText(clone.textContent)
-    const romaji = cleanText(romanization?.textContent)
+      const original = cleanText(clone.textContent)
+      const romaji = cleanText(romanization?.textContent)
 
-    if (original) {
-      originalLines.push(original)
-      romajiLines.push(romaji)
+      if (original) {
+        originalLines.push(original)
+        romajiLines.push(romaji)
+      }
+    }
+  } else {
+    const container = doc.querySelector('.lyric-original, .cnt-letra, .lyric-content')
+    if (container) {
+      const paragraphs = [...container.querySelectorAll('p')]
+      if (paragraphs.length > 0) {
+        for (const p of paragraphs) {
+          const clone = p.cloneNode(true) as Element
+          clone.querySelectorAll('.romanization').forEach((node) => node.remove())
+          clone.querySelectorAll('br').forEach((br) => br.replaceWith('\n'))
+          const text = clone.textContent ?? ''
+          for (const rawLine of text.split('\n')) {
+            const clean = cleanText(rawLine)
+            if (clean) {
+              originalLines.push(clean)
+              romajiLines.push('')
+            }
+          }
+        }
+      } else {
+        const clone = container.cloneNode(true) as Element
+        clone.querySelectorAll('.romanization').forEach((node) => node.remove())
+        clone.querySelectorAll('br').forEach((br) => br.replaceWith('\n'))
+        const text = clone.textContent ?? ''
+        for (const rawLine of text.split('\n')) {
+          const clean = cleanText(rawLine)
+          if (clean) {
+            originalLines.push(clean)
+            romajiLines.push('')
+          }
+        }
+      }
     }
   }
 
@@ -147,14 +181,30 @@ function parseLetrasTranslationPage(html: string): string[] | null {
   if (typeof DOMParser !== 'undefined') {
     const doc = new DOMParser().parseFromString(html, 'text/html')
     const rightColumn = doc.querySelector('.lyric-content .lyric-translation-right')
-    const translated = [...(rightColumn?.querySelectorAll('p .verse, p > span') ?? [])]
-      .map((node) => {
-        const clone = node.cloneNode(true) as Element
-        clone.querySelectorAll('.romanization').forEach((child) => child.remove())
-        return cleanText(clone.textContent)
-      })
+    if (rightColumn) {
+      const verses = [...rightColumn.querySelectorAll('p .verse, p > span')]
+      if (verses.length > 0) {
+        const translated = verses.map((node) => {
+          const clone = node.cloneNode(true) as Element
+          clone.querySelectorAll('.romanization').forEach((child) => child.remove())
+          return cleanText(clone.textContent)
+        }).filter(Boolean)
+        if (translated.length > 0) return translated
+      }
 
-    if (translated.some(Boolean)) return translated
+      const paragraphs = [...rightColumn.querySelectorAll('p')]
+      const lines: string[] = []
+      for (const p of paragraphs) {
+        const clone = p.cloneNode(true) as Element
+        clone.querySelectorAll('.romanization').forEach((node) => node.remove())
+        clone.querySelectorAll('br').forEach((br) => br.replaceWith('\n'))
+        for (const rawLine of (clone.textContent ?? '').split('\n')) {
+          const clean = cleanText(rawLine)
+          if (clean) lines.push(clean)
+        }
+      }
+      if (lines.length > 0) return lines
+    }
   }
 
   const lines: string[] = []
@@ -163,8 +213,11 @@ function parseLetrasTranslationPage(html: string): string[] | null {
     const block = transMatch[1]
     const pMatches = [...block.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi)]
     for (const m of pMatches) {
-      const text = cleanHtml(m[1])
-      if (text) lines.push(text)
+      const withNewlines = m[1].replace(/<br\s*\/?>/gi, '\n')
+      for (const line of withNewlines.split('\n')) {
+        const text = cleanHtml(line)
+        if (text) lines.push(text)
+      }
     }
   }
   return lines.length > 0 ? lines : null

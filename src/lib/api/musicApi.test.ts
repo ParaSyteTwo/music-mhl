@@ -182,6 +182,100 @@ describe('musicApi lyrics combination', () => {
     expect(result?.synced).toBeNull();
     expect(result?.plain).toBe('muteki no egao\nSonrisa invencible');
   });
+
+  describe('LRCLIB robust fetching and metadata cleaning', () => {
+    it('cleans noise from titles and artist strings', () => {
+      expect(__testing.cleanTitleForLyrics('Blinding Lights (feat. Rosalía)')).toBe('Blinding Lights');
+      expect(__testing.cleanTitleForLyrics('Starboy [Official Music Video]')).toBe('Starboy');
+      expect(__testing.cleanTitleForLyrics('Stayin Alive - Remastered 2020')).toBe('Stayin Alive');
+      expect(__testing.cleanArtistForLyrics('AC/DC')).toBe('AC/DC');
+      expect(__testing.cleanArtistForLyrics('Simon & Garfunkel')).toBe('Simon & Garfunkel');
+      expect(__testing.cleanArtistForLyrics('Coldplay feat. BTS')).toBe('Coldplay');
+      expect(__testing.cleanArtistForLyrics('David Guetta ft. Sia')).toBe('David Guetta');
+    });
+
+    it('sends required client identification headers to lrclib.net', async () => {
+      const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        new Response(JSON.stringify({ syncedLyrics: '[00:01.00] Hi', plainLyrics: 'Hi' }), { status: 200 }),
+      );
+
+      await __testing.fetchLrclib('Song', 'Artist', 180);
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('https://lrclib.net/api/get?'),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'Lrclib-Client': expect.stringContaining('MHLMusic'),
+          }),
+        }),
+      );
+    });
+
+    it('falls back to search when /api/get returns 404', async () => {
+      vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+        const url = String(input);
+        if (url.includes('/api/get')) {
+          return new Response(JSON.stringify({ error: 'Not found' }), { status: 404 });
+        }
+        if (url.includes('/api/search')) {
+          return new Response(JSON.stringify([
+            {
+              id: 123,
+              trackName: 'Clean Title',
+              artistName: 'Clean Artist',
+              duration: 182,
+              syncedLyrics: '[00:05.00] Realtime synced line',
+              plainLyrics: 'Realtime synced line',
+            },
+          ]), { status: 200 });
+        }
+        return new Response('', { status: 500 });
+      });
+
+      const res = await __testing.fetchLrclib('Clean Title (feat. Extra)', 'Clean Artist', 180);
+
+      expect(res.syncedLrc).toBe('[00:05.00] Realtime synced line');
+      expect(res.plainLrc).toBe('Realtime synced line');
+    });
+
+    it('uses pywebview.api.lrclib_fetch when running in desktop pywebview', async () => {
+      const lrclibFetchMock = vi.fn().mockResolvedValue({
+        success: true,
+        data: {
+          syncedLyrics: '[00:10.00] Desktop lyric',
+          plainLyrics: 'Desktop lyric',
+        },
+      });
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (window as any).pywebview = {
+        api: {
+          lrclib_fetch: lrclibFetchMock,
+        },
+      };
+
+      try {
+        const res = await __testing.fetchLrclib('Desktop Song', 'Desktop Artist');
+        expect(lrclibFetchMock).toHaveBeenCalledWith(expect.stringContaining('https://lrclib.net/api/get?'));
+        expect(res.syncedLrc).toBe('[00:10.00] Desktop lyric');
+      } finally {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        delete (window as any).pywebview;
+      }
+    });
+
+    it('getLyrics returns null early when all lyric preferences are disabled', async () => {
+      const { getLyrics } = await import('./musicApi');
+      const res = await getLyrics('Song', 'Artist', 180, {
+        lyricOriginal: false,
+        lyricRomanization: false,
+        lyricTranslation: false,
+        lyricLatinOnly: false,
+        deviceLang: 'es',
+      });
+      expect(res).toEqual({ synced: null, plain: null });
+    });
+  });
 });
 
 describe('musicApi request reuse', () => {

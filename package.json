@@ -1,7 +1,7 @@
 {
   "name": "mhl-music",
   "private": true,
-  "version": "1.5.6-beta.2",
+  "version": "1.5.6-beta.3",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -16,7 +16,8 @@
     "cap:run": "npx cap run android",
     "android": "npm run build && npx cap sync android && npx cap open android",
     "android:prepare-release": "node scripts/android/release-contract.mjs",
-    "test:android-release-contract": "node --test scripts/android/release-contract.test.mjs"
+    "test:android-release-contract": "node --test scripts/android/release-contract.test.mjs",
+    "test:retrieval-invariants": "vitest run src/lib/retrievalInvariants.test.ts"
   },
   "dependencies": {
     "@capacitor/android": "^8.2.0",

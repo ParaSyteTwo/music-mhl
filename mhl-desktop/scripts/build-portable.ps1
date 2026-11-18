@@ -3,6 +3,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
 
 $desktopDir = Split-Path -Parent $PSScriptRoot
 $projectDir = Split-Path -Parent $desktopDir

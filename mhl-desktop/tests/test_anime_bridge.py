@@ -615,6 +615,30 @@ def test_letras_fetch_rejects_non_letras_domain():
     assert 'letras.com' in result['error']
 
 
+def test_lrclib_fetch_returns_json_from_lrclib_domain():
+    response = MagicMock(spec=requests.Response)
+    response.ok = True
+    response.status_code = 200
+    response.json.return_value = {'syncedLyrics': '[00:01.00] Hello', 'plainLyrics': 'Hello'}
+
+    with patch("bridge.requests.get", return_value=response) as get_mock:
+        result = Bridge().lrclib_fetch('https://lrclib.net/api/get?track_name=Hello&artist_name=Adele')
+
+    assert result == {
+        'success': True,
+        'data': {'syncedLyrics': '[00:01.00] Hello', 'plainLyrics': 'Hello'},
+    }
+    assert get_mock.call_args.kwargs['timeout'] == 12
+    assert 'MHLMusic' in get_mock.call_args.kwargs['headers']['Lrclib-Client']
+
+
+def test_lrclib_fetch_rejects_non_lrclib_domain():
+    result = Bridge().lrclib_fetch('https://example.com/api/get')
+
+    assert result['success'] is False
+    assert 'lrclib' in result['error']
+
+
 def test_anime_requests_always_have_timeout():
     """A missing ``timeout`` would block the bridge forever — guard against that."""
     bridge = Bridge()

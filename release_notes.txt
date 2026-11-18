@@ -1,15 +1,16 @@
-# MHL Music 1.5.6-beta.2 (Auto-Update Inteligente de yt-dlp en Desktop y Android)
+# MHL Music 1.5.6-beta.3 (Integración Íntegra de Letras Sincronizadas y Multi-Escritura en M4A/MP3)
 
-Esta versión preliminar (Beta 2 de v1.5.6) dota a MHL Music de un sistema de auto-actualización inteligente y auto-healing para su motor de extracción `yt-dlp` en Windows Desktop y Android.
+Esta versión preliminar (Beta 3 de v1.5.6) soluciona de raíz la descarga e inyección de letras sincronizadas en tiempo real dentro de los metadatos de las canciones descargadas (M4A y MP3), respetando con exactitud los ajustes de escritura original (figuras kanji/kana/hangul), romaji y traducción.
 
 ---
 
-### ⚡ Auto-Actualización y Auto-Healing de yt-dlp
-- **Detección Reactiva (Auto-Healing Transparente):** Si una búsqueda o descarga de audio falla debido a cambios en las firmas/cifrado de YouTube (HTTP 403, error de extractor, n-sig o "Sign in to confirm you're not a bot"), el motor ejecuta una auto-actualización de yt-dlp y reintenta la operación de inmediato sin fricción para el usuario.
-- **Detección Proactiva:** Al arrancar la aplicación o acceder a Ajustes, si la versión instalada de yt-dlp supera los 30 días de antigüedad, se actualiza automáticamente en segundo plano.
-- **Blindaje Concurrente (Mutex y Circuit Breaker):** Bloqueo global con mutex para eliminar condiciones de carrera y ataques de estampida (*thundering herd*) ante fallos de descargas paralelas, con cooldown estricto de 12 horas para prevenir bucles infinitos en pistas eliminadas o geo-bloqueadas.
-- **Aislamiento en Espacio de Usuario en Windows:** El ejecutable `yt-dlp.exe` se mantiene en `%USERPROFILE%\.mhl-music\bin\`, evitando fallos de permisos UAC al instalar en directorios de solo lectura.
-- **Paridad en Ajustes:** El control del motor yt-dlp ahora está disponible y funcional tanto en Android como en Desktop (Windows).
+### 🎵 Inyección de Letras en Metadatos en Tiempo Real (`©lyr` / `USLT`)
+- **Letras Sincronizadas Nativas:** En formato M4A (y MP3), las letras con marcas de tiempo en tiempo real (`[mm:ss.xx]`) ahora quedan embebidas directamente en el átomo `©lyr` de los metadatos, listas para ser leídas por reproductores que admitan letras sincronizadas.
+- **Soporte Multicapa y Escritura de Figuras:** Se sincronizan las distintas capas elegidas por el usuario: idioma original (incluyendo kanji, kana, hanzi, hangul), romanización (romaji) y traducción, o bien solo caracteres latinos (`lyricsLatinOnly`) según los Ajustes.
+- **Identificación de Cliente LRCLIB (Fin de Errores 403):** Se inyectan las cabeceras `Lrclib-Client` y `X-User-Agent`, evitando que las solicitudes sean bloqueadas por Cloudflare/LRCLIB.
+- **Búsqueda Escalonada y Limpieza de Metadatos:** Se limpian sufijos como `(feat. ...)`, `[Remastered]`, `Official Audio` y se incorpora búsqueda escalonada con fallback a `/api/search` difuso si `/api/get` exacto no coincide.
+- **Scraper Universal de Letras.com:** Se amplió el parser para soportar canciones estándar con etiquetas `<p>` y `<br>` en `.cnt-letra` y `.lyric-original`, además de las páginas con `.verse`.
+- **Proxy Nativo LRCLIB en Desktop (`lrclib_fetch`):** Bridge nativo en Python para PyWebView Desktop sin restricciones de navegador.
 
 ### 🛡️ Seguridad y Contrato de Actualización
-- **Identidad Android:** `versionCode 68`, `versionName 1.5.6-beta.2`, certificado oficial verificado y manifiesto `MHL-Music-Android.json`.
+- **Identidad Android:** `versionCode 69`, `versionName 1.5.6-beta.3`, certificado oficial verificado y manifiesto `MHL-Music-Android.json`.
