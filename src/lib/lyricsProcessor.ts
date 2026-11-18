@@ -1,4 +1,5 @@
 import type { Lang } from '@/lib/language'
+import { toRomaji } from 'wanakana'
 
 const MYMEMORY_URL = 'https://api.mymemory.translated.net/get'
 const MAX_CHARS = 450
@@ -184,7 +185,6 @@ async function _romanizeJapanese(lines: string[]): Promise<string[]> {
   }
 
   // Fallback: wanakana (handles kana only, passes through kanji it can't read)
-  const { toRomaji } = await import('wanakana')
   return lines.map(l => l.trim() ? toRomaji(l) : l)
 }
 
@@ -295,15 +295,72 @@ function normalizeLyricLine(text: string): string {
     .trim()
 }
 
+function levenshteinDistance(a: string, b: string): number {
+  const m = a.length
+  const n = b.length
+  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0))
+  for (let i = 0; i <= m; i++) dp[i][0] = i
+  for (let j = 0; j <= n; j++) dp[0][j] = j
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1
+      dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost)
+    }
+  }
+  return dp[m][n]
+}
+
 export function areLyricLinesEquivalent(left: string, right: string): boolean {
   const normalizedLeft = normalizeLyricLine(left)
   const normalizedRight = normalizeLyricLine(right)
   if (!normalizedLeft || !normalizedRight) return false
   if (normalizedLeft === normalizedRight) return true
+
   // Permitir coincidencia por contención de frases cuando las líneas son compuestas (mínimo 4 caracteres)
   if (normalizedLeft.length >= 4 && normalizedRight.length >= 4) {
-    return normalizedLeft.includes(normalizedRight) || normalizedRight.includes(normalizedLeft)
+    if (normalizedLeft.includes(normalizedRight) || normalizedRight.includes(normalizedLeft)) {
+      return true
+    }
   }
+
+  // Squashed repeated characters (ej. "Maxxin'" vs "Maxin'")
+  const squashedLeft = normalizedLeft.replace(/(\p{L})\1+/gu, '$1')
+  const squashedRight = normalizedRight.replace(/(\p{L})\1+/gu, '$1')
+  if (squashedLeft === squashedRight) return true
+
+  // Distancia de edición para typos menores en versos largos
+  const maxLen = Math.max(normalizedLeft.length, normalizedRight.length)
+  if (maxLen >= 5) {
+    const dist = levenshteinDistance(normalizedLeft, normalizedRight)
+    if (dist <= 2 || (maxLen - dist) / maxLen >= 0.8) {
+      return true
+    }
+  }
+
+  return false
+}
+
+/**
+ * Equivalencia extendida para alineación temporal de letras entre distintas fuentes (LRCLIB, Letras.com, etc.).
+ * Además de typos y contención, soporta comparación cruzada Kana <-> Romaji (ej. ダンダラ ダンダラン <-> Dan-da-ra-dan-da-ran).
+ */
+export function areAlignableLyricLines(left: string, right: string): boolean {
+  if (areLyricLinesEquivalent(left, right)) return true
+
+  // Si una línea contiene kana (hiragana/katakana) y la otra está en alfabeto latino
+  const hasKanaLeft = /[\u3040-\u309F\u30A0-\u30FF]/.test(left)
+  const hasKanaRight = /[\u3040-\u309F\u30A0-\u30FF]/.test(right)
+
+  if ((hasKanaLeft && !hasKanaRight) || (hasKanaRight && !hasKanaLeft)) {
+    try {
+      const romajiLeft = hasKanaLeft ? toRomaji(left) : left
+      const romajiRight = hasKanaRight ? toRomaji(right) : right
+      return areLyricLinesEquivalent(romajiLeft, romajiRight)
+    } catch {
+      return false
+    }
+  }
+
   return false
 }
 

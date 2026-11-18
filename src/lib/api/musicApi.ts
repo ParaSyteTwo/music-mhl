@@ -1028,8 +1028,62 @@ interface LrclibResult {
   plainLrc: string
 }
 
-function hasValidSyncedTimestamps(lrc?: string | null): boolean {
-  return Boolean(lrc && /\[\d+:\d+\.\d+\]/.test(lrc))
+function parseTimestamps(lrc: string): Array<{ time: number; centis: string }> {
+  const matches = [...lrc.matchAll(/\[(\d+):(\d+(?:\.\d+)?)\]/g)]
+  return matches.map((m) => {
+    const mins = parseInt(m[1], 10)
+    const secs = parseFloat(m[2])
+    const rawSec = m[2]
+    return {
+      time: mins * 60 + secs,
+      centis: rawSec.includes('.') ? rawSec.split('.')[1] : '00',
+    }
+  })
+}
+
+function hasValidSyncedTimestamps(lrc?: string | null, duration?: number): boolean {
+  if (!lrc || typeof lrc !== 'string') return false
+  const timed = parseTimestamps(lrc)
+  if (timed.length === 0) return false
+
+  // Para tests unitarios o canciones muy breves (1 o 2 líneas)
+  if (timed.length < 3) {
+    return true
+  }
+
+  // 1. Detección de secuencias artificiales / sintéticas (1 segundo o deltas uniformes enteros)
+  let uniformDeltas = 0
+  let exactZeroCentis = 0
+  for (let i = 1; i < timed.length; i++) {
+    const dt = Math.round((timed[i].time - timed[i - 1].time) * 100) / 100
+    if (dt === 1.0 || dt === 2.0) {
+      uniformDeltas++
+    }
+  }
+  for (const t of timed) {
+    if (t.centis === '00' || t.centis === '0') {
+      exactZeroCentis++
+    }
+  }
+
+  const uniformRatio = uniformDeltas / (timed.length - 1)
+  const zeroCentisRatio = exactZeroCentis / timed.length
+
+  // Si >= 65% de líneas tienen deltas idénticos de 1s/2s Y >= 75% tienen .00 centésimas exactas, es una pista falsa generada por bot
+  if (uniformRatio >= 0.65 && zeroCentisRatio >= 0.75) {
+    return false
+  }
+
+  // 2. Disparidad severa con la duración del track:
+  // Si dura > 60s y tiene >= 12 versos pero el último verso termina en < 35% de la canción con deltas uniformes
+  if (duration && duration > 60 && timed.length >= 12) {
+    const lastTime = timed[timed.length - 1].time
+    if (lastTime < duration * 0.35 && uniformRatio >= 0.45) {
+      return false
+    }
+  }
+
+  return true
 }
 
 async function _fetchLrclib(title: string, artist: string, duration?: number): Promise<LrclibResult> {
@@ -1045,14 +1099,14 @@ async function _fetchLrclib(title: string, artist: string, duration?: number): P
   const exactParams = new URLSearchParams({ track_name: title, artist_name: artist })
   if (duration) exactParams.set('duration', String(Math.round(duration)))
   const exactData = await fetchLrclibJson<LrclibRecord>(`https://lrclib.net/api/get?${exactParams}`)
-  if (exactData?.syncedLyrics && hasValidSyncedTimestamps(exactData.syncedLyrics)) {
+  if (exactData?.syncedLyrics && hasValidSyncedTimestamps(exactData.syncedLyrics, duration)) {
     return {
       syncedLrc: exactData.syncedLyrics,
       plainLrc: exactData.plainLyrics || '',
     }
   }
   if (exactData?.plainLyrics || exactData?.syncedLyrics) {
-    fallbackPlain = exactData.plainLyrics || exactData.syncedLyrics || ''
+    fallbackPlain = exactData.plainLyrics || (hasValidSyncedTimestamps(exactData.syncedLyrics, duration) ? exactData.syncedLyrics : '') || ''
   }
 
   // Si LRCLIB entró en cooldown tras intento 1, abortar de inmediato sin reintentar
@@ -1064,14 +1118,14 @@ async function _fetchLrclib(title: string, artist: string, duration?: number): P
   if (cleanTitle !== title || cleanArtist !== artist || duration) {
     const cleanParams = new URLSearchParams({ track_name: cleanTitle || title, artist_name: cleanArtist || artist })
     const cleanData = await fetchLrclibJson<LrclibRecord>(`https://lrclib.net/api/get?${cleanParams}`)
-    if (cleanData?.syncedLyrics && hasValidSyncedTimestamps(cleanData.syncedLyrics)) {
+    if (cleanData?.syncedLyrics && hasValidSyncedTimestamps(cleanData.syncedLyrics, duration)) {
       return {
         syncedLrc: cleanData.syncedLyrics,
         plainLrc: cleanData.plainLyrics || fallbackPlain,
       }
     }
     if (!fallbackPlain && (cleanData?.plainLyrics || cleanData?.syncedLyrics)) {
-      fallbackPlain = cleanData.plainLyrics || cleanData.syncedLyrics || ''
+      fallbackPlain = cleanData.plainLyrics || (hasValidSyncedTimestamps(cleanData.syncedLyrics, duration) ? cleanData.syncedLyrics : '') || ''
     }
   }
 
@@ -1087,24 +1141,23 @@ async function _fetchLrclib(title: string, artist: string, duration?: number): P
       (r.syncedLyrics || r.plainLyrics) && isLrclibCandidateFidelityValid(r, cleanTitle || title, duration)
     )
     if (valid.length > 0) {
-      // Priorizar candidatos con marcas temporales reales
-      valid.sort((a, b) => (hasValidSyncedTimestamps(b.syncedLyrics) ? 1 : 0) - (hasValidSyncedTimestamps(a.syncedLyrics) ? 1 : 0))
-      let best = valid[0]
-      if (duration && valid.length > 1) {
-        const targetSec = Math.round(duration)
-        best = valid.reduce((prev, curr) => {
-          const prevHasSync = hasValidSyncedTimestamps(prev.syncedLyrics)
-          const currHasSync = hasValidSyncedTimestamps(curr.syncedLyrics)
-          if (currHasSync && !prevHasSync) return curr
-          if (prevHasSync && !currHasSync) return prev
-          const prevDiff = Math.abs((prev.duration || 0) - targetSec)
-          const currDiff = Math.abs((curr.duration || 0) - targetSec)
-          return currDiff < prevDiff ? curr : prev
-        }, best)
+      const verifiedSynced = valid.filter((r) => hasValidSyncedTimestamps(r.syncedLyrics, duration))
+      if (verifiedSynced.length > 0) {
+        if (duration) {
+          const targetSec = Math.round(duration)
+          verifiedSynced.sort((a, b) => Math.abs((a.duration || 0) - targetSec) - Math.abs((b.duration || 0) - targetSec))
+        }
+        return {
+          syncedLrc: verifiedSynced[0].syncedLyrics || '',
+          plainLrc: verifiedSynced[0].plainLyrics || fallbackPlain,
+        }
       }
-      return {
-        syncedLrc: hasValidSyncedTimestamps(best.syncedLyrics) ? best.syncedLyrics || '' : '',
-        plainLrc: best.plainLyrics || fallbackPlain,
+      const bestPlain = valid.find((r) => r.plainLyrics)
+      if (bestPlain) {
+        return {
+          syncedLrc: '',
+          plainLrc: bestPlain.plainLyrics || fallbackPlain,
+        }
       }
     }
   }
@@ -1120,11 +1173,22 @@ async function _fetchLrclib(title: string, artist: string, duration?: number): P
     const valid = queryResults.filter((r) =>
       (r.syncedLyrics || r.plainLyrics) && isLrclibCandidateFidelityValid(r, cleanTitle || title, duration)
     )
-    const best = valid.find((r) => hasValidSyncedTimestamps(r.syncedLyrics)) || valid.find((r) => r.plainLyrics)
-    if (best) {
+    const verifiedSynced = valid.filter((r) => hasValidSyncedTimestamps(r.syncedLyrics, duration))
+    if (verifiedSynced.length > 0) {
+      if (duration) {
+        const targetSec = Math.round(duration)
+        verifiedSynced.sort((a, b) => Math.abs((a.duration || 0) - targetSec) - Math.abs((b.duration || 0) - targetSec))
+      }
       return {
-        syncedLrc: hasValidSyncedTimestamps(best.syncedLyrics) ? best.syncedLyrics || '' : '',
-        plainLrc: best.plainLyrics || fallbackPlain,
+        syncedLrc: verifiedSynced[0].syncedLyrics || '',
+        plainLrc: verifiedSynced[0].plainLyrics || fallbackPlain,
+      }
+    }
+    const bestPlain = valid.find((r) => r.plainLyrics)
+    if (bestPlain) {
+      return {
+        syncedLrc: '',
+        plainLrc: bestPlain.plainLyrics || fallbackPlain,
       }
     }
   }
@@ -1164,29 +1228,44 @@ function alignLetrasTimestamps(
 
   let nextTimedIndex = 0
   const aligned: Array<string | undefined> = []
+  let matchesCount = 0
 
-  for (const line of originalLines) {
-    const relativeIndex = timedLines
-      .slice(nextTimedIndex)
-      .findIndex((timedLine) => areEquivalent(timedLine.text, line))
-    if (relativeIndex < 0) {
-      // Si la línea actual anterior contiene el verso (versos consecutivos agrupados en una sola marca)
-      if (
-        nextTimedIndex > 0 &&
-        nextTimedIndex - 1 < timedLines.length &&
-        areEquivalent(timedLines[nextTimedIndex - 1].text, line)
-      ) {
-        aligned.push(timedLines[nextTimedIndex - 1].timestamp)
-        continue
-      }
-      return null
+  for (let i = 0; i < originalLines.length; i++) {
+    const line = originalLines[i]
+
+    // 1. Si la marca temporal previa ya abarca este verso (versos compuestos agrupados en una sola marca)
+    if (
+      nextTimedIndex > 0 &&
+      nextTimedIndex - 1 < timedLines.length &&
+      areEquivalent(timedLines[nextTimedIndex - 1].text, line)
+    ) {
+      aligned.push(timedLines[nextTimedIndex - 1].timestamp)
+      matchesCount++
+      continue
     }
-    const matchIndex = nextTimedIndex + relativeIndex
-    aligned.push(timedLines[matchIndex].timestamp)
-    nextTimedIndex = matchIndex + 1
+
+    // 2. Búsqueda lookahead hacia adelante (hasta 6 marcas temporales)
+    const searchSlice = timedLines.slice(nextTimedIndex, nextTimedIndex + 6)
+    const relativeIndex = searchSlice.findIndex((tl) => areEquivalent(tl.text, line))
+
+    if (relativeIndex >= 0) {
+      const matchIndex = nextTimedIndex + relativeIndex
+      aligned.push(timedLines[matchIndex].timestamp)
+      nextTimedIndex = matchIndex + 1
+      matchesCount++
+    } else {
+      // Verso no coincidente de forma directa: hereda la marca previa para no colapsar la sincronización
+      aligned.push(aligned.length > 0 ? aligned[aligned.length - 1] : timedLines[0]?.timestamp)
+    }
   }
 
-  return aligned
+  // Aceptar la sincronización si al menos el 60% de los versos (o al menos 3) encontraron coincidencia
+  const minMatches = Math.min(originalLines.length * 0.6, 5)
+  if (matchesCount >= minMatches) {
+    return aligned
+  }
+
+  return null
 }
 
 async function _combineLyrics(
@@ -1202,6 +1281,7 @@ async function _combineLyrics(
     detectScript,
     detectLyricSourceLanguage,
     areLyricLinesEquivalent,
+    areAlignableLyricLines,
     processLyrics,
     romanizeLines,
     shouldTranslateLyrics,
@@ -1210,7 +1290,7 @@ async function _combineLyrics(
   const sourceScript = detectScript(sample)
   const sourceLang = detectLyricSourceLanguage(sample, sourceScript)
   const timestamps = lrclib?.syncedLrc
-    ? alignLetrasTimestamps(letras.original, lrclib.syncedLrc, areLyricLinesEquivalent)
+    ? alignLetrasTimestamps(letras.original, lrclib.syncedLrc, areAlignableLyricLines)
     : null
 
   const hasRichLetrasContent = (
@@ -1218,8 +1298,8 @@ async function _combineLyrics(
     letras.translated.some((t) => t.trim())
   )
 
-  // Si no hay timestamps y Letras no tiene contenido enriquecido (ni romaji ni traducción), fallback a LRCLIB canónico
-  if (lrclib?.syncedLrc && !timestamps && !hasRichLetrasContent) {
+  // Si no se pudieron alinear los timestamps pero LRCLIB tiene sincronización válida, fallback a procesar LRCLIB directamente para no perder timestamps
+  if (lrclib?.syncedLrc && !timestamps) {
     return processLyrics(lrclib.syncedLrc, lrclib.plainLrc, p)
   }
   const shouldTranslate = shouldTranslateLyrics(sourceLang, p.deviceLang, p.lyricTranslation)
@@ -1302,6 +1382,8 @@ async function _combineLyrics(
 export const __testing = {
   combineLyrics: _combineLyrics,
   fetchLrclib: _fetchLrclib,
+  hasValidSyncedTimestamps,
+  alignLetrasTimestamps,
   cleanTitleForLyrics,
   cleanArtistForLyrics,
   fetchLrclibJson,

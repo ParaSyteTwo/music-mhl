@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { __testing, getLyrics, cleanTitleForLyrics, cleanArtistForLyrics } from '@/lib/api/musicApi';
 import { __testing as letrasTesting } from '@/lib/letrasScraper';
-import { buildLRC, processLyrics, romanizeLines } from '@/lib/lyricsProcessor';
+import { buildLRC, processLyrics, romanizeLines, areAlignableLyricLines } from '@/lib/lyricsProcessor';
 
 describe('Data & Content Retrieval Invariant Contract (Gobernanza de Invariantes)', () => {
   beforeEach(() => {
@@ -218,6 +218,97 @@ describe('Data & Content Retrieval Invariant Contract (Gobernanza de Invariantes
       expect(result?.translated).toHaveLength(2);
       expect(result?.translated?.[0]).toBe('¿Soñando? ¿Quieres hacerlo realidad?');
       expect(result?.translated?.[1]).toBe('Vamos, hazlo');
+    });
+
+    it('INVARIANTE 3.6: hasValidSyncedTimestamps detecta y rechaza secuencias sintéticas artificiales de 1 segundo', () => {
+      // Simula el registro falso 38948100 de LRCLIB donde cada verso incrementa exactamente 1.00s
+      const fakeBotSynced = `
+        [00:01.00]Dreamin' 叶えたいの？
+        [00:02.00]Come on and do it
+        [00:03.00]俯いてる暇ナイ！
+        [00:04.00]Dreamin' 叶えたいの？
+        [00:05.00]Yeah, you can do it
+        [00:06.00]キミ次第 駆け抜けてく
+        [00:07.00]生き様 rebel
+        [00:08.00]コピー オンパレード
+        [00:09.00]Maxxin' out 全力で
+        [00:10.00]上等！自分勝手
+      `;
+      // Debe ser detectado como falso
+      expect(__testing.hasValidSyncedTimestamps(fakeBotSynced, 185)).toBe(false);
+
+      // En cambio, una pista con marcas reales y centésimas de segundo variables debe ser aceptada
+      const realHumanSynced = `
+        [00:05.99]Dreamin' 叶えたいの？
+        [00:08.47]Come on and do it 俯いてる暇ナイ！
+        [00:12.20]Dreamin' 叶えたいの？
+        [00:14.83]Yeah, you can do it キミ次第
+        [00:17.11]駆け抜けてく
+        [00:18.42]生き様 rebel
+        [00:19.98]コピー オンパレード
+        [00:21.50]Maxin' out 全力で
+        [00:22.85]上等！自分勝手
+        [00:24.45]And you?
+      `;
+      expect(__testing.hasValidSyncedTimestamps(realHumanSynced, 185)).toBe(true);
+    });
+
+    it('INVARIANTE 3.7: fetchLrclib descarta /api/get si contiene marcas sintéticas y recupera el candidato verificado de /api/search', async () => {
+      vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+        const url = String(input);
+        if (url.includes('/api/get')) {
+          // Devuelve registro sintético (bot)
+          return new Response(JSON.stringify({
+            id: 38948100,
+            trackName: 'DND',
+            artistName: 'Ado, KUROMI',
+            duration: 185,
+            syncedLyrics: '[00:01.00] Línea 1\n[00:02.00] Línea 2\n[00:03.00] Línea 3\n[00:04.00] Línea 4\n[00:05.00] Línea 5\n[00:06.00] Línea 6\n[00:07.00] Línea 7\n[00:08.00] Línea 8',
+          }), { status: 200 });
+        }
+        if (url.includes('/api/search')) {
+          // Búsqueda devuelve candidato con tiempos reales
+          return new Response(JSON.stringify([
+            {
+              id: 38952727,
+              trackName: 'DND (feat. KUROMI)',
+              artistName: 'Ado',
+              duration: 185,
+              syncedLyrics: '[00:05.99] Línea 1\n[00:08.47] Línea 2\n[00:12.20] Línea 3\n[00:14.83] Línea 4\n[00:17.11] Línea 5',
+            },
+          ]), { status: 200 });
+        }
+        return new Response('', { status: 500 });
+      });
+
+      const res = await __testing.fetchLrclib('DND', 'Ado, KUROMI', 185);
+      expect(res.syncedLrc).toContain('[00:05.99] Línea 1');
+      expect(res.syncedLrc).not.toContain('[00:01.00] Línea 1');
+    });
+
+    it('INVARIANTE 3.8: alignLetrasTimestamps tolera ligeras variaciones ortográficas (Maxxin vs Maxin) y Kana-Romaji', () => {
+      const originalLines = [
+        "Dreamin' 叶えたいの?",
+        'Come on and do it',
+        '俯いてる暇ナイ!',
+        "Maxxin' out 全力で",
+        'Dan-da-ra-dan-da-ran (I\'ma block that!)',
+      ];
+      const syncedLrc = `
+[00:05.99] Dreamin' 叶えたいの？
+[00:08.47] Come on and do it 俯いてる暇ナイ！
+[00:21.50] Maxin' out 全力で
+[00:48.57] ダンダラ ダンダラン (I'ma block that!)
+      `;
+
+      const aligned = __testing.alignLetrasTimestamps(originalLines, syncedLrc, areAlignableLyricLines);
+      expect(aligned).not.toBeNull();
+      expect(aligned).toHaveLength(5);
+      expect(aligned?.[0]).toBe('00:05.99');
+      expect(aligned?.[1]).toBe('00:08.47');
+      expect(aligned?.[2]).toBe('00:08.47'); // verso compuesto
+      expect(aligned?.[3]).toBe('00:21.50'); // variación Maxxin vs Maxin
+      expect(aligned?.[4]).toBe('00:48.57'); // kana vs romaji
     });
   });
 
