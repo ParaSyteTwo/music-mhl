@@ -297,7 +297,14 @@ function normalizeLyricLine(text: string): string {
 
 export function areLyricLinesEquivalent(left: string, right: string): boolean {
   const normalizedLeft = normalizeLyricLine(left)
-  return normalizedLeft.length > 0 && normalizedLeft === normalizeLyricLine(right)
+  const normalizedRight = normalizeLyricLine(right)
+  if (!normalizedLeft || !normalizedRight) return false
+  if (normalizedLeft === normalizedRight) return true
+  // Permitir coincidencia por contención de frases cuando las líneas son compuestas (mínimo 4 caracteres)
+  if (normalizedLeft.length >= 4 && normalizedRight.length >= 4) {
+    return normalizedLeft.includes(normalizedRight) || normalizedRight.includes(normalizedLeft)
+  }
+  return false
 }
 
 export function buildLRC(

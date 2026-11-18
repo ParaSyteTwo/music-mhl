@@ -34,12 +34,32 @@ async function letrasFetch(path: string, attempt = 0): Promise<string | null> {
       return result?.success && result.html ? result.html : null
     }
 
+    if (typeof window !== 'undefined') {
+      try {
+        const { Capacitor, CapacitorHttp } = await import('@capacitor/core')
+        if (Capacitor.isNativePlatform()) {
+          const resp = await CapacitorHttp.get({
+            url,
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36',
+              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+              'Accept-Language': 'es-ES,es;q=0.9,ja;q=0.8,en;q=0.7',
+            },
+          })
+          if (resp.status >= 200 && resp.status < 300 && resp.data) {
+            return typeof resp.data === 'string' ? resp.data : JSON.stringify(resp.data)
+          }
+        }
+      } catch {
+        // Fallback a fetch de navegador si CapacitorHttp no está disponible
+      }
+    }
+
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 12000)
     const res = await fetch(url, {
       signal: controller.signal,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Android; Mobile)',
         'Accept': 'text/html,application/xhtml+xml,application/xml',
       },
     })
@@ -121,15 +141,44 @@ interface LetrasSongResult {
   sourceUrl: string
 }
 
-function parseLetrasSongPage(html: string): { original: string[]; romaji: string[] } | null {
+function parseLetrasSongPage(html: string): { original: string[]; romaji: string[]; translated?: string[] } | null {
   const originalLines: string[] = []
   const romajiLines: string[] = []
+  let inlineTranslations: string[] = []
 
   if (typeof DOMParser === 'undefined') return null
 
   const doc = new DOMParser().parseFromString(html, 'text/html')
-  // 1. Selector robusto: canciones con .verse y .romanization (Ado, Anime, K-Pop, dual-script)
-  const verses = [...doc.querySelectorAll('.lyric-original .verse, .cnt-letra .verse, #js-lyric-content .verse, .verse')]
+
+  // 1. Selector de contenedor exclusivo: previene seleccionar columnas duplicadas (traducción lateral / móvil)
+  const container =
+    doc.querySelector('.lyric-translation-left') ||
+    doc.querySelector('.lyric-original') ||
+    doc.querySelector('.cnt-letra') ||
+    doc.querySelector('#js-lyric-content') ||
+    doc.querySelector('.lyric-content')
+
+  if (!container) return null
+
+  // 1.1 Si la página ya contiene la columna derecha de traducción, extraerla de inmediato
+  const rightColumn = doc.querySelector(
+    '.lyric-translation-right, .lyric-stackedTranslation, #js-lyric-content .lyric-translation-right, .lyric-content .lyric-translation-right'
+  )
+  if (rightColumn) {
+    const rightVerses = [...rightColumn.querySelectorAll('.verse')]
+    if (rightVerses.length > 0) {
+      inlineTranslations = rightVerses.map((v) => {
+        const clone = v.cloneNode(true) as Element
+        clone.querySelectorAll('.romanization').forEach((n) => n.remove())
+        clone.querySelectorAll('br').forEach((n) => n.replaceWith('\n'))
+        const lines = (clone.textContent ?? '').split('\n').map((l) => l.trim()).filter(Boolean)
+        return cleanText(lines[0] || '')
+      }).filter(Boolean)
+    }
+  }
+
+  // 1.2 Extraer versos originales y romaji dentro del contenedor principal
+  const verses = [...container.querySelectorAll('.verse')]
   if (verses.length > 0) {
     for (const verse of verses) {
       const romanization = verse.querySelector('.romanization')
@@ -137,36 +186,25 @@ function parseLetrasSongPage(html: string): { original: string[]; romaji: string
       clone.querySelectorAll('.romanization').forEach((node) => node.remove())
       clone.querySelectorAll('br').forEach((br) => br.replaceWith('\n'))
 
-      const original = cleanText(clone.textContent)
-      const romaji = cleanText(romanization?.textContent)
+      const origText = (clone.textContent ?? '').split('\n').map((l) => cleanText(l)).filter(Boolean)
+      const romText = romanization
+        ? (romanization.textContent ?? '').split('\n').map((l) => cleanText(l)).filter(Boolean)
+        : []
 
-      if (original) {
-        originalLines.push(original)
-        romajiLines.push(romaji || '')
+      if (origText.length > 0) {
+        for (let i = 0; i < origText.length; i++) {
+          originalLines.push(origText[i])
+          romajiLines.push(romText[i] || (romText.length === 1 ? romText[0] : ''))
+        }
       }
     }
   } else {
     // 2. Selector fallback: canciones estándar en formato de párrafos <p>
-    const container = doc.querySelector('.lyric-original, .cnt-letra, #js-lyric-content, .lyric-content')
-    if (container) {
-      const paragraphs = [...container.querySelectorAll('p')]
-      if (paragraphs.length > 0) {
-        for (const p of paragraphs) {
-          const clone = p.cloneNode(true) as Element
-          const romanization = clone.querySelector('.romanization')
-          clone.querySelectorAll('.romanization').forEach((node) => node.remove())
-          clone.querySelectorAll('br').forEach((br) => br.replaceWith('\n'))
-          const text = clone.textContent ?? ''
-          for (const rawLine of text.split('\n')) {
-            const clean = cleanText(rawLine)
-            if (clean) {
-              originalLines.push(clean)
-              romajiLines.push(cleanText(romanization?.textContent) || '')
-            }
-          }
-        }
-      } else {
-        const clone = container.cloneNode(true) as Element
+    const paragraphs = [...container.querySelectorAll('p')]
+    if (paragraphs.length > 0) {
+      for (const p of paragraphs) {
+        const clone = p.cloneNode(true) as Element
+        const romanization = clone.querySelector('.romanization')
         clone.querySelectorAll('.romanization').forEach((node) => node.remove())
         clone.querySelectorAll('br').forEach((br) => br.replaceWith('\n'))
         const text = clone.textContent ?? ''
@@ -174,15 +212,31 @@ function parseLetrasSongPage(html: string): { original: string[]; romaji: string
           const clean = cleanText(rawLine)
           if (clean) {
             originalLines.push(clean)
-            romajiLines.push('')
+            romajiLines.push(cleanText(romanization?.textContent) || '')
           }
+        }
+      }
+    } else {
+      const clone = container.cloneNode(true) as Element
+      clone.querySelectorAll('.romanization').forEach((node) => node.remove())
+      clone.querySelectorAll('br').forEach((br) => br.replaceWith('\n'))
+      const text = clone.textContent ?? ''
+      for (const rawLine of text.split('\n')) {
+        const clean = cleanText(rawLine)
+        if (clean) {
+          originalLines.push(clean)
+          romajiLines.push('')
         }
       }
     }
   }
 
   return originalLines.length > 0
-    ? { original: originalLines, romaji: romajiLines }
+    ? {
+        original: originalLines,
+        romaji: romajiLines,
+        ...(inlineTranslations.length > 0 ? { translated: inlineTranslations } : {}),
+      }
     : null
 }
 
@@ -195,12 +249,14 @@ function parseLetrasTranslationPage(html: string): string[] | null {
     if (rightColumn) {
       const verses = [...rightColumn.querySelectorAll('.verse, p > span')]
       if (verses.length > 0) {
-        const translated = verses.map((node) => {
+        const translated: string[] = []
+        for (const node of verses) {
           const clone = node.cloneNode(true) as Element
           clone.querySelectorAll('.romanization').forEach((child) => child.remove())
           clone.querySelectorAll('br').forEach((br) => br.replaceWith('\n'))
-          return cleanText(clone.textContent)
-        }).filter(Boolean)
+          const lines = (clone.textContent ?? '').split('\n').map((l) => cleanText(l)).filter(Boolean)
+          translated.push(...lines)
+        }
         if (translated.length > 0) return translated
       }
 
@@ -394,16 +450,20 @@ export async function fetchLetrasLyrics(
     return { original: [], romaji: [], translated: [], sourceUrl: '' }
   }
 
-  // 2. Fetch página original y de traducción en paralelo
+  // 2. Parsear página original (y traducción inline si está presente)
   const cleanBaseUrl = songPageResult.url.replace(/\/$/, '')
-  const [songPage, transPage] = await Promise.all([
-    songPageResult.html ?? letrasFetch(songPageResult.url),
-    letrasFetch(`${cleanBaseUrl}/traduccion.html`),
-  ])
-
-  // 3. Parsear
+  const songPage = songPageResult.html ?? (await letrasFetch(songPageResult.url))
   const parsed = songPage ? parseLetrasSongPage(songPage) : null
-  const translated = transPage ? parseLetrasTranslationPage(transPage) : null
+
+  // Si la página original ya trajo traducción alineada, usarla; si no, buscar traduccion.html
+  let translated = parsed?.translated && parsed.translated.length === (parsed.original?.length || 0)
+    ? parsed.translated
+    : null
+
+  if (!translated) {
+    const transPage = await letrasFetch(`${cleanBaseUrl}/traduccion.html`)
+    translated = transPage ? parseLetrasTranslationPage(transPage) : null
+  }
 
   let romaji = parsed?.romaji ?? []
   if (parsed?.original && parsed.original.length > 0 && romaji.every((r) => !r)) {

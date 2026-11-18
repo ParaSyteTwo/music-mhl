@@ -173,6 +173,52 @@ describe('Data & Content Retrieval Invariant Contract (Gobernanza de Invariantes
       expect(romanized[1]).not.toContain('shang');
       expect(romanized[2]).toBe('Dreamin');
     });
+
+    it('INVARIANTE 3.5: parseLetrasSongPage no debe duplicar versos cuando existen columnas de traducción simultáneas (Mobile/Stacked views)', () => {
+      // Simula estructura de Letras.com con columna izquierda (original+romaji) y derecha (traducción)
+      const dualColumnHtml = `
+        <div class="lyric-content">
+          <div class="lyric-translation-left">
+            <p>
+              <span class="verse">
+                <span>Dreamin' 叶えたいの?</span>
+                <span class="romanization">Dreamin' kanaetai no?</span>
+              </span>
+              <br/>
+              <span class="verse">
+                <span>Come on and do it</span>
+                <span class="romanization">Come on and do it</span>
+              </span>
+            </p>
+          </div>
+          <div class="lyric-translation-right">
+            <p>
+              <span class="verse">
+                ¿Soñando? ¿Quieres hacerlo realidad?
+                <span class="romanization">Dreamin' 叶えたいの?</span>
+              </span>
+              <br/>
+              <span class="verse">
+                Vamos, hazlo
+                <span class="romanization">Come on and do it</span>
+              </span>
+            </p>
+          </div>
+        </div>
+      `;
+      const result = letrasTesting.parseLetrasSongPage(dualColumnHtml);
+      expect(result).not.toBeNull();
+      // Debe contener exactamente 2 versos, no 4
+      expect(result?.original).toHaveLength(2);
+      expect(result?.original[0]).toBe("Dreamin' 叶えたいの?");
+      expect(result?.original[1]).toBe('Come on and do it');
+      expect(result?.romaji[0]).toBe("Dreamin' kanaetai no?");
+      expect(result?.romaji[1]).toBe('Come on and do it');
+      // Si la columna derecha estaba presente, debió extraer también la traducción inline
+      expect(result?.translated).toHaveLength(2);
+      expect(result?.translated?.[0]).toBe('¿Soñando? ¿Quieres hacerlo realidad?');
+      expect(result?.translated?.[1]).toBe('Vamos, hazlo');
+    });
   });
 
   describe('4. Invariantes de Limpieza de Metadatos (Data Sanitization)', () => {

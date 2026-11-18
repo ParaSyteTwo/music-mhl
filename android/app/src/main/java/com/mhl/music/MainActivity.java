@@ -15,9 +15,7 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        if (BuildConfig.MHL_EMULATOR_BUILD) {
-            WebView.setWebContentsDebuggingEnabled(true);
-        }
+        WebView.setWebContentsDebuggingEnabled(true);
         registerPlugin(YtDlpPlugin.class);
         registerPlugin(OpenFilePlugin.class);
         registerPlugin(AppUpdaterPlugin.class);
