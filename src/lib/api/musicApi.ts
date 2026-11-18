@@ -930,13 +930,27 @@ async function fetchLrclibJson<T>(url: string): Promise<T | null> {
 
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 3500)
-    const res = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        'Lrclib-Client': 'MHLMusic/1.5.6-beta.3 (https://github.com/ParaSyteTwo/music-mhl)',
-        'X-User-Agent': 'MHLMusic/1.5.6-beta.3 (https://github.com/ParaSyteTwo/music-mhl)',
-      },
-    })
+    let res: Response
+    try {
+      res = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          'Lrclib-Client': 'MHLMusic/1.5.6-beta.4 (https://github.com/ParaSyteTwo/music-mhl)',
+          'X-User-Agent': 'MHLMusic/1.5.6-beta.4 (https://github.com/ParaSyteTwo/music-mhl)',
+        },
+      })
+    } catch (signalErr: any) {
+      if (signalErr?.message?.includes('AbortSignal')) {
+        res = await fetch(url, {
+          headers: {
+            'Lrclib-Client': 'MHLMusic/1.5.6-beta.4 (https://github.com/ParaSyteTwo/music-mhl)',
+            'X-User-Agent': 'MHLMusic/1.5.6-beta.4 (https://github.com/ParaSyteTwo/music-mhl)',
+          },
+        })
+      } else {
+        throw signalErr
+      }
+    }
     clearTimeout(timeout)
     if (res.status === 429) {
       lrclibCooldownUntil = Date.now() + 15 * 60 * 1000
@@ -1017,7 +1031,7 @@ export async function getLyrics(
       }
 
       return { synced: null, plain: null }
-    })(), 5000)
+    })(), 12000)
   } catch {
     return { synced: null, plain: null }
   }
@@ -1069,8 +1083,8 @@ function hasValidSyncedTimestamps(lrc?: string | null, duration?: number): boole
   const uniformRatio = uniformDeltas / (timed.length - 1)
   const zeroCentisRatio = exactZeroCentis / timed.length
 
-  // Si >= 65% de líneas tienen deltas idénticos de 1s/2s Y >= 75% tienen .00 centésimas exactas, es una pista falsa generada por bot
-  if (uniformRatio >= 0.65 && zeroCentisRatio >= 0.75) {
+  // Si >= 50% de líneas tienen deltas idénticos de 1s/2s Y >= 60% tienen .00 centésimas exactas, es una pista falsa generada por bot
+  if (uniformRatio >= 0.50 && zeroCentisRatio >= 0.60) {
     return false
   }
 
@@ -1260,7 +1274,7 @@ function alignLetrasTimestamps(
   }
 
   // Aceptar la sincronización si al menos el 60% de los versos (o al menos 3) encontraron coincidencia
-  const minMatches = Math.min(originalLines.length * 0.6, 5)
+  const minMatches = originalLines.length < 3 ? originalLines.length : Math.max(3, Math.ceil(originalLines.length * 0.6))
   if (matchesCount >= minMatches) {
     return aligned
   }
@@ -1289,6 +1303,25 @@ async function _combineLyrics(
   } = await import('@/lib/lyricsProcessor')
   const sourceScript = detectScript(sample)
   const sourceLang = detectLyricSourceLanguage(sample, sourceScript)
+
+  // Invariante de fidelidad de idioma: si LRCLIB está en un idioma o script no inglés (p. ej. rumano, japonés, coreano)
+  // y Letras.com devolvió una adaptación en inglés, no permitir que la adaptación reemplace la letra original.
+  const lrclibSample = lrclib?.syncedLrc
+    ? lrclib.syncedLrc.split('\n').map((l) => l.replace(/^\[\d+:\d+\.\d+\]/, '').trim()).filter(Boolean).join('\n').slice(0, 500)
+    : ''
+  const lrclibScript = lrclibSample ? detectScript(lrclibSample) : 'latin'
+  const lrclibLang = lrclibSample ? detectLyricSourceLanguage(lrclibSample, lrclibScript) : 'unknown'
+
+  const isLanguageMismatch = Boolean(
+    lrclib?.syncedLrc &&
+    ((lrclibScript !== 'latin' && sourceScript === 'latin') ||
+     (lrclibLang !== 'en' && lrclibLang !== 'unknown' && sourceLang === 'en'))
+  )
+
+  if (isLanguageMismatch && lrclib?.syncedLrc) {
+    return processLyrics(lrclib.syncedLrc, lrclib.plainLrc, p)
+  }
+
   const timestamps = lrclib?.syncedLrc
     ? alignLetrasTimestamps(letras.original, lrclib.syncedLrc, areAlignableLyricLines)
     : null
@@ -1380,6 +1413,7 @@ async function _combineLyrics(
 }
 
 export const __testing = {
+  resetLrclibCooldown: () => { lrclibCooldownUntil = 0; },
   combineLyrics: _combineLyrics,
   fetchLrclib: _fetchLrclib,
   hasValidSyncedTimestamps,

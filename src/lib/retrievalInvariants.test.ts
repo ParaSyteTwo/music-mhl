@@ -310,6 +310,84 @@ describe('Data & Content Retrieval Invariant Contract (Gobernanza de Invariantes
       expect(aligned?.[3]).toBe('00:21.50'); // variación Maxxin vs Maxin
       expect(aligned?.[4]).toBe('00:48.57'); // kana vs romaji
     });
+
+    it('INVARIANTE 3.9: alignLetrasTimestamps rechaza alineaciones con discrepancia severa de idioma (evita sustitución por versiones en inglés)', () => {
+      const englishAdaptation = [
+        'Hello, salute',
+        'Its me your duke',
+        'And I made something that is real',
+        'To show you how I feel',
+        'Hello, hello it is me picasso I will paint',
+        'My words of love with your name on every wall',
+        'When you leave my colors fade to gray',
+        'Every word of love I used to say',
+      ];
+      const romanianLrclib = `
+[00:33.30] Alo? Salut!
+[00:39.34] Sunt eu, un haiduc
+[00:42.82] Și te rog, iubirea mea
+[00:46.62] Primeşte fericirea
+[00:49.78] Alo? Alo!
+[00:53.20] Sunt eu, Picasso
+[00:56.75] Ţi-am dat beep
+[00:58.56] Și sunt voinic
+[01:00.96] Dar să ştii, nu-ţi cer nimic
+      `;
+      const aligned = __testing.alignLetrasTimestamps(englishAdaptation, romanianLrclib, areAlignableLyricLines);
+      expect(aligned).toBeNull();
+    });
+
+    it('INVARIANTE 3.10: combineLyrics detecta discrepancia de idioma (Letras en inglés vs LRCLIB en rumano) y prioriza la lírica original de LRCLIB', async () => {
+      const letrasEnglish = {
+        original: [
+          'Ma-ia-hii',
+          'Ma-ia-huu',
+          'Ma-ia-hoo',
+          'Ma-ia-haa',
+          'Hello, salute',
+          'Its me your duke',
+        ],
+        romaji: [],
+        translated: [
+          '',
+          '',
+          '',
+          '',
+          'Hola, saludo',
+          'Soy yo tu duque',
+        ],
+        sourceUrl: 'https://www.letras.com/o-zone/dragostea-din-tei-english/',
+      };
+      const lrclibRomanian = {
+        syncedLrc: `[00:00.91] Mai-ia-hi
+[00:05.67] Mai-ia-hu
+[00:07.33] Mai-ia-ha
+[00:08.90] Mai-ia-ha-ha
+[00:33.30] Alo? Salut!
+[00:39.34] Sunt eu, un haiduc`,
+        plainLrc: `Mai-ia-hi
+Mai-ia-hu
+Mai-ia-ha
+Mai-ia-ha-ha
+Alo? Salut!
+Sunt eu, un haiduc`,
+      };
+
+      const result = await __testing.combineLyrics(
+        letrasEnglish,
+        lrclibRomanian,
+        {
+          lyricOriginal: true,
+          lyricRomanization: false,
+          lyricTranslation: false,
+          deviceLang: 'es',
+        },
+      );
+
+      // Debe conservar la versión en rumano (Alo? Salut! Sunt eu, un haiduc) y NO la versión inglesa (Hello, salute)
+      expect(result?.synced).toContain('Sunt eu, un haiduc');
+      expect(result?.synced).not.toContain('Its me your duke');
+    });
   });
 
   describe('4. Invariantes de Limpieza de Metadatos (Data Sanitization)', () => {

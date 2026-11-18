@@ -32,10 +32,12 @@ export function detectScript(text: string): Script {
   return 'latin'
 }
 
-export type LyricSourceLang = Lang | 'unknown'
+export type LyricSourceLang = Lang | 'ro' | 'fr' | 'it' | 'pt' | 'de' | 'unknown'
 
 const ES_WORDS = /\b(el|la|los|las|un|una|unos|unas|de|del|que|y|en|por|para|con|sin|mi|tu|yo|te|me|se|su|sus|es|soy|eres|somos|estoy|estas|esta|hay|amor|corazon|vida|noche|dia|alma|cielo|ojos|quiero|puedo|porque|cuando|donde|como|aunque|siempre|nunca|nada|todo|toda|contigo|conmigo|baila|besame|deja|sigo)\b/gi
 const EN_WORDS = /\b(the|and|you|your|me|my|i|we|to|of|in|on|for|with|without|love|heart|life|night|day|soul|eyes|want|are|is|am|like|baby|because|when|where|always|never|nothing|everything|dance|kiss|let|still)\b/gi
+const RO_WORDS = /\b(sunt|pentru|dragostea|iubirea|fericirea|voinic|nimic|vrei|pleci|ochii|inima|haiduc|cui|acest|acesta|când|noastra|voastra|privesc|simt|acum|frumos|viata|lumea|noaptea|doar)\b/gi
+const RO_DIACRITICS = /[ăâîșțşţĂÂÎȘȚŞŢ]/
 
 function countMatches(text: string, re: RegExp): number {
   return (text.match(re) ?? []).length
@@ -52,6 +54,14 @@ export function detectLatinLyricLanguage(text: string): LyricSourceLang {
 
   if (!sample) return 'unknown'
   const raw = text.toLowerCase()
+
+  // 1. Detección específica de rumano (evita colisiones de palabras compartidas con español como "un", "te", "mi", "de")
+  const hasRomanianDiacritics = RO_DIACRITICS.test(text)
+  const roWordMatches = countMatches(sample, RO_WORDS)
+  if (hasRomanianDiacritics || roWordMatches >= 2) {
+    return 'ro'
+  }
+
   const hasSpanishSignals =
     /[áéíóúñ¿¡]/i.test(text) ||
     /\b(que|porque|aunque|estoy|eres|corazon|cancion|contigo|conmigo|quiero)\b/i.test(raw)

@@ -17,6 +17,12 @@ describe('lyrics language decisions', () => {
     expect(detectLatinLyricLanguage('I want your love in my heart and in my life tonight')).toBe('en');
   });
 
+  it('detects Romanian lyrics and does not mistake them for Spanish', () => {
+    const roSample = 'Alo? Salut! Sunt eu, un haiduc, și te rog, iubirea mea, primeşte fericirea. Chipul tău şi dragostea din tei';
+    expect(detectLatinLyricLanguage(roSample)).toBe('ro');
+    expect(shouldTranslateLyrics('ro', 'es', true)).toBe(true);
+  });
+
   it('does not translate when source and target match', () => {
     expect(shouldTranslateLyrics('es', 'es', true)).toBe(false);
     expect(shouldTranslateLyrics('en', 'en', true)).toBe(false);

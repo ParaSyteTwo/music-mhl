@@ -18,7 +18,7 @@ from urllib.parse import quote_plus, urlparse
 # CREATE_NO_WINDOW para evitar popup de consola en Windows
 CREATE_NO_WINDOW = 0x08000000 if sys.platform == 'win32' else 0
 
-APP_VERSION = '1.5.6-beta.4'
+APP_VERSION = '1.5.6-beta.5'
 
 import requests
 
@@ -764,8 +764,9 @@ class Bridge:
                 url,
                 timeout=12,
                 headers={
-                    'User-Agent': 'Mozilla/5.0 (Android; Mobile)',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml,application/json;q=0.9,*/*;q=0.8',
+                    'Accept-Language': 'es-ES,es;q=0.9,ja;q=0.8,en;q=0.7',
                 },
             )
             if not response.ok:

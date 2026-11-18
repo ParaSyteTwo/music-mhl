@@ -177,4 +177,70 @@ describe('letras.com scraper', () => {
       'Vamos, hazlo',
     ])
   })
+
+  it('searches Genius API and extracts original and romanized tracks', async () => {
+    const geniusSearchResponse = JSON.stringify({
+      response: {
+        sections: [
+          {
+            type: 'top_hit',
+            hits: [
+              {
+                type: 'song',
+                result: {
+                  id: 123,
+                  title: 'DND',
+                  path: '/Ado-dnd-lyrics',
+                  primary_artist: { name: 'Ado' },
+                },
+              },
+              {
+                type: 'song',
+                result: {
+                  id: 456,
+                  title: 'Ado - DND ft. KUROMI (Romanized)',
+                  path: '/Genius-romanizations-ado-dnd-ft-kuromi-romanized-lyrics',
+                  primary_artist: { name: 'Genius Romanizations' },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    })
+
+    const geniusOrigPage = `
+      <div data-lyrics-container="true">
+        Dreamin' 叶えたいの?<br>
+        Come on and do it<br>
+        俯いてる暇ナイ!
+      </div>
+    `
+    const geniusRomPage = `
+      <div data-lyrics-container="true">
+        Dreamin' kanaetai no?<br>
+        Come on and do it<br>
+        utsuite ru hima nai!
+      </div>
+    `
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.includes('api/search/multi')) {
+        return new Response(geniusSearchResponse, { status: 200 })
+      }
+      if (url.includes('/Ado-dnd-lyrics')) {
+        return new Response(geniusOrigPage, { status: 200 })
+      }
+      if (url.includes('romanized-lyrics')) {
+        return new Response(geniusRomPage, { status: 200 })
+      }
+      return new Response('', { status: 404 })
+    })
+
+    const result = await __testing.fetchGeniusLyrics('DND (feat. KUROMI)', 'Ado')
+    expect(result).not.toBeNull()
+    expect(result?.original).toEqual(["Dreamin' 叶えたいの?", 'Come on and do it', '俯いてる暇ナイ!'])
+    expect(result?.romaji).toEqual(["Dreamin' kanaetai no?", 'Come on and do it', 'utsuite ru hima nai!'])
+  })
 })

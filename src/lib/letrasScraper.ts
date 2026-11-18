@@ -57,12 +57,25 @@ async function letrasFetch(path: string, attempt = 0): Promise<string | null> {
 
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 12000)
-    const res = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        'Accept': 'text/html,application/xhtml+xml,application/xml',
-      },
-    })
+    let res: Response
+    try {
+      res = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          'Accept': 'text/html,application/xhtml+xml,application/xml',
+        },
+      })
+    } catch (signalErr: any) {
+      if (signalErr?.message?.includes('AbortSignal')) {
+        res = await fetch(url, {
+          headers: {
+            'Accept': 'text/html,application/xhtml+xml,application/xml',
+          },
+        })
+      } else {
+        throw signalErr
+      }
+    }
     clearTimeout(timeout)
     if (!res.ok) return null
     return await res.text()
@@ -101,6 +114,7 @@ function cleanHtml(text: string): string {
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
+    .replace(/&#x27;/gi, "'")
     .replace(/&nbsp;/g, ' ')
     .replace(/\r\n/g, '\n')
     .trim()
@@ -328,9 +342,11 @@ async function searchLetrasSong(title: string, artist: string): Promise<LetrasSo
   const html = await letrasFetch(`/search/?lookup=${query}&from=header`)
   if (!html) return null
 
-  // Buscar todos los enlaces de canciones
-  const songLinks = [...html.matchAll(/href="(https:\/\/www\.letras\.com\/[a-z0-9-]+\/[a-z0-9-]+\/?)"/gi)]
-    .map((m) => m[1])
+  const isExplicitEnglishRequest = /\b(english|ingles|versao em ingles|version en ingles)\b/i.test(title)
+
+  // Buscar todos los enlaces de canciones (relativos y absolutos)
+  const songLinks = [...html.matchAll(/href="((?:https:\/\/www\.letras\.com)?\/[a-z0-9-]+\/[a-z0-9-]+\/?)"/gi)]
+    .map((m) => (m[1].startsWith('http') ? m[1] : `${LETRAS_BASE}${m[1]}`))
     .filter((url) => {
       // Filtrar: solo URLs de canciones (2 segmentos, no estilos/discografia/etc)
       const parts = url.replace('https://www.letras.com/', '').replace(/\/$/, '').split('/')
@@ -347,7 +363,7 @@ async function searchLetrasSong(title: string, artist: string): Promise<LetrasSo
 
   // Scoring: mejor coincidencia
   let best: string | null = null
-  let bestScore = 0
+  let bestScore = -Infinity
 
   for (const url of [...new Set(songLinks)]) {
     const parts = url.replace('https://www.letras.com/', '').replace(/\/$/, '').split('/')
@@ -356,11 +372,16 @@ async function searchLetrasSong(title: string, artist: string): Promise<LetrasSo
 
     let score = 0
     if (urlArtist.includes(artistSlug) || artistSlug.includes(urlArtist)) score += 10
-    if (urlSong.includes(titleSlug) || titleSlug.includes(urlSong)) score += 10
-    if (urlSong.includes(titleWithFeatSlug) || titleWithFeatSlug.includes(urlSong)) score += 15
-    if (urlArtist === artistSlug && (urlSong === titleSlug || urlSong === titleWithFeatSlug)) score += 30
+    if (urlArtist === artistSlug) score += 10
+    if (urlSong === titleSlug || urlSong === titleWithFeatSlug) score += 40
+    else if (urlSong.includes(titleSlug) || titleSlug.includes(urlSong)) score += 10
 
-    if (score > bestScore) {
+    // Penalizar fuertemente versiones en inglés / traducciones si el título no pedía explícitamente versión en inglés
+    if (!isExplicitEnglishRequest && /-(english|ingles|traducao|traduccion|translation|versao|version-inglesa)/i.test(urlSong)) {
+      score -= 50
+    }
+
+    if (score > bestScore && score > 0) {
       bestScore = score
       best = url
     }
@@ -399,33 +420,132 @@ function parseGeniusPage(html: string): string[] {
   return lines
 }
 
-async function fetchGeniusLyrics(title: string, artist: string): Promise<LetrasSongResult | null> {
-  const artistSlug = slugify(artist, false)
-  const titleSlug = slugify(title, false)
-  if (!artistSlug || !titleSlug) return null
+interface GeniusSearchHit {
+  type: string
+  result: {
+    id: number
+    title: string
+    path: string
+    url?: string
+    primary_artist?: {
+      name: string
+    }
+  }
+}
 
-  const capitalizedArtist = artistSlug.charAt(0).toUpperCase() + artistSlug.slice(1)
-  const url = `https://genius.com/${capitalizedArtist}-${titleSlug}-lyrics`
-  const html = await letrasFetch(url)
+async function searchGeniusApi(query: string): Promise<GeniusSearchHit[]> {
+  try {
+    const jsonStr = await letrasFetch(`https://genius.com/api/search/multi?q=${encodeURIComponent(query)}`)
+    if (!jsonStr) return []
+    const parsed = JSON.parse(jsonStr)
+    const sections = parsed?.response?.sections
+    if (!Array.isArray(sections)) return []
+    const hits: GeniusSearchHit[] = []
+    for (const sec of sections) {
+      if (Array.isArray(sec.hits)) {
+        for (const hit of sec.hits) {
+          if (hit?.type === 'song' && hit.result?.path) {
+            hits.push(hit)
+          }
+        }
+      }
+    }
+    return hits
+  } catch {
+    return []
+  }
+}
+
+async function fetchGeniusLyrics(title: string, artist: string): Promise<LetrasSongResult | null> {
+  const cleanTitle = title.replace(/\b(feat|ft|featuring)\b.*$/i, '').trim()
+  const cleanArtist = artist.replace(/\b(feat|ft|featuring)\b.*$/i, '').trim()
+  const query = `${cleanTitle || title} ${cleanArtist || artist}`.trim()
+  if (!query) return null
+
+  // 1. Buscar en la API de Genius
+  let hits = await searchGeniusApi(query)
+  if (hits.length === 0 && (cleanTitle !== title || cleanArtist !== artist)) {
+    hits = await searchGeniusApi(`${title} ${artist}`.trim())
+  }
+  if (hits.length === 0) {
+    // Fallback con URL directa predecible
+    const artistSlug = slugify(artist, false)
+    const titleSlug = slugify(title, false)
+    if (artistSlug && titleSlug) {
+      const capitalizedArtist = artistSlug.charAt(0).toUpperCase() + artistSlug.slice(1)
+      hits = [{
+        type: 'song',
+        result: {
+          id: 0,
+          title,
+          path: `/${capitalizedArtist}-${titleSlug}-lyrics`,
+        },
+      }]
+    }
+  }
+
+  if (hits.length === 0) return null
+
+  // Identificar el hit de la canción original y el hit de la versión romanizada
+  let primaryHit: GeniusSearchHit | null = null
+  let romajiHit: GeniusSearchHit | null = null
+  let translationHit: GeniusSearchHit | null = null
+
+  for (const h of hits) {
+    const t = h.result.title.toLowerCase()
+    const art = (h.result.primary_artist?.name || '').toLowerCase()
+    if (t.includes('romaniz') || art.includes('romaniz')) {
+      if (!romajiHit) romajiHit = h
+    } else if (t.includes('translation') || t.includes('traducci')) {
+      if (!translationHit) translationHit = h
+    } else if (!primaryHit) {
+      primaryHit = h
+    }
+  }
+
+  // Si no se encontró versión romanizada en los hits iniciales, buscar explícitamente "query romanized"
+  if (!romajiHit) {
+    const romHits = await searchGeniusApi(`${query} romanized`)
+    romajiHit = romHits.find((h) => {
+      const t = h.result.title.toLowerCase()
+      const art = (h.result.primary_artist?.name || '').toLowerCase()
+      return t.includes('romaniz') || art.includes('romaniz')
+    }) || null
+  }
+
+  const primaryPath = primaryHit?.result?.path || hits[0]?.result?.path
+  if (!primaryPath) return null
+
+  const songUrl = primaryPath.startsWith('http') ? primaryPath : `https://genius.com${primaryPath}`
+  const html = await letrasFetch(songUrl)
   if (!html) return null
 
   const origLines = parseGeniusPage(html)
   if (origLines.length === 0) return null
 
   let romLines: string[] = []
-  const romMatch = html.match(/href="([^"]*romaniz[^"]*lyrics)"/i)
-  if (romMatch?.[1]) {
-    const romHtml = await letrasFetch(romMatch[1])
+  if (romajiHit?.result?.path) {
+    const romUrl = romajiHit.result.path.startsWith('http') ? romajiHit.result.path : `https://genius.com${romajiHit.result.path}`
+    const romHtml = await letrasFetch(romUrl)
     if (romHtml) {
       romLines = parseGeniusPage(romHtml)
+    }
+  }
+
+  let transLines: string[] = []
+  if (translationHit?.result?.path) {
+    const transUrl = translationHit.result.path.startsWith('http') ? translationHit.result.path : `https://genius.com${translationHit.result.path}`
+    const transHtml = await letrasFetch(transUrl)
+    if (transHtml) {
+      transLines = parseGeniusPage(transHtml)
     }
   }
 
   return {
     original: origLines,
     romaji: romLines,
-    translated: [],
-    sourceUrl: url,
+    translated: transLines,
+    sourceUrl: songUrl,
   }
 }
 
@@ -469,8 +589,15 @@ export async function fetchLetrasLyrics(
   if (parsed?.original && parsed.original.length > 0 && romaji.every((r) => !r)) {
     // Si Letras.com no contenía romaji, intentar complementar con Genius
     const genius = await fetchGeniusLyrics(title, artist)
-    if (genius && genius.romaji.length === parsed.original.length) {
-      romaji = genius.romaji
+    if (genius && genius.romaji.length > 0) {
+      if (genius.romaji.length === parsed.original.length) {
+        romaji = genius.romaji
+      } else if (genius.original.length === genius.romaji.length) {
+        parsed.original = genius.original
+        romaji = genius.romaji
+      } else {
+        romaji = parsed.original.map((_, i) => genius.romaji[i] || '')
+      }
     }
   }
 
@@ -488,6 +615,7 @@ export const __testing = {
   parseLetrasSongPage,
   parseLetrasTranslationPage,
   parseGeniusPage,
+  searchGeniusApi,
   fetchGeniusLyrics,
   slugify,
   clearCache: () => letrasCache.clear(),
