@@ -24,20 +24,32 @@ import android.content.Context;
 import android.content.Intent;
 import android.provider.MediaStore;
 import android.media.MediaMetadataRetriever;
+import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.OutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import android.util.Base64;
 import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.net.HttpURLConnection;
+import java.net.InetAddress;
 import java.net.URI;
+import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 
@@ -47,8 +59,18 @@ public class YtDlpPlugin extends Plugin {
     private static final String TAG = "YtDlpPlugin";
     private static final Pattern SPEED_PATTERN =
         Pattern.compile("at\\s+([\\d.]+)\\s*(KiB|MiB|GiB|KB|MB|GB)/s");
+    private static final long STALE_CACHE_TTL_MS = 3600_000L; // 1 hour
+    private static final int COVER_CACHE_MAX_ENTRIES = 12;
+    private static final int COVER_MAX_BYTES = 5 * 1024 * 1024; // 5 MB
+    private static final long COVER_CACHE_MAX_TOTAL_BYTES = 16L * 1024 * 1024; // 16 MB global cap
+    private static final int COVER_MAX_REDIRECTS = 3;
+
     private boolean isInitialized = false;
     private final ExecutorService executor = Executors.newFixedThreadPool(4);
+    private final ExecutorService searchExecutor = Executors.newFixedThreadPool(3);
+    private final ExecutorService enrichExecutor = Executors.newFixedThreadPool(2);
+    private final Map<String, byte[]> coverCache = new LinkedHashMap<String, byte[]>(16, 0.75f, true);
+    private long coverCacheTotalBytes = 0L;
 
     private final Object updateLock = new Object();
     private long lastAutoUpdateTimestamp = 0;
@@ -101,6 +123,260 @@ public class YtDlpPlugin extends Plugin {
         return "";
     }
 
+    private static void deleteRecursively(File target) {
+        if (target == null || !target.exists()) return;
+        if (target.isDirectory()) {
+            File[] children = target.listFiles();
+            if (children != null) {
+                for (File child : children) {
+                    deleteRecursively(child);
+                }
+            }
+        }
+        target.delete();
+    }
+
+    private void cleanupStaleCache(File cacheDir) {
+        if (cacheDir == null || !cacheDir.exists() || !cacheDir.isDirectory()) return;
+        long cutoff = System.currentTimeMillis() - STALE_CACHE_TTL_MS;
+        File[] entries = cacheDir.listFiles();
+        if (entries == null) return;
+        for (File entry : entries) {
+            try {
+                if (entry.lastModified() < cutoff) {
+                    deleteRecursively(entry);
+                }
+            } catch (Exception e) {
+                Log.w(TAG, "Failed to cleanup stale cache entry: " + e.getMessage());
+            }
+        }
+    }
+
+    private File resolveValidatedTempFile(String tempPath, boolean requireExists) throws IOException {
+        if (tempPath == null || tempPath.isEmpty()) {
+            return null;
+        }
+        File ytdlpRoot = new File(getContext().getCacheDir(), "ytdlp");
+        String rootCanonical = ytdlpRoot.getCanonicalPath();
+        String rootPrefix = rootCanonical.endsWith(File.separator)
+            ? rootCanonical
+            : rootCanonical + File.separator;
+
+        File candidate = new File(tempPath);
+        String candidateCanonical = candidate.getCanonicalPath();
+        if (!candidateCanonical.startsWith(rootPrefix)) {
+            return null;
+        }
+        if (requireExists && (!candidate.exists() || !candidate.isFile())) {
+            return null;
+        }
+        return candidate;
+    }
+
+    private void deleteTempFileAndTaskDir(File tempFile) {
+        if (tempFile == null) return;
+        try {
+            File ytdlpRoot = new File(getContext().getCacheDir(), "ytdlp");
+            String rootCanonical = ytdlpRoot.getCanonicalPath();
+            String rootPrefix = rootCanonical.endsWith(File.separator)
+                ? rootCanonical
+                : rootCanonical + File.separator;
+
+            String fileCanonical = tempFile.getCanonicalPath();
+            if (!fileCanonical.startsWith(rootPrefix)) {
+                return;
+            }
+            if (tempFile.isDirectory()) {
+                deleteRecursively(tempFile);
+                return;
+            }
+            if (tempFile.exists()) {
+                tempFile.delete();
+            }
+            File parentDir = tempFile.getParentFile();
+            if (parentDir != null) {
+                String parentCanonical = parentDir.getCanonicalPath();
+                if (parentCanonical.startsWith(rootPrefix) && !parentCanonical.equals(rootCanonical)) {
+                    deleteRecursively(parentDir);
+                }
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to cleanup temp file/taskDir: " + e.getMessage());
+        }
+    }
+
+    private static boolean isSafeCoverUrl(URL url) {
+        if (url == null) return false;
+        if (!"https".equalsIgnoreCase(url.getProtocol())) {
+            return false;
+        }
+        String host = url.getHost();
+        if (host == null || host.isEmpty()) {
+            return false;
+        }
+        String lowerHost = host.toLowerCase(Locale.ROOT);
+        while (lowerHost.endsWith(".")) {
+            lowerHost = lowerHost.substring(0, lowerHost.length() - 1);
+        }
+        if (lowerHost.isEmpty()
+                || "localhost".equals(lowerHost)
+                || lowerHost.endsWith(".localhost")
+                || lowerHost.endsWith(".local")
+                || lowerHost.endsWith(".internal")) {
+            return false;
+        }
+        try {
+            InetAddress[] addresses = InetAddress.getAllByName(host);
+            if (addresses == null || addresses.length == 0) {
+                return false;
+            }
+            for (InetAddress addr : addresses) {
+                if (addr.isLoopbackAddress()
+                        || addr.isSiteLocalAddress()
+                        || addr.isLinkLocalAddress()
+                        || addr.isAnyLocalAddress()
+                        || addr.isMulticastAddress()) {
+                    return false;
+                }
+                byte[] raw = addr.getAddress();
+                if (raw != null && raw.length == 16 && (raw[0] & 0xfe) == 0xfc) {
+                    // IPv6 Unique Local Address (fc00::/7)
+                    return false;
+                }
+            }
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private static boolean isJpegBytes(byte[] bytes) {
+        return bytes != null
+                && bytes.length > 32
+                && (bytes[0] & 0xFF) == 0xFF
+                && (bytes[1] & 0xFF) == 0xD8
+                && (bytes[2] & 0xFF) == 0xFF;
+    }
+
+    private static boolean isPngBytes(byte[] bytes) {
+        return bytes != null
+                && bytes.length > 32
+                && (bytes[0] & 0xFF) == 0x89
+                && (bytes[1] & 0xFF) == 0x50
+                && (bytes[2] & 0xFF) == 0x4E
+                && (bytes[3] & 0xFF) == 0x47
+                && (bytes[4] & 0xFF) == 0x0D
+                && (bytes[5] & 0xFF) == 0x0A
+                && (bytes[6] & 0xFF) == 0x1A
+                && (bytes[7] & 0xFF) == 0x0A;
+    }
+
+    private static boolean isValidCoverImage(byte[] bytes) {
+        return isJpegBytes(bytes) || isPngBytes(bytes);
+    }
+
+    private byte[] fetchCoverBytes(String coverUrl) {
+        if (coverUrl == null || coverUrl.isEmpty()) return null;
+        URL initialUrl;
+        try {
+            initialUrl = new URL(coverUrl);
+        } catch (Exception e) {
+            return null;
+        }
+        if (!isSafeCoverUrl(initialUrl)) {
+            return null;
+        }
+        synchronized (coverCache) {
+            byte[] cached = coverCache.get(coverUrl);
+            if (cached != null) {
+                return cached;
+            }
+        }
+        HttpURLConnection conn = null;
+        try {
+            URL currentUrl = initialUrl;
+            int status = -1;
+            for (int hop = 0; hop <= COVER_MAX_REDIRECTS; hop++) {
+                if (hop > 0 && !isSafeCoverUrl(currentUrl)) {
+                    return null;
+                }
+                conn = (HttpURLConnection) currentUrl.openConnection();
+                conn.setConnectTimeout(8000);
+                conn.setReadTimeout(10000);
+                conn.setInstanceFollowRedirects(false);
+                conn.setRequestMethod("GET");
+                status = conn.getResponseCode();
+                if (status == HttpURLConnection.HTTP_MOVED_PERM
+                        || status == HttpURLConnection.HTTP_MOVED_TEMP
+                        || status == HttpURLConnection.HTTP_SEE_OTHER
+                        || status == 307
+                        || status == 308) {
+                    String location = conn.getHeaderField("Location");
+                    conn.disconnect();
+                    conn = null;
+                    if (location == null || location.isEmpty() || hop == COVER_MAX_REDIRECTS) {
+                        return null;
+                    }
+                    currentUrl = new URL(currentUrl, location);
+                    continue;
+                }
+                break;
+            }
+            if (conn == null || status < 200 || status >= 300) {
+                return null;
+            }
+            int contentLength = conn.getContentLength();
+            if (contentLength > COVER_MAX_BYTES) {
+                return null;
+            }
+            try (InputStream in = conn.getInputStream();
+                 ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+                byte[] buffer = new byte[8192];
+                int bytesRead;
+                int total = 0;
+                while ((bytesRead = in.read(buffer)) != -1) {
+                    total += bytesRead;
+                    if (total > COVER_MAX_BYTES) {
+                        return null;
+                    }
+                    baos.write(buffer, 0, bytesRead);
+                }
+                byte[] bytes = baos.toByteArray();
+                if (!isValidCoverImage(bytes)) {
+                    return null;
+                }
+                synchronized (coverCache) {
+                    byte[] previous = coverCache.put(coverUrl, bytes);
+                    if (previous != null) {
+                        coverCacheTotalBytes -= previous.length;
+                    }
+                    coverCacheTotalBytes += bytes.length;
+                    Iterator<Map.Entry<String, byte[]>> it = coverCache.entrySet().iterator();
+                    while (it.hasNext()
+                            && (coverCache.size() > COVER_CACHE_MAX_ENTRIES
+                                || coverCacheTotalBytes > COVER_CACHE_MAX_TOTAL_BYTES)) {
+                        Map.Entry<String, byte[]> eldest = it.next();
+                        if (eldest.getValue() != null) {
+                            coverCacheTotalBytes -= eldest.getValue().length;
+                        }
+                        it.remove();
+                    }
+                    if (coverCacheTotalBytes < 0) {
+                        coverCacheTotalBytes = 0;
+                    }
+                }
+                return bytes;
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Cover download failed: " + e.getMessage());
+        } finally {
+            if (conn != null) {
+                conn.disconnect();
+            }
+        }
+        return null;
+    }
+
     private synchronized void ensureInitialized() throws Exception {
         if (!isInitialized) {
             try {
@@ -117,6 +393,7 @@ public class YtDlpPlugin extends Plugin {
                 Log.w(TAG, "FFmpeg init error (non-fatal): " + e.getMessage());
                 // FFmpeg init failure is not fatal for basic operations
             }
+            cleanupStaleCache(new File(getContext().getCacheDir(), "ytdlp"));
             isInitialized = true;
             Log.i(TAG, "yt-dlp + FFmpeg ready");
         }
@@ -238,7 +515,7 @@ public class YtDlpPlugin extends Plugin {
         Boolean requestedEnrich = call.getBoolean("enrich", false);
         boolean enrich = requestedEnrich != null && requestedEnrich;
 
-        executor.execute(() -> {
+        searchExecutor.execute(() -> {
             try {
                 ensureInitialized();
                 JSArray results = runSearch(query, limit, source, enrich);
@@ -322,9 +599,17 @@ public class YtDlpPlugin extends Plugin {
 
         Log.i(TAG, "Search found " + results.length() + " results");
         if (enrich) {
-            for (int i = 0; i < Math.min(2, results.length()); i++) {
+            int enrichCount = Math.min(2, results.length());
+            List<CompletableFuture<Void>> futures = new ArrayList<>(enrichCount);
+            for (int i = 0; i < enrichCount; i++) {
                 Object rawItem = results.get(i);
-                if (rawItem instanceof JSONObject) enrichCandidate((JSONObject) rawItem);
+                if (rawItem instanceof JSONObject) {
+                    final JSONObject itemObj = (JSONObject) rawItem;
+                    futures.add(CompletableFuture.runAsync(() -> enrichCandidate(itemObj), enrichExecutor));
+                }
+            }
+            if (!futures.isEmpty()) {
+                CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
             }
         }
         return results;
@@ -402,6 +687,8 @@ public class YtDlpPlugin extends Plugin {
         String sourceUrl = call.getString("sourceUrl");
         Double expectedDurationValue = call.getDouble("expectedDuration");
         double expectedDuration = expectedDurationValue != null ? expectedDurationValue : 0;
+        boolean skipBase64 = Boolean.TRUE.equals(call.getBoolean("skipBase64", false));
+        String downloadId = call.getString("downloadId");
         if ((videoId == null || videoId.isEmpty()) && (sourceUrl == null || sourceUrl.isEmpty())) {
             call.reject("Missing videoId or sourceUrl parameter");
             return;
@@ -416,19 +703,15 @@ public class YtDlpPlugin extends Plugin {
         }
 
         executor.execute(() -> {
-            File cacheDir = new File(getContext().getCacheDir(), "ytdlp");
-            cacheDir.mkdirs();
-
-            // Clean ALL previous files to avoid stale data
-            File[] oldFiles = cacheDir.listFiles();
-            if (oldFiles != null) {
-                for (File f : oldFiles) {
-                    f.delete();
-                }
-            }
-
-                try {
+            File taskDir = null;
+            boolean keepOutput = false;
+            try {
                 ensureInitialized();
+
+                File cacheDir = new File(getContext().getCacheDir(), "ytdlp");
+                cacheDir.mkdirs();
+                taskDir = new File(cacheDir, UUID.randomUUID().toString());
+                taskDir.mkdirs();
 
                 String url = sourceUrl != null && !sourceUrl.isEmpty()
                     ? sourceUrl
@@ -438,8 +721,8 @@ public class YtDlpPlugin extends Plugin {
                 boolean isMp3 = "mp3".equalsIgnoreCase(format);
                 String fileName = "audio_" + System.currentTimeMillis() + (isMp3 ? ".mp3" : ".m4a");
 
-                // Descargar al caché privado (no visible para otras apps)
-                File outputFile = new File(cacheDir, fileName);
+                // Descargar en subcarpeta aislada dentro del caché privado (seguro para concurrencia)
+                File outputFile = new File(taskDir, fileName);
                 String outputPath = outputFile.getAbsolutePath();
 
                 YoutubeDLRequest request = new YoutubeDLRequest(url);
@@ -462,8 +745,7 @@ public class YtDlpPlugin extends Plugin {
                 request.addOption("--fragment-retries", "2");
                 // Usar cliente Android para evitar SABR streaming forzado por YouTube (403)
                 request.addOption("--extractor-args", "youtube:player_client=android,web");
-                // 8 fragmentos paralelos: máximo seguro sin triggers de rate-limit de YouTube
-                request.addOption("--concurrent-fragments", "2");
+                request.addOption("--concurrent-fragments", "4");
 
                 Log.i(TAG, "Downloading audio for: " + videoId + " -> " + outputPath);
 
@@ -473,10 +755,17 @@ public class YtDlpPlugin extends Plugin {
                         @Override
                         public kotlin.Unit invoke(Float progress, Long etaInSeconds, String line) {
                             try {
+                                if (progress == null || progress < 0f) {
+                                    return kotlin.Unit.INSTANCE;
+                                }
+                                int clampedProgress = Math.max(0, Math.min(100, Math.round(progress)));
                                 JSObject data = new JSObject();
-                                data.put("progress", Math.round(progress));
+                                data.put("progress", clampedProgress);
                                 data.put("eta", etaInSeconds);
                                 data.put("speed", parseSpeed(line));
+                                if (downloadId != null && !downloadId.isEmpty()) {
+                                    data.put("downloadId", downloadId);
+                                }
                                 notifyListeners("downloadProgress", data);
                             } catch (Exception ignored) {}
                             return kotlin.Unit.INSTANCE;
@@ -512,7 +801,6 @@ public class YtDlpPlugin extends Plugin {
                     if (rawDuration == null) throw new IllegalStateException("Missing M4A duration");
                     durationMs = Long.parseLong(rawDuration);
                 } catch (Exception validationError) {
-                    outputFile.delete();
                     bridge.getActivity().runOnUiThread(() -> call.reject("conversion: M4A is not decodable"));
                     return;
                 } finally {
@@ -521,32 +809,69 @@ public class YtDlpPlugin extends Plugin {
                 if (expectedDuration > 0) {
                     double tolerance = Math.max(5.0, expectedDuration * 0.05);
                     if (Math.abs(durationMs / 1000.0 - expectedDuration) > tolerance) {
-                        outputFile.delete();
                         bridge.getActivity().runOnUiThread(() -> call.reject("candidate_invalid: downloaded duration mismatch"));
                         return;
                     }
                 }
 
-                // Leer archivo completo y codificar en base64 para devolver al bridge JS
-                // IMPORTANTE: usar DataInputStream.readFully() para garantizar lectura completa.
-                // FileInputStream.read() puede devolver menos bytes de los pedidos (bug 88KB).
-                byte[] fileBytes = new byte[(int) outputFile.length()];
-                try (DataInputStream dis = new DataInputStream(new FileInputStream(outputFile))) {
-                    dis.readFully(fileBytes);
-                } finally {
-                    outputFile.delete();
-                }
-                String base64Data = Base64.encodeToString(fileBytes, Base64.NO_WRAP);
+                if (skipBase64) {
+                    JSObject result = new JSObject();
+                    result.put("success", true);
+                    result.put("tempPath", outputFile.getAbsolutePath());
+                    result.put("fileName", fileName);
+                    result.put("size", outputFile.length());
+                    keepOutput = true;
+                    bridge.getActivity().runOnUiThread(() -> call.resolve(result));
+                } else {
+                    // Leer archivo completo y codificar en base64 para devolver al bridge JS
+                    // IMPORTANTE: usar DataInputStream.readFully() para garantizar lectura completa.
+                    // FileInputStream.read() puede devolver menos bytes de los pedidos (bug 88KB).
+                    byte[] fileBytes = new byte[(int) outputFile.length()];
+                    try (DataInputStream dis = new DataInputStream(new FileInputStream(outputFile))) {
+                        dis.readFully(fileBytes);
+                    }
+                    String base64Data = Base64.encodeToString(fileBytes, Base64.NO_WRAP);
 
-                JSObject result = new JSObject();
-                result.put("success", true);
-                result.put("data", base64Data);
-                result.put("fileName", fileName);
-                result.put("size", fileBytes.length);
-                bridge.getActivity().runOnUiThread(() -> call.resolve(result));
+                    JSObject result = new JSObject();
+                    result.put("success", true);
+                    result.put("data", base64Data);
+                    result.put("fileName", fileName);
+                    result.put("size", fileBytes.length);
+                    bridge.getActivity().runOnUiThread(() -> call.resolve(result));
+                }
             } catch (Exception e) {
+                keepOutput = false;
                 Log.e(TAG, "downloadAudio failed: " + e.getMessage(), e);
                 bridge.getActivity().runOnUiThread(() -> call.reject("Download failed: " + e.getMessage()));
+            } finally {
+                if (!keepOutput && taskDir != null) {
+                    deleteRecursively(taskDir);
+                }
+            }
+        });
+    }
+
+    @PluginMethod
+    public void cleanupTempAudio(PluginCall call) {
+        String tempPath = call.getString("tempPath");
+        if (tempPath == null || tempPath.isEmpty()) {
+            call.reject("Invalid tempPath");
+            return;
+        }
+        executor.execute(() -> {
+            try {
+                File validated = resolveValidatedTempFile(tempPath, false);
+                if (validated == null) {
+                    bridge.getActivity().runOnUiThread(() -> call.reject("Invalid tempPath"));
+                    return;
+                }
+                deleteTempFileAndTaskDir(validated);
+                JSObject result = new JSObject();
+                result.put("success", true);
+                bridge.getActivity().runOnUiThread(() -> call.resolve(result));
+            } catch (Exception e) {
+                Log.w(TAG, "cleanupTempAudio failed: " + e.getMessage());
+                bridge.getActivity().runOnUiThread(() -> call.reject("Invalid tempPath"));
             }
         });
     }
@@ -563,13 +888,14 @@ public class YtDlpPlugin extends Plugin {
 
     /**
      * Guarda audio ya procesado (con ID3 tags) en Music/MHL Music via MediaStore.
-     * Recibe: fileName (string), data (base64 string)
+     * Recibe: fileName (string), tempPath (string opcional) o data (base64 string opcional)
      * Devuelve: uri (string)
      */
     @PluginMethod
     public void tagAndSaveM4A(PluginCall call) {
         String fileName = call.getString("fileName");
         String base64Data = call.getString("data");
+        String tempPath = call.getString("tempPath");
         String coverUrl = call.getString("coverUrl");
         String title = call.getString("title", "");
         String artist = call.getString("artist", "");
@@ -584,34 +910,46 @@ public class YtDlpPlugin extends Plugin {
         String discNumber = call.getString("discNumber", "");
         String discTotal = call.getString("discTotal", "");
 
-        if (fileName == null || fileName.isEmpty() || base64Data == null || base64Data.isEmpty()) {
-            call.reject("fileName and data are required");
+        boolean hasTempPath = tempPath != null && !tempPath.isEmpty();
+        boolean hasBase64Data = base64Data != null && !base64Data.isEmpty();
+        if (fileName == null || fileName.isEmpty() || (!hasTempPath && !hasBase64Data)) {
+            call.reject("fileName and either tempPath or data are required");
             return;
         }
 
         executor.execute(() -> {
             File tempAudio = null;
             File tempCover = null;
+            boolean fromTempPath = false;
             try {
                 boolean isMp3 = fileName.toLowerCase().endsWith(".mp3");
-                // Escribir audio base64 a archivo temporal
-                tempAudio = File.createTempFile("untagged", isMp3 ? ".mp3" : ".m4a", getContext().getCacheDir());
-                byte[] audioBytes = Base64.decode(base64Data, Base64.NO_WRAP);
-                try (FileOutputStream fos = new FileOutputStream(tempAudio)) {
-                    fos.write(audioBytes);
+                if (hasTempPath) {
+                    File validated = resolveValidatedTempFile(tempPath, true);
+                    if (validated == null) {
+                        bridge.getActivity().runOnUiThread(() -> call.reject("Invalid tempPath"));
+                        return;
+                    }
+                    tempAudio = validated;
+                    fromTempPath = true;
+                } else {
+                    // Escribir audio base64 a archivo temporal
+                    tempAudio = File.createTempFile("untagged", isMp3 ? ".mp3" : ".m4a", getContext().getCacheDir());
+                    byte[] audioBytes = Base64.decode(base64Data, Base64.NO_WRAP);
+                    try (FileOutputStream fos = new FileOutputStream(tempAudio)) {
+                        fos.write(audioBytes);
+                    }
                 }
 
-                // Descargar cover si existe
+                // Descargar cover si existe (con caché LRU y timeouts)
                 if (coverUrl != null && !coverUrl.isEmpty()) {
-                    tempCover = File.createTempFile("cover", ".jpg", getContext().getCacheDir());
-                    try (InputStream in = new java.net.URL(coverUrl).openStream();
-                         FileOutputStream fos = new FileOutputStream(tempCover)) {
-                        byte[] buffer = new byte[8192];
-                        int bytesRead;
-                        while ((bytesRead = in.read(buffer)) != -1) {
-                            fos.write(buffer, 0, bytesRead);
+                    byte[] coverBytes = fetchCoverBytes(coverUrl);
+                    if (coverBytes != null && coverBytes.length > 0) {
+                        String coverExt = isPngBytes(coverBytes) ? ".png" : ".jpg";
+                        tempCover = File.createTempFile("cover", coverExt, getContext().getCacheDir());
+                        try (FileOutputStream fos = new FileOutputStream(tempCover)) {
+                            fos.write(coverBytes);
                         }
-                    } catch (Exception ignored) {}
+                    }
                 }
 
                 // Tag usando jaudiotagger (MP3 ID3v2.3 o M4A MP4Tag)
@@ -636,9 +974,13 @@ public class YtDlpPlugin extends Plugin {
                     if (lyrics != null && !lyrics.isEmpty()) tag.setField(org.jaudiotagger.tag.FieldKey.LYRICS, lyrics);
 
                     if (tempCover != null && tempCover.length() > 0) {
-                        org.jaudiotagger.tag.images.Artwork artwork = org.jaudiotagger.tag.images.ArtworkFactory.createArtworkFromFile(tempCover);
-                        tag.deleteArtworkField();
-                        tag.setField(artwork);
+                        try {
+                            org.jaudiotagger.tag.images.Artwork artwork = org.jaudiotagger.tag.images.ArtworkFactory.createArtworkFromFile(tempCover);
+                            tag.deleteArtworkField();
+                            tag.setField(artwork);
+                        } catch (Exception coverErr) {
+                            Log.w(TAG, "Skipping invalid artwork: " + coverErr.getMessage());
+                        }
                     }
                     org.jaudiotagger.audio.AudioFileIO.write(audioFile);
                 } catch (Exception e) {
@@ -709,7 +1051,13 @@ public class YtDlpPlugin extends Plugin {
                 Log.e(TAG, "tagAndSaveM4A failed", e);
                 bridge.getActivity().runOnUiThread(() -> call.reject(e.getMessage() != null ? e.getMessage() : "Tagging failed"));
             } finally {
-                if (tempAudio != null) tempAudio.delete();
+                if (tempAudio != null) {
+                    if (fromTempPath) {
+                        deleteTempFileAndTaskDir(tempAudio);
+                    } else {
+                        tempAudio.delete();
+                    }
+                }
                 if (tempCover != null) tempCover.delete();
             }
         });

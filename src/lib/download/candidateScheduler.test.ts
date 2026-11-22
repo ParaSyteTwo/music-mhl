@@ -85,4 +85,85 @@ describe('CandidateScheduler', () => {
     await new Promise((resolve) => setTimeout(resolve, 5));
     expect(onResult).not.toHaveBeenCalled();
   });
+
+  it('does not let an orphan request from a previous session break deduplication in the new session', async () => {
+    const resolvers: Array<() => void> = [];
+    const resolver = vi.fn(async () => {
+      await new Promise<void>((resolve) => {
+        resolvers.push(resolve);
+      });
+      return [];
+    });
+    const scheduler = new CandidateScheduler(settings, async () => context(), resolver, 2);
+
+    // Session 1 enqueues track(1)
+    scheduler.startSession();
+    scheduler.enqueue(track(1), 'visible', () => {});
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(resolver).toHaveBeenCalledTimes(1);
+
+    // Session 2 starts and enqueues track(1) while Session 1's request is still in-flight
+    scheduler.startSession();
+    scheduler.enqueue(track(1), 'visible', () => {});
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(resolver).toHaveBeenCalledTimes(2);
+
+    // Session 1's orphan request finishes now — must NOT delete track(1) from Session 2's dedup set
+    resolvers[0]();
+    await new Promise((resolve) => setTimeout(resolve, 5));
+
+    // Re-enqueuing track(1) in Session 2 while Session 2's request is still in-flight must be deduplicated
+    scheduler.enqueue(track(1), 'visible', () => {});
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(resolver).toHaveBeenCalledTimes(2);
+
+    // Finish Session 2's request
+    resolvers[1]();
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  });
+
+  it('uses concurrency 3 by default on non-Android Wi-Fi and drops to 1 on metered or economy profile', async () => {
+    let active = 0;
+    let peak = 0;
+    const makeResolver = () => vi.fn(async () => {
+      active += 1;
+      peak = Math.max(peak, active);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      active -= 1;
+      return [];
+    });
+
+    // Non-Android default (3) on Wi-Fi adaptive
+    const desktopScheduler = new CandidateScheduler(settings, async () => context(), makeResolver());
+    desktopScheduler.startSession();
+    for (let i = 0; i < 6; i++) desktopScheduler.enqueue(track(i), 'visible', () => {});
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(peak).toBe(3);
+
+    // Economy profile dynamically throttles concurrency to 1
+    active = 0;
+    peak = 0;
+    const economyScheduler = new CandidateScheduler(
+      { ...settings, profile: 'economy' },
+      async () => context(),
+      makeResolver(),
+    );
+    economyScheduler.startSession();
+    for (let i = 0; i < 4; i++) economyScheduler.enqueue(track(i), 'visible', () => {});
+    await new Promise((resolve) => setTimeout(resolve, 70));
+    expect(peak).toBe(1);
+
+    // Metered network dynamically throttles concurrency to 1
+    active = 0;
+    peak = 0;
+    const meteredScheduler = new CandidateScheduler(
+      settings,
+      async () => context({ metered: true, networkType: 'cellular' }),
+      makeResolver(),
+    );
+    meteredScheduler.startSession();
+    for (let i = 0; i < 4; i++) meteredScheduler.enqueue(track(i), 'visible', () => {});
+    await new Promise((resolve) => setTimeout(resolve, 70));
+    expect(peak).toBe(1);
+  });
 });

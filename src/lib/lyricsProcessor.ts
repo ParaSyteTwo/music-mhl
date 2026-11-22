@@ -3,6 +3,7 @@ import { toRomaji } from 'wanakana'
 
 const MYMEMORY_URL = 'https://api.mymemory.translated.net/get'
 const MAX_CHARS = 450
+const MAX_TRANSLATION_CONCURRENCY = 3
 
 // ─── Script Detection (expanded for ALL non-Latin scripts) ──────────────────
 
@@ -81,20 +82,27 @@ export function shouldTranslateLyrics(
 // android/app/src/main/assets/public/kuromoji-dict/ y se acceden como
 // file:///android_asset/public/kuromoji-dict/ desde el WebView.
 // En web (Vite dev / build) están en /kuromoji-dict (carpeta pública).
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let _kuroshiro: any = null
-let _kuroshiroLoading = false
-let _kuroshiroPromise: Promise<void> | null = null
+interface Kuroshiro {
+  init(analyzer: {
+    tokenizer: JapaneseTokenizer | null
+    init(): Promise<void>
+    parse(text: string): Promise<JapaneseToken[]>
+  }): Promise<void>
+  convert(text: string, options: { to: 'romaji'; mode: 'normal' }): Promise<string>
+}
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function _getKuroshiro(): Promise<any | null> {
+let _kuroshiro: Kuroshiro | null = null
+let _kuroshiroLoading = false
+let _kuroshiroPromise: Promise<Kuroshiro | null> | null = null
+
+async function _getKuroshiro(): Promise<Kuroshiro | null> {
   if (_kuroshiro) return _kuroshiro
-  if (_kuroshiroLoading) return _kuroshiroPromise ?? null
+  if (_kuroshiroLoading && _kuroshiroPromise) return _kuroshiroPromise
   _kuroshiroLoading = true
 
-  _kuroshiroPromise = (async () => {
+  _kuroshiroPromise = (async (): Promise<Kuroshiro | null> => {
     try {
-      const { default: Kuroshiro } = await import('kuroshiro')
+      const { default: KuroshiroCtor } = await import('kuroshiro')
       const { default: kuromoji } = await import('kuromoji/build/kuromoji.js')
       const isAndroid = typeof navigator !== 'undefined' &&
         /android/i.test(navigator.userAgent)
@@ -122,16 +130,21 @@ async function _getKuroshiro(): Promise<any | null> {
         },
       }
 
-      const ks = new Kuroshiro()
+      const ks = new KuroshiroCtor() as Kuroshiro
       await ks.init(analyzer)
       _kuroshiro = ks
+      _kuroshiroLoading = false
+      return _kuroshiro
     } catch (e) {
       console.warn('[lyrics] kuroshiro-kuromoji init failed:', e)
       _kuroshiro = null
+      _kuroshiroLoading = false
+      _kuroshiroPromise = null
+      return null
     }
   })()
 
-  return _kuroshiroPromise.then(() => _kuroshiro)
+  return _kuroshiroPromise
 }
 
 // ─── Romanization ────────────────────────────────────────────────────────────
@@ -250,13 +263,34 @@ async function _translateInChunks(lines: string[], lang: Lang): Promise<string[]
     else { chunk.push(line); len += size }
   }
   if (chunk.length) chunks.push(chunk)
+  if (!chunks.length) return []
+
+  const translatedChunks: string[][] = new Array(chunks.length)
+  const workerCount = Math.min(MAX_TRANSLATION_CONCURRENCY, chunks.length)
+  let nextIndex = 0
+  let failed = false
+
+  const worker = async () => {
+    while (!failed) {
+      const idx = nextIndex++
+      if (idx >= chunks.length) return
+      const currentChunk = chunks[idx]
+      const out = await _callMyMemory(currentChunk.join('\n'), lang)
+      if (!out) {
+        failed = true
+        return
+      }
+      const tLines = out.split('\n')
+      translatedChunks[idx] = currentChunk.map((_, i) => tLines[i] ?? currentChunk[i])
+    }
+  }
+
+  await Promise.all(Array.from({ length: workerCount }, () => worker()))
+  if (failed) return null
 
   const result: string[] = []
-  for (const c of chunks) {
-    const out = await _callMyMemory(c.join('\n'), lang)
-    if (!out) return null
-    const tLines = out.split('\n')
-    c.forEach((_, i) => result.push(tLines[i] ?? c[i]))
+  for (const translatedChunk of translatedChunks) {
+    result.push(...translatedChunk)
   }
   return result
 }
@@ -460,4 +494,13 @@ export async function processLyrics(
   })
 
   return { synced: synced || null, plain: plain || null }
+}
+
+export const __testing = {
+  getKuroshiro: _getKuroshiro,
+  resetKuroshiro: () => {
+    _kuroshiro = null
+    _kuroshiroLoading = false
+    _kuroshiroPromise = null
+  },
 }

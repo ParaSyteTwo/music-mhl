@@ -20,11 +20,13 @@ export interface YtDlpProgressEvent {
   progress: number;  // 0-100
   eta: number;       // segundos restantes
   speed: string;     // e.g. "1.2 MB/s"
+  downloadId?: string;
 }
 
 export interface TagAndSaveOptions {
   fileName: string;
-  data: string;
+  data?: string;
+  tempPath?: string;
   coverUrl?: string;
   title?: string;
   artist?: string;
@@ -45,7 +47,8 @@ interface YtDlpPluginInterface {
   update(): Promise<{ success: boolean; status: string }>;
   getVersion(): Promise<{ success: boolean; version: string }>;
   search(options: { query: string; limit?: number; source?: 'youtube_music' | 'youtube'; enrich?: boolean }): Promise<{ success: boolean; results: YtDlpSearchResult[] }>;
-  downloadAudio(options: { videoId?: string; sourceUrl?: string; expectedDuration?: number; format?: 'm4a' | 'mp3' }): Promise<{ success: boolean; data: string; size: number; fileName?: string }>;
+  downloadAudio(options: { videoId?: string; sourceUrl?: string; expectedDuration?: number; format?: 'm4a' | 'mp3'; skipBase64?: boolean; downloadId?: string }): Promise<{ success: boolean; data?: string; tempPath?: string; size: number; fileName?: string }>;
+  cleanupTempAudio(options: { tempPath: string }): Promise<{ success: boolean }>;
   saveTaggedAudioToMusic(options: { fileName: string; data: string }): Promise<{ success: boolean; uri: string }>;
   tagAndSaveM4A(options: TagAndSaveOptions): Promise<{ success: boolean; uri: string }>;
   addListener(eventName: 'downloadProgress', listenerFunc: (event: YtDlpProgressEvent) => void): Promise<PluginListenerHandle>;
@@ -115,6 +118,44 @@ export async function downloadMp3Native(
     bytes[i] = binaryStr.charCodeAt(i);
   }
   return bytes.buffer;
+}
+
+export async function downloadAudioToTempNative(
+  videoId: string | null,
+  opts?: { sourceUrl?: string; expectedDuration?: number; format?: 'm4a' | 'mp3'; downloadId?: string },
+): Promise<{ tempPath: string; size: number; fileName?: string }> {
+  if (!initialized) await initYtDlp();
+
+  const result = await YtDlp.downloadAudio({
+    ...(videoId ? { videoId } : {}),
+    ...(opts?.sourceUrl ? { sourceUrl: opts.sourceUrl } : {}),
+    ...(opts?.expectedDuration ? { expectedDuration: opts.expectedDuration } : {}),
+    ...(opts?.format ? { format: opts.format } : {}),
+    ...(opts?.downloadId ? { downloadId: opts.downloadId } : {}),
+    skipBase64: true,
+  });
+
+  if (!result || !result.success || !result.tempPath) {
+    throw new Error('Download failed: no tempPath returned from native plugin');
+  }
+
+  return {
+    tempPath: result.tempPath,
+    size: result.size,
+    ...(result.fileName ? { fileName: result.fileName } : {}),
+  };
+}
+
+export async function cleanupTempAudioNative(tempPath: string): Promise<void> {
+  if (!tempPath || !Capacitor.isNativePlatform()) return;
+  if (!initialized) await initYtDlp();
+  try {
+    await YtDlp.cleanupTempAudio({ tempPath });
+  } catch (err) {
+    if (import.meta.env.DEV) {
+      console.warn('[ytdlpBridge.cleanupTempAudioNative] Cleanup error:', err);
+    }
+  }
 }
 
 function isPyWebView(): boolean {
@@ -210,6 +251,9 @@ export async function saveTaggedAudioToMusic(fileName: string, base64Data: strin
 
 export async function tagAndSaveM4A(options: TagAndSaveOptions): Promise<string> {
   if (!Capacitor.isNativePlatform()) throw new Error('Not on native platform');
+  if (!options.tempPath && !options.data) {
+    throw new Error('tagAndSaveM4A requires either tempPath or data');
+  }
   if (!initialized) await initYtDlp();
   const operation = YtDlp.tagAndSaveM4A(options);
   let timeoutId: ReturnType<typeof setTimeout> | undefined;

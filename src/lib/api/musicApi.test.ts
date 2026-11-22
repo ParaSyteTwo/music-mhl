@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { __testing, getDownloadCandidates, searchDeezer } from './musicApi';
+import { __testing, downloadTrackAudio, getDeezerTrackMeta, getDownloadCandidates, searchDeezer } from './musicApi';
 import type { Track } from '@/types/music';
 
 const track: Track = {
@@ -337,6 +337,106 @@ describe('musicApi request reuse', () => {
     expect(fetchMock).not.toHaveBeenCalled();
     expect(second).toEqual(first);
   });
+
+  it('caches and deduplicates Deezer /album/{id} calls across tracks of the same album', async () => {
+    const albumCalls: string[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('/track/101')) {
+        return new Response(JSON.stringify({
+          id: 101,
+          release_date: '2024-05-10',
+          track_position: 1,
+          disk_number: 1,
+          artist: { name: 'Artist' },
+          album: { id: 999, title: 'Shared Album' },
+        }), { status: 200 });
+      }
+      if (url.includes('/track/102')) {
+        return new Response(JSON.stringify({
+          id: 102,
+          release_date: '2024-05-10',
+          track_position: 2,
+          disk_number: 1,
+          artist: { name: 'Artist' },
+          album: { id: 999, title: 'Shared Album' },
+        }), { status: 200 });
+      }
+      if (url.includes('/track/103')) {
+        return new Response(JSON.stringify({
+          id: 103,
+          release_date: '2024-05-10',
+          track_position: 3,
+          disk_number: 1,
+          artist: { name: 'Artist' },
+          album: { id: 999, title: 'Shared Album' },
+        }), { status: 200 });
+      }
+      if (url.includes('/album/999')) {
+        albumCalls.push(url);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        return new Response(JSON.stringify({
+          id: 999,
+          title: 'Shared Album',
+          nb_tracks: 12,
+          artist: { name: 'Album Artist' },
+          genres: { data: [{ name: 'J-Pop' }] },
+        }), { status: 200 });
+      }
+      return new Response('', { status: 404 });
+    });
+
+    // 2 concurrent tracks from the same album (deduplicates in-flight) + 1 sequential (hits memory cache)
+    const [meta1, meta2] = await Promise.all([
+      getDeezerTrackMeta('dz-101'),
+      getDeezerTrackMeta('dz-102'),
+    ]);
+    const meta3 = await getDeezerTrackMeta('dz-103');
+
+    expect(albumCalls).toHaveLength(1);
+    expect(meta1).toMatchObject({ genre: 'J-Pop', trackNumber: 1, trackTotal: 12, year: 2024 });
+    expect(meta2).toMatchObject({ genre: 'J-Pop', trackNumber: 2, trackTotal: 12, year: 2024 });
+    expect(meta3).toMatchObject({ genre: 'J-Pop', trackNumber: 3, trackTotal: 12, year: 2024 });
+    expect(__testing.getCacheSizes().albums).toBe(1);
+  });
+
+  it('runs LRCLIB clean /api/get and structured /api/search in parallel while prioritizing clean /api/get', async () => {
+    const startedUrls: string[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      startedUrls.push(url);
+      if (url.includes('/api/get?') && url.includes('duration=')) {
+        return new Response(JSON.stringify({ error: 'Not found' }), { status: 404 });
+      }
+      if (url.includes('/api/get?')) {
+        // Slower than /api/search, yet must still win priority
+        await new Promise((resolve) => setTimeout(resolve, 15));
+        return new Response(JSON.stringify({
+          syncedLyrics: '[00:04.25] Clean get lyric',
+          plainLyrics: 'Clean get lyric',
+        }), { status: 200 });
+      }
+      if (url.includes('/api/search?')) {
+        return new Response(JSON.stringify([
+          {
+            id: 77,
+            trackName: 'Parallel Track',
+            artistName: 'Parallel Artist',
+            duration: 180,
+            syncedLyrics: '[00:05.50] Search fallback lyric',
+            plainLyrics: 'Search fallback lyric',
+          },
+        ]), { status: 200 });
+      }
+      return new Response('', { status: 500 });
+    });
+
+    const res = await __testing.fetchLrclib('Parallel Track (Remastered)', 'Parallel Artist', 180);
+
+    expect(res.syncedLrc).toBe('[00:04.25] Clean get lyric');
+    expect(startedUrls.some((u) => u.includes('/api/get?') && !u.includes('duration='))).toBe(true);
+    expect(startedUrls.some((u) => u.includes('/api/search?'))).toBe(true);
+  });
 });
 
 describe('musicApi candidate ranking', () => {
@@ -391,6 +491,144 @@ describe('musicApi candidate ranking', () => {
     const normal = __testing.buildCandidateCacheKey(animeTrack, false, false);
     const anime = __testing.buildCandidateCacheKey(animeTrack, true, false);
     expect(normal).not.toBe(anime);
+  });
+
+  it('handles non-object JSON values ("null", "123", arrays) in localStorage persistent candidate cache without throwing', () => {
+    for (const badPayload of ['null', '123', '[1,2,3]', '"string"', '{corrupt']) {
+      __testing.clearRequestCaches();
+      localStorage.setItem(__testing.PERSISTENT_CANDIDATE_CACHE_KEY, badPayload);
+      expect(() => __testing.readPersistentCandidateCache()).not.toThrow();
+      expect(__testing.readPersistentCandidateCache()).toEqual({});
+      expect(() => __testing.setPersistentCandidateCacheValue('k1', [])).not.toThrow();
+    }
+  });
+
+  it('purges expired entries in persistent candidate cache and does not resurrect cleared data on debounced flush', () => {
+    vi.useFakeTimers();
+    try {
+      __testing.clearRequestCaches();
+      const now = Date.now();
+      localStorage.setItem(
+        __testing.PERSISTENT_CANDIDATE_CACHE_KEY,
+        JSON.stringify({
+          expiredKey: { value: [], expiresAt: now - 10_000 },
+          validKey: { value: [], expiresAt: now + 60_000 },
+        }),
+      );
+
+      __testing.setPersistentCandidateCacheValue('freshKey', []);
+      vi.advanceTimersByTime(350);
+
+      const persisted = JSON.parse(localStorage.getItem(__testing.PERSISTENT_CANDIDATE_CACHE_KEY) || '{}');
+      expect(persisted).not.toHaveProperty('expiredKey');
+      expect(persisted).toHaveProperty('validKey');
+      expect(persisted).toHaveProperty('freshKey');
+
+      // Schedule a new debounced write, then clear localStorage before flush fires
+      __testing.setPersistentCandidateCacheValue('anotherKey', []);
+      localStorage.clear();
+      vi.advanceTimersByTime(350);
+
+      // Must NOT have resurrected deleted cache back into localStorage
+      expect(localStorage.getItem(__testing.PERSISTENT_CANDIDATE_CACHE_KEY)).toBeNull();
+      expect(__testing.readPersistentCandidateCache()).toEqual({});
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('rejects LRCLIB clean /api/get candidate with mismatched duration so validated /api/search wins', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('/api/get?') && url.includes('duration=')) {
+        return new Response(JSON.stringify({ error: 'Not found' }), { status: 404 });
+      }
+      if (url.includes('/api/get?')) {
+        return new Response(JSON.stringify({
+          id: 500,
+          trackName: 'Duration Track',
+          artistName: 'Artist',
+          duration: 320, // Wrong duration (>6s delta vs 180s)
+          syncedLyrics: '[00:05.12] Extended remix lyric',
+          plainLyrics: 'Extended remix lyric',
+        }), { status: 200 });
+      }
+      if (url.includes('/api/search?')) {
+        return new Response(JSON.stringify([
+          {
+            id: 501,
+            trackName: 'Duration Track',
+            artistName: 'Artist',
+            duration: 181,
+            syncedLyrics: '[00:04.88] Exact duration lyric',
+            plainLyrics: 'Exact duration lyric',
+          },
+        ]), { status: 200 });
+      }
+      return new Response('', { status: 500 });
+    });
+
+    const res = await __testing.fetchLrclib('Duration Track (Remastered)', 'Artist', 180);
+    expect(res.syncedLrc).toBe('[00:04.88] Exact duration lyric');
+  });
+
+  it('resolves candidates in downloadTrackAudio with valid signature and skips rejected candidates', async () => {
+    const getCandidatesSpy = vi.fn().mockResolvedValue({
+      success: true,
+      candidates: [
+        {
+          videoId: 'rejected-cover',
+          title: 'Song (Cover)',
+          channel: 'Random Fan',
+          duration: 180,
+          source: 'youtube',
+        },
+        {
+          videoId: 'verified-ytm',
+          title: 'Song',
+          channel: 'Artist - Topic',
+          artist: 'Artist',
+          duration: 180,
+          source: 'youtube_music',
+          resultType: 'song',
+        },
+      ],
+    });
+    const getRawAudioSpy = vi.fn().mockResolvedValue({
+      success: true,
+      data_b64: 'QUFB',
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).pywebview = {
+      api: {
+        get_candidates: getCandidatesSpy,
+        get_raw_audio: getRawAudioSpy,
+      },
+    };
+
+    try {
+      const buf = await downloadTrackAudio(track);
+      expect(buf.byteLength).toBe(3);
+      expect(getCandidatesSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          animeSearchEnabled: false,
+          depth: 'light',
+        }),
+      );
+      expect(getRawAudioSpy).toHaveBeenCalledWith(
+        'verified-ytm',
+        'Song',
+        'Artist',
+        [],
+        null,
+        180,
+        'm4a',
+      );
+    } finally {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      delete (window as any).pywebview;
+    }
   });
 
 });

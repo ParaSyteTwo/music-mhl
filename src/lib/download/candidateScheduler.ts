@@ -29,12 +29,13 @@ export class CandidateScheduler {
   private active = 0;
   private meteredCount = 0;
   private paused = false;
+  private draining = false;
 
   constructor(
     private readonly settings: CandidateSchedulerSettings,
     private readonly contextProvider: () => Promise<DeviceContext> = getDeviceContext,
     private readonly resolver = getDownloadCandidates,
-    private readonly concurrency = Capacitor.getPlatform() === 'android' ? 1 : 2,
+    private readonly concurrency = Capacitor.getPlatform() === 'android' ? 2 : 3,
   ) {}
 
   startSession(): void {
@@ -62,20 +63,38 @@ export class CandidateScheduler {
   }
 
   private async drain(): Promise<void> {
-    if (this.paused) return;
-    while (this.active < this.concurrency && this.queue.length > 0) {
-      const item = this.queue.shift()!;
-      this.active += 1;
-      void this.run(item).finally(() => {
-        this.active = Math.max(0, this.active - 1);
-        this.queued.delete(item.key);
-        void this.drain();
-      });
+    if (this.paused || this.draining || this.queue.length === 0) return;
+    if (this.active >= this.concurrency) return;
+
+    this.draining = true;
+    try {
+      const context = await this.contextProvider();
+      if (this.paused) return;
+
+      const effectiveConcurrency =
+        context.metered || this.settings.profile === 'economy'
+          ? Math.min(this.concurrency, 1)
+          : this.concurrency;
+
+      while (!this.paused && this.active < effectiveConcurrency && this.queue.length > 0) {
+        const item = this.queue.shift()!;
+        this.active += 1;
+        void this.run(item, context).finally(() => {
+          this.active = Math.max(0, this.active - 1);
+          if (item.generation === this.generation) {
+            this.queued.delete(item.key);
+          }
+          void this.drain();
+        });
+      }
+    } catch {
+      // Context lookup failure must never deadlock the scheduler.
+    } finally {
+      this.draining = false;
     }
   }
 
-  private async run(item: QueueItem): Promise<void> {
-    const context = await this.contextProvider();
+  private async run(item: QueueItem, context: DeviceContext): Promise<void> {
     if (item.generation !== this.generation || this.paused || !canRunBackgroundResolution(context)) return;
     if (context.metered) {
       if (this.settings.cellularPolicy === 'off' || this.meteredCount >= 5) return;

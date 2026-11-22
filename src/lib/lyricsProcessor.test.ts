@@ -5,6 +5,7 @@ import {
   processLyrics,
   romanizeLines,
   shouldTranslateLyrics,
+  translateLines,
 } from './lyricsProcessor';
 
 describe('lyrics language decisions', () => {
@@ -104,5 +105,143 @@ describe('lyrics language decisions', () => {
     });
 
     expect(result.synced).toBe('[00:01.00]Yo quiero tu amor');
+  });
+
+  it('translates multiple chunks in parallel (up to 3) while preserving exact line order', async () => {
+    // 5 chunks of 300 chars each (> MAX_CHARS=450 when combined)
+    const lines = Array.from({ length: 5 }, (_, idx) => `LINE_${idx}_${'x'.repeat(290)}`);
+    let inFlight = 0;
+    let peakInFlight = 0;
+
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      inFlight += 1;
+      peakInFlight = Math.max(peakInFlight, inFlight);
+      const url = new URL(String(input));
+      const q = url.searchParams.get('q') ?? '';
+      const match = /LINE_(\d+)_/.exec(q);
+      const chunkIdx = match ? Number(match[1]) : 0;
+      // Later chunks resolve faster to ensure output order is preserved by index, not completion order
+      const delayMs = (5 - chunkIdx) * 8;
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      inFlight -= 1;
+
+      const translatedText = q
+        .split('\n')
+        .map((line) => `TR:${line}`)
+        .join('\n');
+      return new Response(
+        JSON.stringify({ responseStatus: 200, responseData: { translatedText } }),
+        { status: 200 },
+      );
+    });
+
+    try {
+      const translated = await translateLines(lines, 'es');
+      expect(fetchMock).toHaveBeenCalledTimes(5);
+      expect(peakInFlight).toBeGreaterThan(1);
+      expect(peakInFlight).toBeLessThanOrEqual(3);
+      expect(translated).toEqual(lines.map((line) => `TR:${line}`));
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
+  it('returns null from translateLines if any parallel chunk fails', async () => {
+    const lines = Array.from({ length: 4 }, (_, idx) => `FAIL_${idx}_${'y'.repeat(290)}`);
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = new URL(String(input));
+      const q = url.searchParams.get('q') ?? '';
+      if (q.includes('FAIL_1_')) {
+        return new Response('rate limit', { status: 429 });
+      }
+      return new Response(
+        JSON.stringify({ responseStatus: 200, responseData: { translatedText: `TR:${q}` } }),
+        { status: 200 },
+      );
+    });
+
+    try {
+      const translated = await translateLines(lines, 'es');
+      expect(translated).toBeNull();
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
+  it('shares a single Kuroshiro instance across concurrent callers and retries after init failure', async () => {
+    vi.resetModules();
+
+    let buildCount = 0;
+    let shouldFailFirst = true;
+    const convertSpy = vi.fn(async (text: string) => `rom:${text}`);
+
+    vi.doMock('kuroshiro', () => ({
+      default: class FakeKuroshiro {
+        private analyzer: { init: () => Promise<void> } | null = null;
+        async init(analyzer: { init: () => Promise<void> }) {
+          this.analyzer = analyzer;
+          await this.analyzer.init();
+        }
+        async convert(text: string) {
+          return convertSpy(text);
+        }
+      },
+    }));
+
+    vi.doMock('kuromoji/build/kuromoji.js', () => ({
+      default: {
+        builder: () => ({
+          build: (cb: (err: Error | null, tokenizer: { tokenize: (text: string) => unknown[] }) => void) => {
+            buildCount += 1;
+            setTimeout(() => {
+              if (shouldFailFirst) {
+                cb(new Error('transient dict load error'), null as never);
+                return;
+              }
+              cb(null, { tokenize: () => [] });
+            }, 10);
+          },
+        }),
+      },
+    }));
+
+    try {
+      const mod = await import('./lyricsProcessor');
+      mod.__testing.resetKuroshiro();
+
+      // 1. Concurrent failure must resolve to null (not undefined) and reset state so retry works
+      const [failA, failB] = await Promise.all([
+        mod.__testing.getKuroshiro(),
+        mod.__testing.getKuroshiro(),
+      ]);
+      expect(failA).toBeNull();
+      expect(failB).toBeNull();
+      expect(buildCount).toBe(1);
+
+      // 2. Subsequent concurrent calls must retry once, return the real Kuroshiro instance (never undefined)
+      shouldFailFirst = false;
+      const [ksA, ksB, ksC] = await Promise.all([
+        mod.__testing.getKuroshiro(),
+        mod.__testing.getKuroshiro(),
+        mod.__testing.getKuroshiro(),
+      ]);
+      expect(ksA).not.toBeNull();
+      expect(ksA).toBeDefined();
+      expect(ksB).toBe(ksA);
+      expect(ksC).toBe(ksA);
+      expect(buildCount).toBe(2);
+
+      // 3. Concurrent Japanese romanizeLines calls must both use Kuroshiro cleanly without failing
+      const [romA, romB] = await Promise.all([
+        mod.romanizeLines(['愛してる'], 'japanese'),
+        mod.romanizeLines(['無敵の笑顔'], 'japanese'),
+      ]);
+      expect(romA).toEqual(['rom:愛してる']);
+      expect(romB).toEqual(['rom:無敵の笑顔']);
+    } finally {
+      vi.doUnmock('kuroshiro');
+      vi.doUnmock('kuromoji/build/kuromoji.js');
+      vi.resetModules();
+    }
   });
 });

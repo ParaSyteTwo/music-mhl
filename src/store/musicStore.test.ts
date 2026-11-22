@@ -1,6 +1,22 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import { Capacitor } from '@capacitor/core';
 import { useMusicStore } from './musicStore';
-import { searchDeezer } from '@/lib/api/musicApi';
+import { __downloadSliceTesting } from './slices/downloadSlice';
+import {
+  downloadTrackAudio,
+  getDownloadCandidates,
+  getDeezerTrackMeta,
+  getLyrics,
+  invalidateDownloadCandidateCache,
+  searchDeezer,
+} from '@/lib/api/musicApi';
+import {
+  addDownloadProgressListener,
+  cleanupTempAudioNative,
+  downloadAudioToTempNative,
+  tagAndSaveM4A,
+  type YtDlpProgressEvent,
+} from '@/lib/ytdlpBridge';
 
 // Mock external dependencies
 vi.mock('@/lib/audioEngine', () => ({
@@ -25,6 +41,12 @@ vi.mock('@/lib/audioEngine', () => ({
 }));
 
 vi.mock('@/lib/api/musicApi');
+vi.mock('@/lib/ytdlpBridge', () => ({
+  downloadAudioToTempNative: vi.fn(),
+  cleanupTempAudioNative: vi.fn().mockResolvedValue(undefined),
+  tagAndSaveM4A: vi.fn(),
+  addDownloadProgressListener: vi.fn().mockResolvedValue({ remove: vi.fn() }),
+}));
 vi.mock('@/lib/colorExtractor', () => ({
   extractDominantColor: vi.fn().mockResolvedValue('#FF5733'),
 }));
@@ -36,6 +58,14 @@ vi.mock('@capacitor/filesystem');
 
 describe('useMusicStore', () => {
   afterEach(() => {
+    delete (window as { pywebview?: unknown }).pywebview;
+    __downloadSliceTesting.resetRateLimitCooldown();
+    __downloadSliceTesting.setRetryDelayMs(2000);
+    vi.clearAllMocks();
+    vi.mocked(Capacitor.isNativePlatform).mockReturnValue(false);
+    vi.mocked(Capacitor.getPlatform).mockReturnValue('web');
+    vi.mocked(addDownloadProgressListener).mockResolvedValue({ remove: vi.fn() });
+    vi.mocked(cleanupTempAudioNative).mockResolvedValue(undefined);
     // Clean up state after each test
     useMusicStore.setState({
       currentTrack: null,
@@ -51,6 +81,8 @@ describe('useMusicStore', () => {
       hasMoreResults: false,
       isLoadingMore: false,
       downloads: [],
+      downloadQueue: [],
+      activeDownloads: 0,
       downloadFolder: null,
       downloadFolderName: '',
       dominantColor: null,
@@ -418,6 +450,733 @@ describe('useMusicStore', () => {
       expect(() => {
         store.removeDownload('d1');
       }).not.toThrow();
+    });
+
+    it('limits concurrent downloads to 2 outside PyWebView and drains queued items on completion', async () => {
+      vi.mocked(Capacitor.isNativePlatform).mockReturnValue(true);
+      vi.mocked(getDeezerTrackMeta).mockResolvedValue({
+        albumArtist: 'Artist',
+        composer: null,
+        genre: 'Pop',
+        year: 2024,
+        trackNumber: 1,
+        trackTotal: 10,
+        discNumber: 1,
+        discTotal: 1,
+      });
+      vi.mocked(getLyrics).mockResolvedValue({ synced: null, plain: null });
+      vi.mocked(tagAndSaveM4A).mockResolvedValue('content://media/external/audio/1');
+
+      const pendingResolvers: Array<() => void> = [];
+      let peakActive = 0;
+      vi.mocked(downloadAudioToTempNative).mockImplementation(
+        async (videoId) =>
+          await new Promise((resolve) => {
+            peakActive = Math.max(peakActive, useMusicStore.getState().activeDownloads);
+            pendingResolvers.push(() =>
+              resolve({ tempPath: `/cache/ytdlp/${videoId}/audio.m4a`, size: 65536 }),
+            );
+          }),
+      );
+
+      for (let i = 1; i <= 5; i++) {
+        useMusicStore.getState().startDownloadWithVideoId(
+          {
+            id: `pool-non-pw-${i}`,
+            title: `Song ${i}`,
+            artist: `Artist ${i}`,
+            album: 'Album',
+            duration: 180,
+            cover: 'https://example.com/cover.jpg',
+          },
+          `vid_${i}`,
+        );
+      }
+
+      await vi.waitFor(() => {
+        expect(pendingResolvers).toHaveLength(2);
+      });
+
+      expect(useMusicStore.getState().activeDownloads).toBe(2);
+      expect(useMusicStore.getState().downloadQueue).toHaveLength(3);
+      expect(peakActive).toBe(2);
+
+      // Complete first batch of 2 -> next 2 should start
+      pendingResolvers[0]();
+      pendingResolvers[1]();
+      await vi.waitFor(() => {
+        expect(pendingResolvers).toHaveLength(4);
+      });
+      expect(useMusicStore.getState().activeDownloads).toBeLessThanOrEqual(2);
+      expect(useMusicStore.getState().downloadQueue).toHaveLength(1);
+      expect(peakActive).toBe(2);
+
+      // Complete second batch -> 5th item starts
+      pendingResolvers[2]();
+      pendingResolvers[3]();
+      await vi.waitFor(() => {
+        expect(pendingResolvers).toHaveLength(5);
+      });
+
+      // Complete final item
+      pendingResolvers[4]();
+      await vi.waitFor(() => {
+        const state = useMusicStore.getState();
+        expect(state.activeDownloads).toBe(0);
+        expect(state.downloadQueue).toHaveLength(0);
+        expect(state.downloads.every((d) => d.status === 'completed')).toBe(true);
+      });
+      expect(peakActive).toBe(2);
+    });
+
+    it('limits concurrent downloads to 3 in PyWebView and drains queued items on completion', async () => {
+      vi.mocked(getDeezerTrackMeta).mockResolvedValue({
+        albumArtist: 'Artist',
+        composer: null,
+        genre: 'Rock',
+        year: 2024,
+        trackNumber: 1,
+        trackTotal: 10,
+        discNumber: 1,
+        discTotal: 1,
+      });
+      vi.mocked(getLyrics).mockResolvedValue({ synced: null, plain: null });
+
+      const pendingResolvers: Array<() => void> = [];
+      let peakActive = 0;
+      const pyApi = {
+        get_settings: vi.fn().mockResolvedValue({ download_folder: 'C:/Music/MHL' }),
+        get_raw_audio: vi.fn().mockImplementation(
+          async (videoId: string) =>
+            await new Promise((resolve) => {
+              peakActive = Math.max(peakActive, useMusicStore.getState().activeDownloads);
+              pendingResolvers.push(() =>
+                resolve({
+                  success: true,
+                  temp_path: `C:/Temp/mhl_audio_cache/${videoId}/audio.m4a`,
+                  ext: 'm4a',
+                  size: 65536,
+                }),
+              );
+            }),
+        ),
+        tag_and_save_m4a: vi.fn().mockResolvedValue({ success: true, size: 65536 }),
+        cleanup_temp_audio: vi.fn().mockResolvedValue({ success: true }),
+      };
+      (window as unknown as { pywebview: { api: typeof pyApi } }).pywebview = { api: pyApi };
+
+      for (let i = 1; i <= 5; i++) {
+        useMusicStore.getState().startDownloadWithVideoId(
+          {
+            id: `pool-pw-${i}`,
+            title: `Desktop Song ${i}`,
+            artist: `Artist ${i}`,
+            album: 'Album',
+            duration: 200,
+            cover: 'https://example.com/cover.jpg',
+          },
+          `dvid_${i}`,
+        );
+      }
+
+      await vi.waitFor(() => {
+        expect(pendingResolvers).toHaveLength(3);
+      });
+
+      expect(useMusicStore.getState().activeDownloads).toBe(3);
+      expect(useMusicStore.getState().downloadQueue).toHaveLength(2);
+      expect(peakActive).toBe(3);
+
+      // Finish first 3 -> remaining 2 start
+      pendingResolvers[0]();
+      pendingResolvers[1]();
+      pendingResolvers[2]();
+      await vi.waitFor(() => {
+        expect(pendingResolvers).toHaveLength(5);
+      });
+      expect(useMusicStore.getState().downloadQueue).toHaveLength(0);
+      expect(peakActive).toBe(3);
+
+      // Finish last 2
+      pendingResolvers[3]();
+      pendingResolvers[4]();
+      await vi.waitFor(() => {
+        const state = useMusicStore.getState();
+        expect(state.activeDownloads).toBe(0);
+        expect(state.downloadQueue).toHaveLength(0);
+        expect(state.downloads.every((d) => d.status === 'completed')).toBe(true);
+      });
+      expect(peakActive).toBe(3);
+    });
+
+    it('uses Zero-Base64 temp_path in PyWebView and cleans up temp_path on pre-tagging error', async () => {
+      vi.mocked(getDeezerTrackMeta).mockResolvedValue({
+        albumArtist: 'Album Artist',
+        composer: 'Composer',
+        genre: 'Electronic',
+        year: 2025,
+        trackNumber: 2,
+        trackTotal: 12,
+        discNumber: 1,
+        discTotal: 1,
+      });
+      vi.mocked(getLyrics).mockResolvedValue({ synced: '[00:01.00]Hello', plain: 'Hello' });
+
+      const tempPath = 'C:/Temp/mhl_audio_cache/job1/audio.m4a';
+      const pyApi = {
+        get_settings: vi.fn().mockResolvedValue({ download_folder: 'C:/Music/MHL' }),
+        get_raw_audio: vi.fn().mockResolvedValue({
+          success: true,
+          temp_path: tempPath,
+          ext: 'm4a',
+          size: 123456,
+        }),
+        tag_and_save_m4a: vi.fn().mockResolvedValue({ success: true, size: 123456 }),
+        cleanup_temp_audio: vi.fn().mockResolvedValue({ success: true }),
+      };
+      (window as unknown as { pywebview: { api: typeof pyApi } }).pywebview = { api: pyApi };
+
+      useMusicStore.getState().startDownloadWithVideoId(
+        {
+          id: 'desktop-zero-b64',
+          title: 'Zero B64 Track',
+          artist: 'Synth Artist',
+          album: 'Synth Album',
+          duration: 210,
+          cover: 'https://example.com/cover.jpg',
+        },
+        'vidZeroB64',
+      );
+
+      await vi.waitFor(() => {
+        expect(useMusicStore.getState().downloads[0]?.status).toBe('completed');
+      });
+
+      expect(pyApi.get_raw_audio).toHaveBeenCalledTimes(1);
+      expect(pyApi.get_raw_audio.mock.calls[0][7]).toBe(true);
+      expect(pyApi.tag_and_save_m4a).toHaveBeenCalledTimes(1);
+      const tagArgs = pyApi.tag_and_save_m4a.mock.calls[0];
+      expect(tagArgs).toHaveLength(16);
+      expect(tagArgs[1]).toBeNull(); // audio_b64 is null when temp_path is used
+      expect(tagArgs[15]).toBe(tempPath); // 16th arg is temp_path
+      expect(pyApi.cleanup_temp_audio).not.toHaveBeenCalled();
+
+      // Error prior to tag_and_save_m4a must invoke cleanup_temp_audio
+      const leakedTempPath = 'C:/Temp/mhl_audio_cache/job2/audio.m4a';
+      pyApi.get_raw_audio.mockResolvedValueOnce({
+        success: true,
+        temp_path: leakedTempPath,
+        ext: 'm4a',
+        size: 65536,
+      });
+      pyApi.get_settings.mockRejectedValueOnce(new Error('settings read failed'));
+      pyApi.tag_and_save_m4a.mockClear();
+
+      useMusicStore.getState().startDownloadWithVideoId(
+        {
+          id: 'desktop-zero-b64-fail',
+          title: 'Fail Before Tag',
+          artist: 'Synth Artist',
+          album: 'Synth Album',
+          duration: 210,
+          cover: 'https://example.com/cover.jpg',
+        },
+        'vidZeroB64Fail',
+      );
+
+      await vi.waitFor(() => {
+        const failed = useMusicStore.getState().downloads.find((d) => d.track.id === 'desktop-zero-b64-fail');
+        expect(failed?.status).toBe('error');
+        expect(useMusicStore.getState().activeDownloads).toBe(0);
+      });
+
+      expect(pyApi.tag_and_save_m4a).not.toHaveBeenCalled();
+      expect(pyApi.cleanup_temp_audio).toHaveBeenCalledWith(leakedTempPath);
+
+      // Retrocompat: when get_raw_audio returns only data_b64 (without temp_path)
+      pyApi.get_raw_audio.mockResolvedValueOnce({
+        success: true,
+        data_b64: 'QUFB',
+        ext: 'm4a',
+        size: 3,
+      });
+      pyApi.get_settings.mockResolvedValueOnce({ download_folder: 'C:/Music/MHL' });
+      pyApi.tag_and_save_m4a.mockClear();
+      pyApi.cleanup_temp_audio.mockClear();
+
+      useMusicStore.getState().startDownloadWithVideoId(
+        {
+          id: 'desktop-legacy-b64',
+          title: 'Legacy B64 Track',
+          artist: 'Synth Artist',
+          album: 'Synth Album',
+          duration: 210,
+          cover: 'https://example.com/cover.jpg',
+        },
+        'vidLegacyB64',
+      );
+
+      await vi.waitFor(() => {
+        const legacy = useMusicStore.getState().downloads.find((d) => d.track.id === 'desktop-legacy-b64');
+        expect(legacy?.status).toBe('completed');
+        expect(useMusicStore.getState().activeDownloads).toBe(0);
+      });
+
+      expect(pyApi.tag_and_save_m4a).toHaveBeenCalledTimes(1);
+      const legacyTagArgs = pyApi.tag_and_save_m4a.mock.calls[0];
+      expect(legacyTagArgs).toHaveLength(16);
+      expect(legacyTagArgs[1]).toBe('QUFB');
+      expect(legacyTagArgs[15]).toBeNull();
+      expect(pyApi.cleanup_temp_audio).not.toHaveBeenCalled();
+    });
+
+    it('uses Zero-Base64 tempPath and isolates downloadProgress by downloadId on Android native', async () => {
+      vi.mocked(Capacitor.isNativePlatform).mockReturnValue(true);
+      vi.mocked(getDeezerTrackMeta).mockResolvedValue({
+        albumArtist: 'Android Artist',
+        composer: null,
+        genre: 'Pop',
+        year: 2025,
+        trackNumber: 3,
+        trackTotal: 10,
+        discNumber: 1,
+        discTotal: 1,
+      });
+      vi.mocked(getLyrics).mockResolvedValue({ synced: '[00:05.00]Line', plain: 'Line' });
+
+      let progressCallback: ((evt: YtDlpProgressEvent) => void) | null = null;
+      const removeSpy = vi.fn();
+      vi.mocked(addDownloadProgressListener).mockImplementation(async (cb) => {
+        progressCallback = cb;
+        return { remove: removeSpy };
+      });
+
+      let resolveDownload!: (val: { tempPath: string; size: number }) => void;
+      vi.mocked(downloadAudioToTempNative).mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolveDownload = resolve;
+          }),
+      );
+      vi.mocked(tagAndSaveM4A).mockResolvedValue('content://media/external/audio/99');
+
+      useMusicStore.getState().startDownloadWithVideoId(
+        {
+          id: 'android-zero-b64',
+          title: 'Native Song',
+          artist: 'Android Artist',
+          album: 'Native Album',
+          duration: 195,
+          cover: 'https://example.com/cover.jpg',
+        },
+        'vidAndroid1',
+      );
+
+      await vi.waitFor(() => {
+        expect(downloadAudioToTempNative).toHaveBeenCalledTimes(1);
+        expect(progressCallback).not.toBeNull();
+      });
+
+      const currentDl = useMusicStore.getState().downloads[0];
+      expect(downloadAudioToTempNative).toHaveBeenCalledWith(
+        'vidAndroid1',
+        expect.objectContaining({
+          expectedDuration: 195,
+          format: 'm4a',
+          downloadId: currentDl.id,
+        }),
+      );
+
+      const progressBeforeForeign = useMusicStore.getState().downloads[0].progress;
+      // Foreign downloadId event must be ignored
+      progressCallback!({
+        progress: 90,
+        eta: 1,
+        speed: '9.9 MB/s',
+        downloadId: 'foreign-download-id',
+      });
+      expect(useMusicStore.getState().downloads[0].progress).toBe(progressBeforeForeign);
+      expect(useMusicStore.getState().downloads[0].speed).toBeUndefined();
+
+      // Matching downloadId event must update progress
+      progressCallback!({
+        progress: 50,
+        eta: 4,
+        speed: '2.1 MB/s',
+        downloadId: currentDl.id,
+      });
+      expect(useMusicStore.getState().downloads[0].progress).toBe(53); // 25 + 0.5 * 55 = 52.5 -> 53
+      expect(useMusicStore.getState().downloads[0].speed).toBe('2.1 MB/s');
+      expect(useMusicStore.getState().downloads[0].eta).toBe(4);
+
+      resolveDownload({
+        tempPath: '/data/user/0/com.mhl.music/cache/ytdlp/task-1/audio.m4a',
+        size: 102400,
+      });
+
+      await vi.waitFor(() => {
+        expect(useMusicStore.getState().downloads[0]?.status).toBe('completed');
+        expect(useMusicStore.getState().activeDownloads).toBe(0);
+      });
+
+      expect(downloadTrackAudio).not.toHaveBeenCalled();
+      expect(tagAndSaveM4A).toHaveBeenCalledTimes(1);
+      const tagOptions = vi.mocked(tagAndSaveM4A).mock.calls[0][0];
+      expect(tagOptions.tempPath).toBe('/data/user/0/com.mhl.music/cache/ytdlp/task-1/audio.m4a');
+      expect(tagOptions.data).toBeUndefined();
+      expect(useMusicStore.getState().downloads[0].mediaUri).toBe('content://media/external/audio/99');
+      expect(cleanupTempAudioNative).not.toHaveBeenCalled();
+      expect(removeSpy).toHaveBeenCalled();
+    });
+
+    it('cleans up Android tempPath if tagging fails synchronously before taking ownership', async () => {
+      vi.mocked(Capacitor.isNativePlatform).mockReturnValue(true);
+      vi.mocked(getDeezerTrackMeta).mockResolvedValue({
+        albumArtist: 'Android Artist',
+        composer: null,
+        genre: null,
+        year: null,
+        trackNumber: null,
+        trackTotal: null,
+        discNumber: 1,
+        discTotal: 1,
+      });
+      vi.mocked(getLyrics).mockResolvedValue({ synced: null, plain: null });
+      vi.mocked(downloadAudioToTempNative).mockResolvedValue({
+        tempPath: '/data/user/0/com.mhl.music/cache/ytdlp/task-err/audio.m4a',
+        size: 65536,
+      });
+      vi.mocked(tagAndSaveM4A).mockImplementationOnce(() => {
+        throw new Error('write: bridge unavailable');
+      });
+
+      useMusicStore.getState().startDownloadWithVideoId(
+        {
+          id: 'android-cleanup-err',
+          title: 'Cleanup Song',
+          artist: 'Android Artist',
+          album: 'Album',
+          duration: 180,
+          cover: '',
+        },
+        'vidAndroidErr',
+      );
+
+      await vi.waitFor(() => {
+        expect(useMusicStore.getState().downloads[0]?.status).toBe('error');
+        expect(useMusicStore.getState().activeDownloads).toBe(0);
+      });
+
+      expect(cleanupTempAudioNative).toHaveBeenCalledWith(
+        '/data/user/0/com.mhl.music/cache/ytdlp/task-err/audio.m4a',
+      );
+    });
+
+    it('retries in Desktop PyWebView and falls back to deep candidate search on unavailable error', async () => {
+      __downloadSliceTesting.setRetryDelayMs(5);
+      vi.mocked(getDeezerTrackMeta).mockResolvedValue({
+        albumArtist: 'Artist',
+        composer: null,
+        genre: null,
+        year: 2024,
+        trackNumber: 1,
+        trackTotal: 10,
+        discNumber: 1,
+        discTotal: 1,
+      });
+      vi.mocked(getLyrics).mockResolvedValue({ synced: null, plain: null });
+      vi.mocked(getDownloadCandidates).mockResolvedValue([
+        {
+          videoId: 'vid_alt',
+          title: 'Retry Song',
+          channel: 'Artist - Topic',
+          duration: 180,
+          source: 'youtube_music',
+          edition: 'unknown',
+          verification: 'verified',
+          evidence: {
+            isrcMatch: false,
+            titleMatch: true,
+            artistMatch: true,
+            albumMatch: false,
+            durationDifference: 0,
+            official: true,
+            youtubeMusicSong: true,
+            editionMatch: null,
+            contradictions: [],
+          },
+          rejectionReasons: [],
+          score: 800,
+          confidence: 'alta',
+        },
+      ]);
+
+      const pyApi = {
+        get_settings: vi.fn().mockResolvedValue({ download_folder: 'C:/Music/MHL' }),
+        get_raw_audio: vi
+          .fn()
+          .mockResolvedValueOnce({ success: false, error: 'Video unavailable' })
+          .mockResolvedValueOnce({
+            success: true,
+            temp_path: 'C:/Temp/mhl_audio_cache/retry/audio.m4a',
+            ext: 'm4a',
+            size: 65536,
+          }),
+        tag_and_save_m4a: vi.fn().mockResolvedValue({ success: true, size: 65536 }),
+        cleanup_temp_audio: vi.fn().mockResolvedValue({ success: true }),
+      };
+      (window as unknown as { pywebview: { api: typeof pyApi } }).pywebview = { api: pyApi };
+
+      useMusicStore.getState().startDownloadWithVideoId(
+        {
+          id: 'desktop-retry-fallback',
+          title: 'Retry Song',
+          artist: 'Artist',
+          album: 'Album',
+          duration: 180,
+          cover: '',
+        },
+        'vid_bad',
+      );
+
+      await vi.waitFor(() => {
+        expect(useMusicStore.getState().downloads[0]?.status).toBe('completed');
+        expect(useMusicStore.getState().activeDownloads).toBe(0);
+      });
+
+      expect(invalidateDownloadCandidateCache).toHaveBeenCalledTimes(1);
+      expect(getDownloadCandidates).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'desktop-retry-fallback' }),
+        false,
+        expect.objectContaining({ depth: 'deep' }),
+      );
+      expect(pyApi.get_raw_audio).toHaveBeenCalledTimes(2);
+      expect(pyApi.get_raw_audio.mock.calls[0][0]).toBe('vid_bad');
+      expect(pyApi.get_raw_audio.mock.calls[1][0]).toBe('vid_alt');
+    });
+
+    it('blocks duplicate concurrent downloads even when an earlier error record exists for the same track', () => {
+      const track = {
+        id: 'dup-track-1',
+        title: 'Duplicate Guard Track',
+        artist: 'Artist',
+        album: 'Album',
+        duration: 180,
+        cover: '',
+        youtubeId: 'vid_dup',
+      };
+
+      useMusicStore.setState({
+        activeDownloads: 1,
+        downloads: [
+          { id: 'err-1', track, progress: 0, status: 'error', error: 'Previous failure' },
+          { id: 'dl-2', track, progress: 40, status: 'downloading', videoIdOverride: 'vid_dup' },
+        ],
+        downloadQueue: [],
+      });
+
+      useMusicStore.getState().startDownload(track);
+      useMusicStore.getState().startDownloadWithVideoId(track, 'vid_dup');
+      useMusicStore.getState().startDownloadWithSourceUrl(track, 'https://example.com/audio.ogg');
+
+      expect(useMusicStore.getState().downloads).toHaveLength(2);
+      expect(useMusicStore.getState().downloadQueue).toHaveLength(0);
+    });
+
+    it('checks rate-limit cooldown before resolving candidates and does not cascade-drain queued downloads', async () => {
+      const track1 = {
+        id: 'cooldown-track-1',
+        title: 'Cooldown Track 1',
+        artist: 'Artist',
+        album: 'Album',
+        duration: 180,
+        cover: '',
+      };
+      const track2 = {
+        id: 'cooldown-track-2',
+        title: 'Cooldown Track 2',
+        artist: 'Artist',
+        album: 'Album',
+        duration: 180,
+        cover: '',
+      };
+
+      __downloadSliceTesting.setRateLimitCooldownUntil(Date.now() + 60_000);
+      useMusicStore.setState({
+        activeDownloads: 1,
+        downloads: [
+          { id: 'cd-1', track: track1, progress: 0, status: 'downloading' },
+          { id: 'cd-2', track: track2, progress: 0, status: 'queued', videoIdOverride: 'vid_2' },
+        ],
+        downloadQueue: ['cd-2'],
+      });
+
+      await useMusicStore.getState()._executeDownload(track1, 'cd-1');
+
+      expect(getDownloadCandidates).not.toHaveBeenCalled();
+      const state = useMusicStore.getState();
+      expect(state.downloads.find((d) => d.id === 'cd-1')?.status).toBe('error');
+      expect(state.activeDownloads).toBe(0);
+      // Queued download must remain queued and NOT be cascade-failed immediately
+      expect(state.downloads.find((d) => d.id === 'cd-2')?.status).toBe('queued');
+      expect(state.downloadQueue).toEqual(['cd-2']);
+    });
+
+    it('activates rate-limit cooldown in Desktop PyWebView on 403 Forbidden without cascading queued items', async () => {
+      vi.mocked(getDeezerTrackMeta).mockResolvedValue({
+        albumArtist: 'Artist',
+        composer: null,
+        genre: null,
+        year: null,
+        trackNumber: null,
+        trackTotal: null,
+        discNumber: 1,
+        discTotal: 1,
+      });
+      vi.mocked(getLyrics).mockResolvedValue({ synced: null, plain: null });
+
+      const pyApi = {
+        get_settings: vi.fn().mockResolvedValue({ download_folder: 'C:/Music/MHL' }),
+        get_raw_audio: vi.fn().mockResolvedValue({
+          success: false,
+          error: 'HTTP Error 403: Forbidden',
+        }),
+        tag_and_save_m4a: vi.fn(),
+        cleanup_temp_audio: vi.fn().mockResolvedValue({ success: true }),
+      };
+      (window as unknown as { pywebview: { api: typeof pyApi } }).pywebview = { api: pyApi };
+
+      const track1 = {
+        id: 'pw-403-1',
+        title: 'Rate Limited Song',
+        artist: 'Artist',
+        album: 'Album',
+        duration: 180,
+        cover: '',
+      };
+      const track2 = {
+        id: 'pw-403-2',
+        title: 'Queued After 403',
+        artist: 'Artist',
+        album: 'Album',
+        duration: 180,
+        cover: '',
+      };
+
+      useMusicStore.setState({
+        activeDownloads: 1,
+        downloads: [
+          { id: 'pw-dl-1', track: track1, progress: 0, status: 'downloading', videoIdOverride: 'vid_403' },
+          { id: 'pw-dl-2', track: track2, progress: 0, status: 'queued', videoIdOverride: 'vid_queued' },
+        ],
+        downloadQueue: ['pw-dl-2'],
+      });
+
+      await useMusicStore.getState()._executeDownload(track1, 'pw-dl-1', 'vid_403');
+
+      expect(pyApi.get_raw_audio).toHaveBeenCalledTimes(1);
+      const state = useMusicStore.getState();
+      expect(state.downloads.find((d) => d.id === 'pw-dl-1')?.status).toBe('error');
+      expect(state.activeDownloads).toBe(0);
+      // Cooldown must prevent cascading the queued download immediately
+      expect(state.downloads.find((d) => d.id === 'pw-dl-2')?.status).toBe('queued');
+      expect(state.downloadQueue).toEqual(['pw-dl-2']);
+    });
+
+    it('cleans up temp file when tag_and_save_m4a rejects asynchronously in Desktop PyWebView and ignores negative Android progress', async () => {
+      vi.mocked(getDeezerTrackMeta).mockResolvedValue({
+        albumArtist: 'Artist',
+        composer: null,
+        genre: null,
+        year: null,
+        trackNumber: null,
+        trackTotal: null,
+        discNumber: 1,
+        discTotal: 1,
+      });
+      vi.mocked(getLyrics).mockResolvedValue({ synced: null, plain: null });
+
+      // 1. Desktop async rejection of tag_and_save_m4a must invoke cleanup_temp_audio
+      const desktopTemp = 'C:/Temp/mhl_audio_cache/async_fail/audio.m4a';
+      const pyApi = {
+        get_settings: vi.fn().mockResolvedValue({ download_folder: 'C:/Music/MHL' }),
+        get_raw_audio: vi.fn().mockResolvedValue({
+          success: true,
+          temp_path: desktopTemp,
+          ext: 'm4a',
+          size: 4096,
+        }),
+        tag_and_save_m4a: vi.fn().mockRejectedValue(new Error('write: disk full')),
+        cleanup_temp_audio: vi.fn().mockResolvedValue({ success: true }),
+      };
+      (window as unknown as { pywebview: { api: typeof pyApi } }).pywebview = { api: pyApi };
+
+      useMusicStore.getState().startDownloadWithVideoId(
+        {
+          id: 'desktop-async-tag-fail',
+          title: 'Async Fail',
+          artist: 'Artist',
+          album: 'Album',
+          duration: 180,
+          cover: '',
+        },
+        'vidAsyncFail',
+      );
+
+      await vi.waitFor(() => {
+        expect(useMusicStore.getState().downloads[0]?.status).toBe('error');
+        expect(useMusicStore.getState().activeDownloads).toBe(0);
+      });
+      expect(pyApi.cleanup_temp_audio).toHaveBeenCalledWith(desktopTemp);
+
+      // 2. Android async rejection of tagAndSaveM4A cleans up tempPath + negative progress is ignored
+      delete (window as { pywebview?: unknown }).pywebview;
+      vi.mocked(Capacitor.isNativePlatform).mockReturnValue(true);
+
+      let progressCb: ((evt: YtDlpProgressEvent) => void) | null = null;
+      vi.mocked(addDownloadProgressListener).mockImplementation(async (cb) => {
+        progressCb = cb;
+        return { remove: vi.fn() };
+      });
+      let resolveNative!: (v: { tempPath: string; size: number }) => void;
+      vi.mocked(downloadAudioToTempNative).mockImplementation(
+        () => new Promise((resolve) => { resolveNative = resolve; }),
+      );
+      vi.mocked(tagAndSaveM4A).mockRejectedValueOnce(new Error('write: MediaStore error'));
+
+      useMusicStore.getState().startDownloadWithVideoId(
+        {
+          id: 'android-async-tag-fail',
+          title: 'Native Async Fail',
+          artist: 'Artist',
+          album: 'Album',
+          duration: 180,
+          cover: '',
+        },
+        'vidNativeAsyncFail',
+      );
+
+      await vi.waitFor(() => {
+        expect(progressCb).not.toBeNull();
+      });
+
+      const dl = useMusicStore.getState().downloads.find((d) => d.track.id === 'android-async-tag-fail')!;
+      const beforeNeg = dl.progress;
+      progressCb!({ progress: -5, eta: -1, speed: '', downloadId: dl.id });
+      expect(useMusicStore.getState().downloads.find((d) => d.id === dl.id)?.progress).toBe(beforeNeg);
+
+      resolveNative({
+        tempPath: '/data/user/0/com.mhl.music/cache/ytdlp/async-err/audio.m4a',
+        size: 8192,
+      });
+
+      await vi.waitFor(() => {
+        expect(useMusicStore.getState().downloads.find((d) => d.id === dl.id)?.status).toBe('error');
+        expect(useMusicStore.getState().activeDownloads).toBe(0);
+      });
+      expect(cleanupTempAudioNative).toHaveBeenCalledWith(
+        '/data/user/0/com.mhl.music/cache/ytdlp/async-err/audio.m4a',
+      );
     });
   });
 

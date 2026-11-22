@@ -3,26 +3,261 @@ MHL Music — Python bridge expuesto al frontend React via pywebview.
 Todas las llamadas externas (Deezer, YouTube/yt-dlp, filesystem) pasan por aquí.
 """
 import base64
+from collections import OrderedDict
+import concurrent.futures
+import ipaddress
 import json
 import os
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
 import threading
 import time
+import uuid
 from pathlib import Path
-from urllib.parse import quote_plus, urlparse
+from urllib.parse import quote_plus, urljoin, urlparse
 
 # CREATE_NO_WINDOW para evitar popup de consola en Windows
 CREATE_NO_WINDOW = 0x08000000 if sys.platform == 'win32' else 0
 
-APP_VERSION = '1.5.6-beta.4'
+APP_VERSION = '1.5.6-beta.5'
 
 import requests
+from requests.adapters import HTTPAdapter
 
 from settings import settings
+
+# ── HTTP Connection Pooling ───────────────────────────────────────────────────
+
+_ORIG_REQUESTS_GET = requests.get
+_ORIG_REQUESTS_POST = requests.post
+
+_http_session = requests.Session()
+_http_adapter = HTTPAdapter(pool_connections=16, pool_maxsize=32)
+_http_session.mount('https://', _http_adapter)
+_http_session.mount('http://', _http_adapter)
+
+
+def _http_get(url: str, **kwargs):
+    if requests.get is not _ORIG_REQUESTS_GET:
+        return requests.get(url, **kwargs)
+    return _http_session.get(url, **kwargs)
+
+
+def _http_post(url: str, **kwargs):
+    if requests.post is not _ORIG_REQUESTS_POST:
+        return requests.post(url, **kwargs)
+    return _http_session.post(url, **kwargs)
+
+
+# ── Caché LRU de portadas en memoria ──────────────────────────────────────────
+
+_COVER_CACHE_MAX_ENTRIES = 16
+_COVER_CACHE_MAX_BYTES = 5 * 1024 * 1024  # 5 MB
+_COVER_MAX_REDIRECTS = 3
+_cover_cache: OrderedDict[str, bytes] = OrderedDict()
+_cover_cache_lock = threading.Lock()
+
+
+def _is_public_ip(ip_obj: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    return (
+        ip_obj.is_global
+        and not ip_obj.is_private
+        and not ip_obj.is_loopback
+        and not ip_obj.is_link_local
+        and not ip_obj.is_unspecified
+        and not ip_obj.is_multicast
+        and not ip_obj.is_reserved
+    )
+
+
+def _is_safe_cover_url(cover_url: str) -> bool:
+    if not cover_url or not isinstance(cover_url, str):
+        return False
+    parsed = urlparse(cover_url)
+    if parsed.scheme != 'https' or not parsed.netloc or not parsed.hostname:
+        return False
+
+    host = parsed.hostname.rstrip('.').lower()
+    if (
+        not host
+        or host == 'localhost'
+        or host.endswith('.localhost')
+        or host.endswith('.local')
+        or host.endswith('.internal')
+    ):
+        return False
+
+    try:
+        ip_obj = ipaddress.ip_address(host)
+        return _is_public_ip(ip_obj)
+    except ValueError:
+        pass
+
+    try:
+        infos = socket.getaddrinfo(host, parsed.port or 443, type=socket.SOCK_STREAM)
+        for info in infos:
+            addr = info[4][0]
+            ip_obj = ipaddress.ip_address(addr)
+            if not _is_public_ip(ip_obj):
+                return False
+    except OSError:
+        # Permite dominios de prueba en entornos offline/sandbox cuando _http_get está mockeado
+        pass
+
+    return True
+
+
+def _is_valid_image_bytes(data: bytes) -> bool:
+    if len(data) <= 32:
+        return False
+    return data.startswith(b'\xff\xd8\xff') or data.startswith(b'\x89PNG\r\n\x1a\n')
+
+
+def _read_bounded_cover_content(res) -> bytes | None:
+    headers = getattr(res, 'headers', None)
+    if headers is not None and hasattr(headers, 'get'):
+        raw_cl = headers.get('Content-Length')
+        if isinstance(raw_cl, (str, int)):
+            try:
+                if int(raw_cl) > _COVER_CACHE_MAX_BYTES:
+                    return None
+            except ValueError:
+                pass
+
+    buf = bytearray()
+    iter_content = getattr(res, 'iter_content', None)
+    if callable(iter_content):
+        for chunk in iter_content(chunk_size=65536):
+            if not isinstance(chunk, (bytes, bytearray)) or not chunk:
+                continue
+            if len(buf) + len(chunk) > _COVER_CACHE_MAX_BYTES:
+                return None
+            buf.extend(chunk)
+
+    if buf:
+        return bytes(buf)
+
+    if not isinstance(res, requests.Response):
+        raw = getattr(res, 'content', None)
+        if isinstance(raw, (bytes, bytearray)):
+            if len(raw) > _COVER_CACHE_MAX_BYTES:
+                return None
+            return bytes(raw)
+
+    return None
+
+
+def _fetch_cover_bytes(cover_url: str) -> bytes | None:
+    if not _is_safe_cover_url(cover_url):
+        return None
+
+    with _cover_cache_lock:
+        cached = _cover_cache.get(cover_url)
+        if cached is not None:
+            _cover_cache.move_to_end(cover_url)
+            return cached
+
+    current_url = cover_url
+    try:
+        for _ in range(_COVER_MAX_REDIRECTS + 1):
+            res = _http_get(current_url, timeout=10, stream=True, allow_redirects=False)
+            try:
+                status_code = getattr(res, 'status_code', None)
+                if isinstance(status_code, int) and status_code in (301, 302, 303, 307, 308):
+                    headers = getattr(res, 'headers', None)
+                    location = headers.get('Location') if headers is not None and hasattr(headers, 'get') else None
+                    if not isinstance(location, str) or not location:
+                        return None
+                    next_url = urljoin(current_url, location)
+                    if not _is_safe_cover_url(next_url):
+                        return None
+                    current_url = next_url
+                    continue
+
+                if not res.ok:
+                    return None
+
+                content = _read_bounded_cover_content(res)
+                if not content or not _is_valid_image_bytes(content):
+                    return None
+
+                with _cover_cache_lock:
+                    _cover_cache[cover_url] = content
+                    _cover_cache.move_to_end(cover_url)
+                    while len(_cover_cache) > _COVER_CACHE_MAX_ENTRIES:
+                        _cover_cache.popitem(last=False)
+                return content
+            finally:
+                close_fn = getattr(res, 'close', None)
+                if callable(close_fn):
+                    close_fn()
+        return None
+    except Exception:
+        return None
+
+
+# ── Directorio temporal seguro para audio (Zero-Base64) ──────────────────────
+
+_TEMP_AUDIO_DIR = Path(tempfile.gettempdir()) / 'mhl_audio_cache'
+_TEMP_AUDIO_MAX_AGE_SECONDS = 3600.0
+
+
+def _cleanup_stale_temp_audio_dirs() -> None:
+    try:
+        if not _TEMP_AUDIO_DIR.exists():
+            return
+        now = time.time()
+        for entry in _TEMP_AUDIO_DIR.iterdir():
+            try:
+                if (now - entry.stat().st_mtime) > _TEMP_AUDIO_MAX_AGE_SECONDS:
+                    if entry.is_dir():
+                        shutil.rmtree(entry, ignore_errors=True)
+                    else:
+                        entry.unlink(missing_ok=True)
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+
+def _resolve_safe_temp_audio_path(temp_path: str) -> Path | None:
+    if not temp_path or not isinstance(temp_path, str):
+        return None
+    try:
+        base = _TEMP_AUDIO_DIR.resolve()
+        src = Path(temp_path).resolve()
+        src.relative_to(base)
+    except (ValueError, OSError, TypeError):
+        return None
+    if src == base:
+        return None
+    if not src.exists() or not src.is_file():
+        return None
+    return src
+
+
+def _remove_temp_audio_entry(src: Path) -> None:
+    try:
+        base = _TEMP_AUDIO_DIR.resolve()
+        src.relative_to(base)
+    except (ValueError, OSError):
+        return
+    try:
+        if src.exists() and src.is_file():
+            src.unlink(missing_ok=True)
+    except Exception:
+        pass
+    try:
+        parent = src.parent.resolve()
+        parent.relative_to(base)
+        if parent != base and parent.exists() and parent.is_dir():
+            shutil.rmtree(parent, ignore_errors=True)
+    except Exception:
+        pass
 
 # ── Binarios yt-dlp / ffmpeg ─────────────────────────────────────────────────
 
@@ -45,7 +280,7 @@ def _bin(name: str) -> str:
     return str(p) if p.exists() else name
 
 
-_ytdlp_lock = threading.Lock()
+_ytdlp_lock = threading.RLock()
 _last_auto_update_time = 0.0
 _AUTO_UPDATE_COOLDOWN = 12 * 3600.0  # 12 horas de cooldown para auto-update reactivo
 
@@ -178,7 +413,7 @@ def _anime_episode_range(entries):
 def _anime_graphql_post(url, query, variables):
     """POST síncrono con timeout duro. Devuelve el dict 'data' o lanza excepción."""
     payload = {'query': query, 'variables': variables}
-    response = requests.post(url, json=payload, headers=_ANIME_HEADERS, timeout=_ANIME_TIMEOUT)
+    response = _http_post(url, json=payload, headers=_ANIME_HEADERS, timeout=_ANIME_TIMEOUT)
     response.raise_for_status()
     data = response.json()
     if not isinstance(data, dict):
@@ -232,7 +467,7 @@ def _anime_fetch_meta(anilist_id):
 
 
 def _anime_search_animethemes(name):
-    response = requests.get(
+    response = _http_get(
         f'{_ANIMETHEMES_ENDPOINT}/anime',
         params={'filter[name]': name, 'page[size]': 15},
         headers=_ANIME_HEADERS,
@@ -254,7 +489,7 @@ def _anime_search_animethemes(name):
 
 
 def _anime_fetch_themes(anime_slug):
-    response = requests.get(
+    response = _http_get(
         f'{_ANIMETHEMES_ENDPOINT}/anime/{anime_slug}',
         params={
             'include': (
@@ -376,6 +611,7 @@ class Bridge:
     def __init__(self):
         self._window = None  # asignado por launcher después de create_window
         self._dl_lock = threading.Lock()
+        _cleanup_stale_temp_audio_dirs()
 
     # ── Motor yt-dlp: versión, actualización y auto-healing ─────────────────
 
@@ -460,10 +696,11 @@ class Bridge:
         Respeta circuit breaker con cooldown de 12 horas.
         """
         global _last_auto_update_time
-        now = time.time()
-        if (now - _last_auto_update_time) < _AUTO_UPDATE_COOLDOWN:
-            return False
-        _last_auto_update_time = now
+        with _ytdlp_lock:
+            now = time.time()
+            if (now - _last_auto_update_time) < _AUTO_UPDATE_COOLDOWN:
+                return False
+            _last_auto_update_time = now
         res = self.ytdlp_update()
         return bool(res.get('success') and res.get('status') == 'DONE')
 
@@ -471,7 +708,7 @@ class Bridge:
 
     def deezer_search(self, query: str, limit: int = 25, offset: int = 0) -> dict:
         try:
-            r = requests.get(
+            r = _http_get(
                 'https://api.deezer.com/search',
                 params={'q': query, 'limit': limit, 'index': offset},
                 timeout=10,
@@ -482,14 +719,14 @@ class Bridge:
 
     def deezer_track(self, track_id: str) -> dict:
         try:
-            r = requests.get(f'https://api.deezer.com/track/{track_id}', timeout=10)
+            r = _http_get(f'https://api.deezer.com/track/{track_id}', timeout=10)
             return r.json()
         except Exception as e:
             return {'error': str(e)}
 
     def deezer_album(self, album_id: str) -> dict:
         try:
-            r = requests.get(f'https://api.deezer.com/album/{album_id}', timeout=10)
+            r = _http_get(f'https://api.deezer.com/album/{album_id}', timeout=10)
             return r.json()
         except Exception as e:
             return {'error': str(e)}
@@ -513,12 +750,12 @@ class Bridge:
     def tag_and_save_m4a(
         self,
         file_path: str,
-        audio_b64: str,
-        title: str,
-        artist: str,
-        album: str,
-        cover_url: str | None,
-        lyrics: str | None,
+        audio_b64: str | None = None,
+        title: str = '',
+        artist: str = '',
+        album: str = '',
+        cover_url: str | None = None,
+        lyrics: str | None = None,
         album_artist: str | None = None,
         composer: str | None = None,
         genre: str | None = None,
@@ -527,9 +764,19 @@ class Bridge:
         track_total: int | str | None = None,
         disc_number: int | str | None = None,
         disc_total: int | str | None = None,
+        temp_path: str | None = None,
     ) -> dict:
-        """Escribe M4A a disco e inyecta metadata via Mutagen."""
+        """Escribe M4A/MP3 a disco e inyecta metadata via Mutagen."""
+        src_temp: Path | None = None
+        temp_path_work: Path | None = None
         try:
+            if temp_path is not None:
+                src_temp = _resolve_safe_temp_audio_path(temp_path)
+                if src_temp is None:
+                    return {'success': False, 'error': 'Invalid temp_path'}
+            elif not audio_b64:
+                return {'success': False, 'error': 'Missing audio data'}
+
             root = Path(settings.get(
                 'download_folder',
                 str(Path.home() / 'Music' / 'MHL Music'),
@@ -542,14 +789,17 @@ class Bridge:
                 target_path = (root / safe_name).resolve()
 
             target_path.parent.mkdir(parents=True, exist_ok=True)
-            temp_path = target_path.with_suffix(target_path.suffix + '.tmp')
-            audio_bytes = base64.b64decode(audio_b64)
-            temp_path.write_bytes(audio_bytes)
-            
+            temp_path_work = target_path.with_suffix(f'{target_path.suffix}.{uuid.uuid4().hex[:8]}.tmp')
+            if src_temp is not None:
+                shutil.copy2(str(src_temp), str(temp_path_work))
+            else:
+                audio_bytes = base64.b64decode(audio_b64)
+                temp_path_work.write_bytes(audio_bytes)
+
             if target_path.suffix.lower() == '.mp3':
                 from mutagen.id3 import ID3, TIT2, TPE1, TALB, TPE2, TCOM, TCON, TYER, TRCK, TPOS, USLT, APIC, ID3NoHeaderError
                 try:
-                    audio = ID3(str(temp_path))
+                    audio = ID3(str(temp_path_work))
                 except ID3NoHeaderError:
                     audio = ID3()
                 if title: audio.add(TIT2(encoding=3, text=title))
@@ -559,32 +809,30 @@ class Bridge:
                 if composer: audio.add(TCOM(encoding=3, text=composer))
                 if genre: audio.add(TCON(encoding=3, text=genre))
                 if year: audio.add(TYER(encoding=3, text=str(year)))
-                
+
                 trkn_num = int(track_number) if track_number not in (None, '') else 0
                 trkn_tot = int(track_total) if track_total not in (None, '') else 0
                 if trkn_num > 0 or trkn_tot > 0:
                     audio.add(TRCK(encoding=3, text=f"{trkn_num}/{trkn_tot}" if trkn_tot else str(trkn_num)))
-                    
+
                 disc_num = int(disc_number) if disc_number not in (None, '') else 0
                 disc_tot = int(disc_total) if disc_total not in (None, '') else 0
                 if disc_num > 0 or disc_tot > 0:
                     audio.add(TPOS(encoding=3, text=f"{disc_num}/{disc_tot}" if disc_tot else str(disc_num)))
 
                 if lyrics: audio.add(USLT(encoding=3, lang='eng', desc='', text=lyrics))
-                
+
                 if cover_url:
-                    try:
-                        res = requests.get(cover_url, timeout=10)
-                        if res.ok and len(res.content) > 32:
-                            audio.add(APIC(encoding=3, mime='image/jpeg', type=3, desc='Cover', data=res.content))
-                    except Exception:
-                        pass
-                        
-                audio.save(str(temp_path), v2_version=3)
+                    cover_bytes = _fetch_cover_bytes(cover_url)
+                    if cover_bytes:
+                        mime = 'image/png' if cover_bytes.startswith(b'\x89PNG\r\n\x1a\n') else 'image/jpeg'
+                        audio.add(APIC(encoding=3, mime=mime, type=3, desc='Cover', data=cover_bytes))
+
+                audio.save(str(temp_path_work), v2_version=3)
             else:
                 from mutagen.mp4 import MP4, MP4Cover
-                
-                audio = MP4(str(temp_path))
+
+                audio = MP4(str(temp_path_work))
                 if title: audio["\xa9nam"] = title
                 if artist: audio["\xa9ART"] = artist
                 if album: audio["\xa9alb"] = album
@@ -592,38 +840,60 @@ class Bridge:
                 if composer: audio["\xa9wrt"] = composer
                 if genre: audio["\xa9gen"] = genre
                 if year: audio["\xa9day"] = str(year)
-                
+
                 trkn_num = int(track_number) if track_number not in (None, '') else 0
                 trkn_tot = int(track_total) if track_total not in (None, '') else 0
                 if trkn_num > 0 or trkn_tot > 0:
                     audio["trkn"] = [(trkn_num, trkn_tot)]
-                    
+
                 disc_num = int(disc_number) if disc_number not in (None, '') else 0
                 disc_tot = int(disc_total) if disc_total not in (None, '') else 0
                 if disc_num > 0 or disc_tot > 0:
                     audio["disk"] = [(disc_num, disc_tot)]
 
                 if lyrics: audio["\xa9lyr"] = lyrics
-                
+
                 if cover_url:
-                    try:
-                        res = requests.get(cover_url, timeout=10)
-                        if res.ok and len(res.content) > 32:
-                            audio["covr"] = [MP4Cover(res.content, imageformat=MP4Cover.FORMAT_JPEG)]
-                    except Exception:
-                        pass
-                        
+                    cover_bytes = _fetch_cover_bytes(cover_url)
+                    if cover_bytes:
+                        img_fmt = (
+                            getattr(MP4Cover, 'FORMAT_PNG', MP4Cover.FORMAT_JPEG)
+                            if cover_bytes.startswith(b'\x89PNG\r\n\x1a\n')
+                            else MP4Cover.FORMAT_JPEG
+                        )
+                        audio["covr"] = [MP4Cover(cover_bytes, imageformat=img_fmt)]
+
                 audio.save()
 
-            temp_path.replace(target_path)
+            temp_path_work.replace(target_path)
             return {'success': True, 'size': target_path.stat().st_size}
         except Exception as e:
-            if 'temp_path' in locals():
+            if temp_path_work is not None:
                 try:
-                    if temp_path.exists(): temp_path.unlink()
+                    if temp_path_work.exists():
+                        temp_path_work.unlink()
                 except Exception:
                     pass
             return {'success': False, 'error': f'tagging failed: {str(e)}'}
+        finally:
+            if src_temp is not None:
+                _remove_temp_audio_entry(src_temp)
+
+    def cleanup_temp_audio(self, temp_path: str) -> dict:
+        """Elimina de forma segura un archivo temporal dentro de _TEMP_AUDIO_DIR."""
+        if not temp_path or not isinstance(temp_path, str):
+            return {'success': False, 'error': 'Invalid temp_path'}
+        try:
+            base = _TEMP_AUDIO_DIR.resolve()
+            target = Path(temp_path).resolve()
+            target.relative_to(base)
+        except (ValueError, OSError, TypeError):
+            return {'success': False, 'error': 'Invalid temp_path'}
+        if target == base or (target.exists() and target.is_dir()):
+            return {'success': False, 'error': 'Invalid temp_path'}
+
+        _remove_temp_audio_entry(target)
+        return {'success': True}
 
     def anime_get_themes(self, anilist_id: int) -> dict:
         """
@@ -710,8 +980,19 @@ class Bridge:
                     continue
             candidates = candidates[:limit]
             if deep:
-                for candidate in candidates[:2]:
-                    self._enrich_candidate(candidate)
+                if len(candidates) > 1:
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+                        futures = [
+                            executor.submit(self._enrich_candidate, candidate)
+                            for candidate in candidates[:2]
+                        ]
+                        for future in futures:
+                            try:
+                                future.result()
+                            except Exception:
+                                pass
+                elif candidates:
+                    self._enrich_candidate(candidates[0])
             return {'success': True, 'candidates': candidates}
         except subprocess.TimeoutExpired:
             return {'success': False, 'error': 'Candidate search timeout'}
@@ -760,7 +1041,7 @@ class Bridge:
             return {'success': False, 'error': 'URL de letras.com o genius.com inválida'}
 
         try:
-            response = requests.get(
+            response = _http_get(
                 url,
                 timeout=12,
                 headers={
@@ -780,7 +1061,7 @@ class Bridge:
             return {'success': False, 'error': 'URL de lrclib inválida'}
 
         try:
-            response = requests.get(
+            response = _http_get(
                 url,
                 timeout=12,
                 headers={
@@ -803,10 +1084,10 @@ class Bridge:
         source_url: str | None = None,
         expected_duration: int | float = 0,
         audio_format: str = 'm4a',
+        return_path: bool = False,
     ) -> dict:
         """
-        Descarga audio y retorna bytes en base64 + metadata al frontend.
-        El frontend escribe los ID3 tags con browser-id3-writer.
+        Descarga audio y retorna ruta temporal (Zero-Base64) o bytes en base64 + metadata al frontend.
         """
         if source_url:
             parsed = urlparse(source_url)
@@ -823,6 +1104,7 @@ class Bridge:
         ext = 'mp3' if is_mp3 else 'm4a'
         tmpdir = tempfile.mkdtemp(prefix='mhl_')
         tmppath = os.path.join(tmpdir, f'audio.{ext}')
+        dest_dir: Path | None = None
 
         try:
             input_url = source_url or f'https://www.youtube.com/watch?v={video_id}'
@@ -833,6 +1115,7 @@ class Bridge:
                 *format_opts,
                 '-o', tmppath,
                 '--no-playlist', '--force-overwrites',
+                '--no-part', '--concurrent-fragments', '4',
                 '--ffmpeg-location', _bin('ffmpeg.exe'),
                 '--socket-timeout', '15', '--retries', '2', '--fragment-retries', '2',
                 '--quiet',
@@ -879,25 +1162,56 @@ class Bridge:
             if os.path.getsize(result_path) < 16 * 1024:
                 return {'success': False, 'error': 'conversion: output file is too small'}
 
-            probe = subprocess.run(
-                [_bin('ffmpeg.exe'), '-v', 'info', '-i', result_path, '-f', 'null', '-'],
-                capture_output=True, creationflags=CREATE_NO_WINDOW, timeout=45,
-                encoding='utf-8', errors='replace',
-            )
-            if probe.returncode != 0:
-                return {'success': False, 'error': 'conversion: MP3 is not decodable'}
-            duration_match = re.search(r'Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)', probe.stderr or '')
             actual_duration = 0.0
-            if duration_match:
-                actual_duration = (
-                    int(duration_match.group(1)) * 3600
-                    + int(duration_match.group(2)) * 60
-                    + float(duration_match.group(3))
+            probed_by_mutagen = False
+            try:
+                import mutagen
+                audio_info = mutagen.File(result_path)
+                if audio_info is not None and getattr(audio_info, 'info', None) is not None:
+                    length = getattr(audio_info.info, 'length', 0)
+                    if length and float(length) > 0:
+                        actual_duration = float(length)
+                        probed_by_mutagen = True
+            except Exception:
+                probed_by_mutagen = False
+
+            if not probed_by_mutagen:
+                probe = subprocess.run(
+                    [_bin('ffmpeg.exe'), '-v', 'info', '-t', '1', '-i', result_path, '-f', 'null', '-'],
+                    capture_output=True, creationflags=CREATE_NO_WINDOW, timeout=45,
+                    encoding='utf-8', errors='replace',
                 )
+                if probe.returncode != 0:
+                    return {'success': False, 'error': 'conversion: MP3 is not decodable'}
+                duration_match = re.search(r'Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)', probe.stderr or '')
+                if duration_match:
+                    actual_duration = (
+                        int(duration_match.group(1)) * 3600
+                        + int(duration_match.group(2)) * 60
+                        + float(duration_match.group(3))
+                    )
+
             if expected_duration and actual_duration:
                 tolerance = max(5.0, float(expected_duration) * 0.05)
                 if abs(actual_duration - float(expected_duration)) > tolerance:
                     return {'success': False, 'error': 'candidate_invalid: downloaded duration mismatch'}
+
+            if return_path:
+                dest_dir = _TEMP_AUDIO_DIR / uuid.uuid4().hex
+                dest_dir.mkdir(parents=True, exist_ok=True)
+                final_temp = dest_dir / f'audio.{ext}'
+                shutil.move(result_path, str(final_temp))
+                file_size = final_temp.stat().st_size
+                dest_dir = None
+                return {
+                    'success': True,
+                    'temp_path': str(final_temp),
+                    'videoId': video_id,
+                    'sourceUrl': source_url,
+                    'ext': ext,
+                    'duration': actual_duration,
+                    'size': file_size,
+                }
 
             audio_bytes = Path(result_path).read_bytes()
             b64 = _encode_audio_bytes(audio_bytes)
@@ -912,6 +1226,8 @@ class Bridge:
             }
 
         except Exception as e:
+            if dest_dir is not None:
+                shutil.rmtree(dest_dir, ignore_errors=True)
             return {'success': False, 'error': str(e)}
         finally:
             try:

@@ -111,6 +111,26 @@ export function requirePyWebViewApi(): PyWebViewApi {
 
 // ─── Helpers para Desktop Python ───────────────────────────────────────────────────────
 
+async function fetchWithTimeout(url: string, ms = 8000, init?: RequestInit): Promise<Response> {
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timeoutId = controller ? setTimeout(() => controller.abort(), ms) : undefined;
+  try {
+    const requestInit: RequestInit | undefined = controller
+      ? { ...init, signal: controller.signal }
+      : init;
+    try {
+      return await fetch(url, requestInit);
+    } catch (err) {
+      if (controller && err instanceof TypeError && /AbortSignal/i.test(err.message)) {
+        return await withTimeout(fetch(url, init), ms);
+      }
+      throw err;
+    }
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
+  }
+}
+
 // ─── Llamada directa a Deezer: pywebview (bridge Python) o fetch directo ───
 async function callDeezerDirect<T = unknown>(path: string): Promise<T> {
   if (isRunningInPyWebView()) {
@@ -135,10 +155,10 @@ async function callDeezerDirect<T = unknown>(path: string): Promise<T> {
       }
     }
     // Fallback: fetch directo (funciona si no hay CORS restrictions)
-    const res = await fetch(`https://api.deezer.com${path}`);
+    const res = await fetchWithTimeout(`https://api.deezer.com${path}`, 8000);
     return await res.json() as T;
   }
-  const res = await fetch(`https://api.deezer.com${path}`);
+  const res = await fetchWithTimeout(`https://api.deezer.com${path}`, 8000);
   return await res.json() as T;
 }
 
@@ -175,7 +195,7 @@ interface RawITunesTrack {
 // ─── iTunes Fallback ───
 async function searchITunes(query: string, limit = 25): Promise<Track[]> {
   try {
-    const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(query)}&media=music&limit=${limit}`);
+    const res = await fetchWithTimeout(`https://itunes.apple.com/search?term=${encodeURIComponent(query)}&media=music&limit=${limit}`, 8000);
     if (!res.ok) return [];
     const data = await res.json();
     return ((data.results || []) as RawITunesTrack[]).map((t): Track => ({
@@ -290,7 +310,7 @@ export async function getDeezerTrackMeta(
   if (idStr.startsWith('itunes_')) {
     try {
       const realId = idStr.split('_')[1];
-      const res = await fetch(`https://itunes.apple.com/lookup?id=${realId}`);
+      const res = await fetchWithTimeout(`https://itunes.apple.com/lookup?id=${realId}`, 8000);
       if (!res.ok) throw new Error();
       const data = await res.json();
       const t = data.results?.[0];
@@ -332,7 +352,7 @@ export async function getDeezerTrackMeta(
 
       if (track.album?.id) {
         try {
-          const album = await callDeezerDirect<RawDeezerAlbum>(`/album/${track.album.id}`);
+          const album = await getDeezerAlbumCached(track.album.id);
           genre = album.genres?.data?.[0]?.name ?? null;
           if (!albumArtist && album.artist?.name) {
             albumArtist = album.artist.name;
@@ -413,10 +433,13 @@ interface TimedCacheEntry<T> {
 }
 
 const SEARCH_CACHE_TTL_MS = 2 * 60 * 1000;
+const DEEZER_ALBUM_CACHE_TTL_MS = 10 * 60 * 1000;
 const CANDIDATE_CACHE_TTL_MS = 72 * 60 * 60 * 1000;
 const EMPTY_CANDIDATE_CACHE_TTL_MS = 10 * 60 * 1000;
 const PERSISTENT_CANDIDATE_CACHE_TTL_MS = 72 * 60 * 60 * 1000;
+const PERSISTENT_CANDIDATE_CACHE_FLUSH_MS = 300;
 const SEARCH_CACHE_MAX_ENTRIES = 100;
+const DEEZER_ALBUM_CACHE_MAX_ENTRIES = 100;
 const CANDIDATE_CACHE_MAX_ENTRIES = 200;
 const PERSISTENT_CANDIDATE_CACHE_MAX_ENTRIES = 200;
 const PERSISTENT_CANDIDATE_CACHE_KEY = `mhl-native-candidate-cache-v${CANDIDATE_RESOLVER_VERSION}`;
@@ -426,8 +449,34 @@ const ANDROID_EXTRA_CANDIDATE_LIMIT = 5;
 
 const searchCache = new Map<string, TimedCacheEntry<Track[]>>();
 const searchRequests = new Map<string, Promise<Track[]>>();
+const deezerAlbumCache = new Map<string, TimedCacheEntry<RawDeezerAlbum>>();
+const deezerAlbumRequests = new Map<string, Promise<RawDeezerAlbum>>();
 const candidateCache = new Map<string, TimedCacheEntry<DownloadCandidate[]>>();
 const candidateRequests = new Map<string, Promise<DownloadCandidate[]>>();
+
+async function getDeezerAlbumCached(albumId: string | number): Promise<RawDeezerAlbum> {
+  const key = String(albumId).trim();
+  const cached = getCachedValue(deezerAlbumCache, key);
+  if (cached) return cached;
+
+  const pending = deezerAlbumRequests.get(key);
+  if (pending) return pending;
+
+  const request = (async () => {
+    try {
+      const album = await callDeezerDirect<RawDeezerAlbum>(`/album/${key}`);
+      if (album && typeof album === 'object' && !('error' in album)) {
+        setCachedValue(deezerAlbumCache, key, album, DEEZER_ALBUM_CACHE_TTL_MS, DEEZER_ALBUM_CACHE_MAX_ENTRIES);
+      }
+      return album;
+    } finally {
+      deezerAlbumRequests.delete(key);
+    }
+  })();
+
+  deezerAlbumRequests.set(key, request);
+  return request;
+}
 
 function getCachedValue<T>(cache: Map<string, TimedCacheEntry<T>>, key: string): T | undefined {
   const entry = cache.get(key);
@@ -458,28 +507,95 @@ function canUsePersistentCandidateCache(): boolean {
   return typeof localStorage !== 'undefined';
 }
 
-function readPersistentCandidateCache(): Record<string, TimedCacheEntry<DownloadCandidate[]>> {
-  if (!canUsePersistentCandidateCache()) return {};
-  try {
-    return JSON.parse(localStorage.getItem(PERSISTENT_CANDIDATE_CACHE_KEY) || '{}') as Record<string, TimedCacheEntry<DownloadCandidate[]>>;
-  } catch {
-    return {};
-  }
-}
+let persistentCandidateCacheMem: Record<string, TimedCacheEntry<DownloadCandidate[]>> | null = null;
+let persistentCandidateCacheLastRaw: string | null = null;
+let persistentCandidateCacheFlushTimer: ReturnType<typeof setTimeout> | null = null;
 
-function writePersistentCandidateCache(entries: Record<string, TimedCacheEntry<DownloadCandidate[]>>): void {
-  if (!canUsePersistentCandidateCache()) return;
+function flushPersistentCandidateCache(force = false): void {
+  if (persistentCandidateCacheFlushTimer !== null) {
+    clearTimeout(persistentCandidateCacheFlushTimer);
+    persistentCandidateCacheFlushTimer = null;
+  }
+  if (!canUsePersistentCandidateCache() || !persistentCandidateCacheMem) return;
   try {
-    localStorage.setItem(PERSISTENT_CANDIDATE_CACHE_KEY, JSON.stringify(entries));
+    if (!force) {
+      const currentRaw = localStorage.getItem(PERSISTENT_CANDIDATE_CACHE_KEY);
+      if (currentRaw !== persistentCandidateCacheLastRaw) {
+        // Storage was cleared or modified externally while a debounced flush was pending.
+        persistentCandidateCacheMem = null;
+        persistentCandidateCacheLastRaw = null;
+        return;
+      }
+    }
+    const serialized = JSON.stringify(persistentCandidateCacheMem);
+    localStorage.setItem(PERSISTENT_CANDIDATE_CACHE_KEY, serialized);
+    persistentCandidateCacheLastRaw = serialized;
   } catch {
     // Cache persistence is a speed hint only.
   }
 }
 
+function resetPersistentCandidateCacheMem(): void {
+  if (persistentCandidateCacheFlushTimer !== null) {
+    clearTimeout(persistentCandidateCacheFlushTimer);
+    persistentCandidateCacheFlushTimer = null;
+  }
+  persistentCandidateCacheMem = null;
+  persistentCandidateCacheLastRaw = null;
+}
+
+function readPersistentCandidateCache(): Record<string, TimedCacheEntry<DownloadCandidate[]>> {
+  if (!canUsePersistentCandidateCache()) return {};
+  let raw: string | null = null;
+  try {
+    raw = localStorage.getItem(PERSISTENT_CANDIDATE_CACHE_KEY);
+    if (persistentCandidateCacheMem !== null && raw === persistentCandidateCacheLastRaw) {
+      return persistentCandidateCacheMem;
+    }
+    if (persistentCandidateCacheFlushTimer !== null) {
+      clearTimeout(persistentCandidateCacheFlushTimer);
+      persistentCandidateCacheFlushTimer = null;
+    }
+    persistentCandidateCacheLastRaw = raw;
+    const parsed: unknown = raw ? JSON.parse(raw) : {};
+    persistentCandidateCacheMem =
+      parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? (parsed as Record<string, TimedCacheEntry<DownloadCandidate[]>>)
+        : {};
+    return persistentCandidateCacheMem;
+  } catch {
+    if (persistentCandidateCacheFlushTimer !== null) {
+      clearTimeout(persistentCandidateCacheFlushTimer);
+      persistentCandidateCacheFlushTimer = null;
+    }
+    persistentCandidateCacheMem = {};
+    persistentCandidateCacheLastRaw = raw;
+    return persistentCandidateCacheMem;
+  }
+}
+
+function writePersistentCandidateCache(
+  entries: Record<string, TimedCacheEntry<DownloadCandidate[]>>,
+  immediate = false,
+): void {
+  if (!canUsePersistentCandidateCache()) return;
+  persistentCandidateCacheMem = entries;
+  if (immediate) {
+    flushPersistentCandidateCache(true);
+    return;
+  }
+  if (persistentCandidateCacheFlushTimer !== null) {
+    clearTimeout(persistentCandidateCacheFlushTimer);
+  }
+  persistentCandidateCacheFlushTimer = setTimeout(() => {
+    flushPersistentCandidateCache(false);
+  }, PERSISTENT_CANDIDATE_CACHE_FLUSH_MS);
+}
+
 function getPersistentCandidateCacheValue(key: string): DownloadCandidate[] | undefined {
   const entries = readPersistentCandidateCache();
   const entry = entries[key];
-  if (!entry) return undefined;
+  if (!entry || typeof entry !== 'object' || typeof entry.expiresAt !== 'number') return undefined;
   if (entry.expiresAt <= Date.now()) {
     delete entries[key];
     writePersistentCandidateCache(entries);
@@ -490,16 +606,20 @@ function getPersistentCandidateCacheValue(key: string): DownloadCandidate[] | un
 
 function setPersistentCandidateCacheValue(key: string, value: DownloadCandidate[]): void {
   const entries = readPersistentCandidateCache();
-  const sorted = Object.entries(entries)
-    .filter(([, entry]) => entry.expiresAt > Date.now())
-    .sort((a, b) => a[1].expiresAt - b[1].expiresAt);
+  const now = Date.now();
+  for (const [entryKey, entry] of Object.entries(entries)) {
+    if (!entry || typeof entry !== 'object' || typeof entry.expiresAt !== 'number' || entry.expiresAt <= now) {
+      delete entries[entryKey];
+    }
+  }
+  const sorted = Object.entries(entries).sort((a, b) => a[1].expiresAt - b[1].expiresAt);
   while (!entries[key] && sorted.length >= PERSISTENT_CANDIDATE_CACHE_MAX_ENTRIES) {
     const [oldestKey] = sorted.shift() ?? [];
     if (oldestKey) delete entries[oldestKey];
   }
   entries[key] = {
     value,
-    expiresAt: Date.now() + (value.length > 0 ? PERSISTENT_CANDIDATE_CACHE_TTL_MS : EMPTY_CANDIDATE_CACHE_TTL_MS),
+    expiresAt: now + (value.length > 0 ? PERSISTENT_CANDIDATE_CACHE_TTL_MS : EMPTY_CANDIDATE_CACHE_TTL_MS),
   };
   writePersistentCandidateCache(entries);
 }
@@ -774,7 +894,17 @@ export function invalidateDownloadCandidateCache(track: Track): void {
       changed = true;
     }
   }
-  if (changed) writePersistentCandidateCache(entries);
+  if (changed) writePersistentCandidateCache(entries, true);
+}
+
+function pickBestDownloadCandidate(candidates: DownloadCandidate[]): DownloadCandidate | undefined {
+  return (
+    candidates.find(
+      (c) =>
+        c.verification !== 'rejected' &&
+        (c.verification === 'verified' || c.confidence === 'alta' || c.confidence === 'media'),
+    ) || candidates.find((c) => c.verification !== 'rejected')
+  );
 }
 
 // ─── Download track audio ───
@@ -793,8 +923,8 @@ export async function downloadTrackAudio(
   // Si no hay videoId ni sourceUrl directo válido, resolver dinámicamente el mejor candidato de YouTube Music
   if (!resolvedVideoId && !cleanSourceUrl) {
     try {
-      const candidates = await getDownloadCandidates(track, { depth: 'light' });
-      const best = candidates.find((c) => c.confidence >= 40) || candidates[0];
+      const candidates = await getDownloadCandidates(track, false, { depth: 'light' });
+      const best = pickBestDownloadCandidate(candidates);
       if (best) {
         resolvedVideoId = best.videoId;
       }
@@ -843,8 +973,8 @@ export async function downloadTrackAudio(
 
     if (!resolvedVideoId) {
       try {
-        const candidates = await getDownloadCandidates(track, { depth: 'deep' });
-        const best = candidates.find((c) => c.confidence >= 35) || candidates[0];
+        const candidates = await getDownloadCandidates(track, false, { depth: 'deep' });
+        const best = pickBestDownloadCandidate(candidates);
         if (best) {
           resolvedVideoId = best.videoId;
         }
@@ -928,16 +1058,12 @@ async function fetchLrclibJson<T>(url: string): Promise<T | null> {
       return result?.success && result.data ? (result.data as T) : null
     }
 
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 3500)
-    const res = await fetch(url, {
-      signal: controller.signal,
+    const res = await fetchWithTimeout(url, 3500, {
       headers: {
         'Lrclib-Client': 'MHLMusic/1.5.6-beta.3 (https://github.com/ParaSyteTwo/music-mhl)',
         'X-User-Agent': 'MHLMusic/1.5.6-beta.3 (https://github.com/ParaSyteTwo/music-mhl)',
       },
     })
-    clearTimeout(timeout)
     if (res.status === 429) {
       lrclibCooldownUntil = Date.now() + 15 * 60 * 1000
       return null
@@ -1114,28 +1240,45 @@ async function _fetchLrclib(title: string, artist: string, duration?: number): P
     return { syncedLrc: '', plainLrc: fallbackPlain }
   }
 
-  // 2. Intento limpio /api/get sin duración
-  if (cleanTitle !== title || cleanArtist !== artist || duration) {
-    const cleanParams = new URLSearchParams({ track_name: cleanTitle || title, artist_name: cleanArtist || artist })
-    const cleanData = await fetchLrclibJson<LrclibRecord>(`https://lrclib.net/api/get?${cleanParams}`)
-    if (cleanData?.syncedLyrics && hasValidSyncedTimestamps(cleanData.syncedLyrics, duration)) {
-      return {
-        syncedLrc: cleanData.syncedLyrics,
-        plainLrc: cleanData.plainLyrics || fallbackPlain,
-      }
-    }
-    if (!fallbackPlain && (cleanData?.plainLyrics || cleanData?.syncedLyrics)) {
-      fallbackPlain = cleanData.plainLyrics || (hasValidSyncedTimestamps(cleanData.syncedLyrics, duration) ? cleanData.syncedLyrics : '') || ''
+  // 2 y 3 en paralelo: /api/get limpio (si aplica) y /api/search estructurado.
+  // Se evalúa primero paso 2 para conservar la misma prioridad y ahorrar un roundtrip de red.
+  const shouldTryCleanGet = Boolean(cleanTitle !== title || cleanArtist !== artist || duration)
+  const cleanParams = new URLSearchParams({
+    track_name: cleanTitle || title,
+    artist_name: cleanArtist || artist,
+  })
+  const searchParams = new URLSearchParams({
+    track_name: cleanTitle || title,
+    artist_name: cleanArtist || artist,
+  })
+
+  const [cleanData, searchResults] = await Promise.all([
+    shouldTryCleanGet
+      ? fetchLrclibJson<LrclibRecord>(`https://lrclib.net/api/get?${cleanParams}`)
+      : Promise.resolve(null),
+    fetchLrclibJson<LrclibRecord[]>(`https://lrclib.net/api/search?${searchParams}`),
+  ])
+
+  const isCleanDataValid = Boolean(
+    cleanData &&
+    isLrclibCandidateFidelityValid(
+      cleanData.trackName ? cleanData : { ...cleanData, trackName: cleanTitle || title },
+      cleanTitle || title,
+      duration,
+    ),
+  )
+
+  if (isCleanDataValid && cleanData?.syncedLyrics && hasValidSyncedTimestamps(cleanData.syncedLyrics, duration)) {
+    return {
+      syncedLrc: cleanData.syncedLyrics,
+      plainLrc: cleanData.plainLyrics || fallbackPlain,
     }
   }
-
-  if (Date.now() < lrclibCooldownUntil) {
-    return { syncedLrc: '', plainLrc: fallbackPlain }
+  if (!fallbackPlain && isCleanDataValid && (cleanData?.plainLyrics || cleanData?.syncedLyrics)) {
+    fallbackPlain = cleanData.plainLyrics || (hasValidSyncedTimestamps(cleanData.syncedLyrics, duration) ? cleanData.syncedLyrics : '') || ''
   }
 
-  // 3. Búsqueda estructurada con validación de fidelidad (Anti-Alucinación)
-  const searchParams = new URLSearchParams({ track_name: cleanTitle || title, artist_name: cleanArtist || artist })
-  const searchResults = await fetchLrclibJson<LrclibRecord[]>(`https://lrclib.net/api/search?${searchParams}`)
+  // 3. Evaluar búsqueda estructurada con validación de fidelidad (Anti-Alucinación)
   if (Array.isArray(searchResults) && searchResults.length > 0) {
     const valid = searchResults.filter((r) =>
       (r.syncedLyrics || r.plainLyrics) && isLrclibCandidateFidelityValid(r, cleanTitle || title, duration)
@@ -1293,11 +1436,6 @@ async function _combineLyrics(
     ? alignLetrasTimestamps(letras.original, lrclib.syncedLrc, areAlignableLyricLines)
     : null
 
-  const hasRichLetrasContent = (
-    letras.romaji.some((r) => r.trim()) ||
-    letras.translated.some((t) => t.trim())
-  )
-
   // Si no se pudieron alinear los timestamps pero LRCLIB tiene sincronización válida, fallback a procesar LRCLIB directamente para no perder timestamps
   if (lrclib?.syncedLrc && !timestamps) {
     return processLyrics(lrclib.syncedLrc, lrclib.plainLrc, p)
@@ -1393,12 +1531,21 @@ export const __testing = {
   buildCandidateCacheKey,
   getCacheSizes: () => ({
     searches: searchCache.size,
+    albums: deezerAlbumCache.size,
     candidates: candidateCache.size,
   }),
+  flushPersistentCandidateCache,
+  readPersistentCandidateCache,
+  setPersistentCandidateCacheValue,
+  PERSISTENT_CANDIDATE_CACHE_KEY,
   clearRequestCaches: () => {
     searchCache.clear();
     searchRequests.clear();
+    deezerAlbumCache.clear();
+    deezerAlbumRequests.clear();
     candidateCache.clear();
     candidateRequests.clear();
+    resetPersistentCandidateCacheMem();
+    lrclibCooldownUntil = 0;
   },
 }
