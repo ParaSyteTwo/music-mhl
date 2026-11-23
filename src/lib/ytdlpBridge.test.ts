@@ -7,6 +7,7 @@ const capacitorMocks = vi.hoisted(() => ({
     update: vi.fn(async () => ({ success: true, status: 'DONE' })),
     getVersion: vi.fn(async () => ({ success: true, version: '2026.08.19' })),
     search: vi.fn(async () => ({ success: true, results: [] })),
+    getPlaylistItems: vi.fn(),
     downloadAudio: vi.fn(),
     cleanupTempAudio: vi.fn(async () => ({ success: true })),
     saveTaggedAudioToMusic: vi.fn(),
@@ -32,6 +33,7 @@ import {
   downloadAudioToTempNative,
   cleanupTempAudioNative,
   tagAndSaveM4A,
+  getPlaylistItemsNative,
 } from './ytdlpBridge';
 
 describe('ytdlpBridge', () => {
@@ -260,6 +262,105 @@ describe('ytdlpBridge', () => {
         }),
       ).rejects.toThrow('tagAndSaveM4A requires either tempPath or data');
       expect(capacitorMocks.plugin.tagAndSaveM4A).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getPlaylistItemsNative', () => {
+    it('returns playlist title and items on success with default limit 50', async () => {
+      const playlistUrl = 'https://www.youtube.com/playlist?list=PL1234567890abcdef';
+      capacitorMocks.plugin.getPlaylistItems.mockResolvedValue({
+        success: true,
+        title: 'Anime Classics',
+        items: [
+          {
+            videoId: 'abc12345678',
+            title: 'Unravel',
+            channel: 'TK from Ling tosite sigure',
+            duration: 240,
+            thumbnail: 'https://i.ytimg.com/vi/abc12345678/hqdefault.jpg',
+          },
+        ],
+      });
+
+      const res = await getPlaylistItemsNative(playlistUrl);
+
+      expect(capacitorMocks.plugin.getPlaylistItems).toHaveBeenCalledWith({
+        url: playlistUrl,
+        limit: 50,
+      });
+      expect(res).toEqual({
+        title: 'Anime Classics',
+        items: [
+          {
+            videoId: 'abc12345678',
+            title: 'Unravel',
+            channel: 'TK from Ling tosite sigure',
+            duration: 240,
+            thumbnail: 'https://i.ytimg.com/vi/abc12345678/hqdefault.jpg',
+          },
+        ],
+      });
+    });
+
+    it('passes custom limit and clamps out-of-range limits between 1 and 50', async () => {
+      const playlistUrl = 'https://music.youtube.com/playlist?list=OLAK5uy_12345678';
+      capacitorMocks.plugin.getPlaylistItems.mockResolvedValue({
+        success: true,
+        title: 'OST',
+        items: [],
+      });
+
+      await getPlaylistItemsNative(playlistUrl, 20);
+      expect(capacitorMocks.plugin.getPlaylistItems).toHaveBeenLastCalledWith({
+        url: playlistUrl,
+        limit: 20,
+      });
+
+      await getPlaylistItemsNative(playlistUrl, 999);
+      expect(capacitorMocks.plugin.getPlaylistItems).toHaveBeenLastCalledWith({
+        url: playlistUrl,
+        limit: 50,
+      });
+
+      await getPlaylistItemsNative(playlistUrl, 0);
+      expect(capacitorMocks.plugin.getPlaylistItems).toHaveBeenLastCalledWith({
+        url: playlistUrl,
+        limit: 1,
+      });
+    });
+
+    it('rejects when native plugin returns success: false', async () => {
+      capacitorMocks.plugin.getPlaylistItems.mockResolvedValue({
+        success: false,
+        title: '',
+        items: [],
+      });
+
+      await expect(
+        getPlaylistItemsNative('https://www.youtube.com/playlist?list=PL1234567890abcdef'),
+      ).rejects.toThrow('Failed to fetch YouTube playlist items');
+    });
+
+    it('rejects on non-native platform without calling plugin', async () => {
+      capacitorMocks.isNativePlatform.mockReturnValue(false);
+
+      await expect(
+        getPlaylistItemsNative('https://www.youtube.com/playlist?list=PL1234567890abcdef'),
+      ).rejects.toThrow('Not on native platform');
+      expect(capacitorMocks.plugin.getPlaylistItems).not.toHaveBeenCalled();
+    });
+
+    it('rejects on timeout after 30_000 ms', async () => {
+      vi.useFakeTimers();
+      try {
+        capacitorMocks.plugin.getPlaylistItems.mockReturnValue(new Promise(() => {}));
+        const promise = getPlaylistItemsNative('https://www.youtube.com/playlist?list=PL1234567890abcdef');
+        const expectation = expect(promise).rejects.toThrow('Playlist fetch timeout');
+        await vi.advanceTimersByTimeAsync(30_000);
+        await expectation;
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 });

@@ -303,6 +303,35 @@ describe('musicApi request reuse', () => {
     expect(cached).toEqual(first);
   });
 
+  it('preserves numeric albumId from Deezer search results', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({
+        data: [
+          {
+            id: 4201,
+            title: 'Track With Album ID',
+            artist: { name: 'Artist A' },
+            album: { id: 987654, title: 'Official Album', cover_big: 'https://cdn.example/big.jpg' },
+            duration: 205,
+          },
+          {
+            id: 4202,
+            title: 'Track Without Album ID',
+            artist: { name: 'Artist B' },
+            album: { title: 'Single' },
+            duration: 190,
+          },
+        ],
+      }), { status: 200 }),
+    );
+
+    const results = await searchDeezer('album id check');
+
+    expect(results).toHaveLength(2);
+    expect(results[0].albumId).toBe(987654);
+    expect(results[1].albumId).toBeUndefined();
+  });
+
   it('bounds search cache memory on long sessions', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async () => (
       new Response(JSON.stringify({ data: [] }), { status: 200 })

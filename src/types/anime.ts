@@ -20,4 +20,19 @@ export interface AnimeTheme {
   episodesTo: number | null;
   audioUrl: string | null;
   videoUrl: string | null;
+  seasonNumber?: number;
+  seasonTitle?: string;
+  malId?: number | null;
+}
+
+export interface AnimeSeason {
+  anilistId: number;
+  malId: number | null;
+  seasonNumber: number;
+  titleRomaji: string;
+  titleEnglish: string | null;
+  year: number | null;
+  episodes: number | null;
+  cover: string;
+  themes: AnimeTheme[];
 }

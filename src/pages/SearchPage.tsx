@@ -1,24 +1,26 @@
 import { useShallow } from 'zustand/react/shallow';
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Download, Play, Pause, Search, Loader2, Music, CheckCircle, X, ArrowLeft, Tv, Zap, RefreshCw, Sparkles, Clipboard } from 'lucide-react';
+import { Download, Play, Pause, Search, Loader2, Music, CheckCircle, X, ArrowLeft, Tv, Zap, RefreshCw, Sparkles, Clipboard, Disc3 } from 'lucide-react';
 import { useMusicStore } from '@/store/musicStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getDownloadCandidates, type DownloadCandidate } from '@/lib/api/musicApi';
-import type { Track } from '@/types/music';
+import type { ResolvedCollection, Track } from '@/types/music';
 import { GLOBAL_ARTISTS_POOL, buildAffinityPool, buildArtistVisuals, artistGenre } from '@/data/globalArtists';
 import { useI18n } from '@/lib/useI18n';
 import { CandidatePicker } from '@/components/ui/CandidatePicker';
+import { CollectionPanel } from '@/components/ui/CollectionPanel';
 import { AnimeCard } from '@/components/ui/AnimeCard';
 import { ThemeRow } from '@/components/ui/ThemeRow';
 import { AnimeModeBadge } from '@/components/ui/AnimeModeBadge';
 import { searchAnime, getAnimeThemes, downloadAnimeTheme } from '@/lib/api/animeApi';
 import { looksAnimeLikeQuery } from '@/lib/util/animeDetector';
-import type { Anime, AnimeTheme } from '@/types/anime';
+import type { Anime, AnimeSeason, AnimeTheme } from '@/types/anime';
 import { toast } from 'sonner';
 import { Capacitor } from '@capacitor/core';
 import { canDownloadWithOneTap } from '@/lib/download/candidateResolver';
 import { CandidateScheduler } from '@/lib/download/candidateScheduler';
-import { isDirectMediaUrl, isUnsupportedCollectionUrl, resolveTrackFromUrl } from '@/lib/music/urlResolver';
+import { isDirectMediaUrl, isSupportedCollectionUrl, isUnsupportedCollectionUrl, resolveTrackFromUrl } from '@/lib/music/urlResolver';
+import { resolveCollectionFromUrl, resolveDeezerAlbumById } from '@/lib/music/collectionResolver';
 
 function formatDuration(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -34,6 +36,39 @@ function artistMonogram(name: string): string {
   const words = name.replace(/[()[\].!]/g, ' ').split(/\s+/).filter(Boolean);
   if (words.length === 0) return '♪';
   return words.slice(0, 2).map((word) => word[0]).join('').toLocaleUpperCase();
+}
+
+function normalizeThemeMatchText(value: string): string {
+  return value
+    .toLocaleLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\([^)]*\)|\[[^\]]*\]/g, ' ')
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function isAnimeThemeDownloadMatch(track: Track, theme: AnimeTheme, key: string): boolean {
+  if (track.id === `anime-${key}`) return true;
+  const wantedTitle = normalizeThemeMatchText(theme.title);
+  const candTitle = normalizeThemeMatchText(track.canonicalTitle || track.title);
+  if (!wantedTitle || !candTitle) return false;
+  const titleMatch = (
+    candTitle === wantedTitle
+    || (wantedTitle.length >= 3 && candTitle.includes(wantedTitle))
+    || (candTitle.length >= 3 && wantedTitle.includes(candTitle))
+  );
+  if (!titleMatch) return false;
+  const wantedArtist = normalizeThemeMatchText(theme.artist);
+  if (!wantedArtist) return true;
+  const candArtist = normalizeThemeMatchText(track.artist);
+  if (!candArtist) return false;
+  return (
+    candArtist === wantedArtist
+    || candArtist.includes(wantedArtist)
+    || wantedArtist.includes(candArtist)
+  );
 }
 
 type BestCandidateEntry = {
@@ -69,9 +104,9 @@ export default function SearchPage() {
     playTrack,
     currentTrack,
     isPlaying,
-    startDownload,
     startDownloadWithVideoId,
     startDownloadWithSourceUrl,
+    startBatchDownload,
     downloads,
     mostDownloadedArtists,
     animeSearchEnabled,
@@ -94,9 +129,9 @@ export default function SearchPage() {
     playTrack: s.playTrack,
     currentTrack: s.currentTrack,
     isPlaying: s.isPlaying,
-    startDownload: s.startDownload,
     startDownloadWithVideoId: s.startDownloadWithVideoId,
     startDownloadWithSourceUrl: s.startDownloadWithSourceUrl,
+    startBatchDownload: s.startBatchDownload,
     downloads: s.downloads,
     mostDownloadedArtists: s.mostDownloadedArtists,
     animeSearchEnabled: s.animeSearchEnabled,
@@ -130,14 +165,26 @@ export default function SearchPage() {
 
   // ─── Anime mode state ───
   const [animeMode, setAnimeMode] = useState(false);
+  const animeModeRef = useRef(false);
+  animeModeRef.current = animeMode;
+  const animeBypassQueryRef = useRef<string | null>(null);
   const [animeResults, setAnimeResults] = useState<Anime[]>([]);
   const [isSearchingAnime, setIsSearchingAnime] = useState(false);
   const [selectedAnime, setSelectedAnime] = useState<Anime | null>(null);
   const [animeThemes, setAnimeThemes] = useState<AnimeTheme[]>([]);
+  const [animeSeasons, setAnimeSeasons] = useState<AnimeSeason[]>([]);
+  const [selectedSeasonNumber, setSelectedSeasonNumber] = useState<number | null>(null);
   const [isLoadingThemes, setIsLoadingThemes] = useState(false);
   const [downloadingThemeKey, setDownloadingThemeKey] = useState<string | null>(null);
   const animeRequestId = useRef(0);
   const themesRequestId = useRef(0);
+
+  // ─── Collection (Album / Playlist) & Direct URL state ───
+  const [activeCollection, setActiveCollection] = useState<ResolvedCollection | null>(null);
+  const [isLoadingCollection, setIsLoadingCollection] = useState(false);
+  const collectionRequestId = useRef(0);
+  const directUrlRequestId = useRef(0);
+  const lastHandledDirectUrlRef = useRef<string | null>(null);
 
   const handleDownloadClick = (e: React.MouseEvent, track: Track) => {
     e.stopPropagation();
@@ -205,25 +252,51 @@ export default function SearchPage() {
     const requestId = ++themesRequestId.current;
     setSelectedAnime(anime);
     setAnimeThemes([]);
+    setAnimeSeasons([]);
+    setSelectedSeasonNumber(null);
     setIsLoadingThemes(true);
     const response = await getAnimeThemes(anime.id);
     if (requestId !== themesRequestId.current) return;
     setIsLoadingThemes(false);
     if (response.success && response.themes) {
+      const seasons = response.seasons ?? [];
       setAnimeThemes(response.themes);
+      setAnimeSeasons(seasons);
+      if (seasons.length > 1) {
+        const firstWithThemes = seasons.find((s) => s.themes.length > 0) ?? seasons[0];
+        setSelectedSeasonNumber(firstWithThemes.seasonNumber);
+      } else {
+        setSelectedSeasonNumber(null);
+      }
     } else {
       setAnimeThemes([]);
+      setAnimeSeasons([]);
+      setSelectedSeasonNumber(null);
       const errMsg = response.error ?? t('themeFetchError');
       toast.error(errMsg);
     }
   }, [t]);
 
+  const seasonCoverMap = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const season of animeSeasons) {
+      if (season.cover) {
+        map.set(season.anilistId, season.cover);
+      }
+    }
+    return map;
+  }, [animeSeasons]);
+
   const handleAnimeModeToggle = useCallback(() => {
     const trimmed = query.trim();
+    animeBypassQueryRef.current = trimmed || null;
+    animeModeRef.current = false;
     setAnimeMode(false);
     setAnimeResults([]);
     setSelectedAnime(null);
     setAnimeThemes([]);
+    setAnimeSeasons([]);
+    setSelectedSeasonNumber(null);
     themesRequestId.current++;
     animeRequestId.current++;
     if (trimmed) {
@@ -235,34 +308,65 @@ export default function SearchPage() {
   const handleBackToAnimeResults = useCallback(() => {
     setSelectedAnime(null);
     setAnimeThemes([]);
+    setAnimeSeasons([]);
+    setSelectedSeasonNumber(null);
   }, []);
 
+  const handleDownloadSeason = useCallback(
+    (themes: AnimeTheme[], animeTitle: string, seasonCover: string) => {
+      if (themes.length === 0) return;
+      const tracks: Track[] = themes.map((th) => ({
+        id: `anime-${th.animeId}-${th.type}-${th.sequence}`,
+        title: th.title || `${animeTitle} ${th.type} ${th.sequence}`,
+        canonicalTitle: th.title || `${animeTitle} ${th.type} ${th.sequence}`,
+        artist: th.artist || animeTitle,
+        album: th.seasonTitle || animeTitle,
+        canonicalAlbum: th.seasonTitle || animeTitle,
+        duration: 0,
+        cover: seasonCoverMap.get(th.animeId) || seasonCover,
+      }));
+      const result = startBatchDownload(tracks);
+      if (result.queued > 0) {
+        toast.success(t('animeSeasonQueued', { count: result.queued }));
+      } else {
+        toast(t('collectionAllAlreadyQueued'));
+      }
+    },
+    [seasonCoverMap, startBatchDownload, t],
+  );
+
   const handleThemeDownload = useCallback(
-    (theme: AnimeTheme, animeTitle: string) => {
+    (theme: AnimeTheme, animeTitle: string, seasonCover?: string) => {
       const key = `${theme.animeId}-${theme.type}-${theme.sequence}`;
       if (downloadingThemeKey === key) return;
       setDownloadingThemeKey(key);
-      downloadAnimeTheme(theme, animeTitle, selectedAnime?.cover ?? '')
+      const toastId = `anime-theme-${key}`;
+      const displayTitle = theme.title || `${animeTitle} ${theme.type} ${theme.sequence}`;
+      toast.loading(t('animeResolvingTheme', { title: displayTitle }), { id: toastId });
+      downloadAnimeTheme(theme, animeTitle, seasonCover ?? selectedAnime?.cover ?? '')
         .then((response) => {
-          if (response.success && response.sourceUrl && response.track) {
+          if (response.success && response.videoId && response.track) {
+            startDownloadWithVideoId(response.track, response.videoId);
+            toast.success(t('animeThemeQueued', { title: response.track.title || displayTitle }), { id: toastId });
+          } else if (response.success && response.sourceUrl && response.track) {
             startDownloadWithSourceUrl(response.track, response.sourceUrl);
-            toast.success(`${animeTitle} ${theme.type} ${theme.sequence}`);
-          } else if (response.candidates && response.candidates.length > 0) {
-            toast(t('animeThemesDeadVideo'));
-            if (response.track) setPickerTrack(response.track);
+            toast.success(t('animeThemeQueued', { title: response.track.title || displayTitle }), { id: toastId });
+          } else if (response.candidates && response.candidates.length > 0 && response.track) {
+            toast.dismiss(toastId);
+            setPickerTrack(response.track);
           } else {
-            toast.error(response.error ?? t('downloadFailed'));
+            toast.error(response.error ?? t('downloadFailed'), { id: toastId });
           }
         })
         .catch((error) => {
           const message = error instanceof Error ? error.message : t('downloadFailed');
-          toast.error(message);
+          toast.error(message, { id: toastId });
         })
         .finally(() => {
           setDownloadingThemeKey((current) => (current === key ? null : current));
         });
     },
-    [downloadingThemeKey, selectedAnime?.cover, startDownloadWithSourceUrl, t],
+    [downloadingThemeKey, selectedAnime?.cover, startDownloadWithSourceUrl, startDownloadWithVideoId, t],
   );
   const [inputFocused, setInputFocused] = useState(false);
   const loadMoreRef = useRef<HTMLDivElement>(null);
@@ -284,18 +388,135 @@ export default function SearchPage() {
       || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   }, []);
 
+  const clearActiveCollection = useCallback(() => {
+    collectionRequestId.current++;
+    lastHandledDirectUrlRef.current = null;
+    setActiveCollection(null);
+    setIsLoadingCollection(false);
+  }, []);
+
+  const isDownloading = useCallback(
+    (trackId: string) =>
+      downloads.some((d) => d.track.id === trackId && d.status === 'downloading'),
+    [downloads],
+  );
+
+  const isTrackBusy = useCallback(
+    (trackId: string) =>
+      downloads.some((d) => d.track.id === trackId && (d.status === 'downloading' || d.status === 'queued')),
+    [downloads],
+  );
+
+  const isDownloaded = useCallback(
+    (trackId: string) =>
+      downloads.some((d) => d.track.id === trackId && d.status === 'completed'),
+    [downloads],
+  );
+
+  const handleOpenAlbum = useCallback(async (albumId: number) => {
+    const reqId = ++collectionRequestId.current;
+    directUrlRequestId.current++;
+    lastHandledDirectUrlRef.current = null;
+    setIsLoadingCollection(true);
+    toast.loading(t('resolvingCollection'), { id: 'url-resolve' });
+    try {
+      const collection = await resolveDeezerAlbumById(albumId);
+      if (reqId !== collectionRequestId.current) return;
+      if (collection && collection.tracks.length > 0) {
+        setActiveCollection(collection);
+        toast.success(
+          t('collectionResolved', { title: collection.title, count: collection.tracks.length }),
+          { id: 'url-resolve' },
+        );
+      } else {
+        toast.error(t('collectionLoadError'), { id: 'url-resolve' });
+      }
+    } catch {
+      if (reqId !== collectionRequestId.current) return;
+      toast.error(t('collectionLoadError'), { id: 'url-resolve' });
+    } finally {
+      if (reqId === collectionRequestId.current) {
+        setIsLoadingCollection(false);
+      }
+    }
+  }, [t]);
+
+  const handleCollectionDownloadAll = useCallback((tracks: Track[]) => {
+    if (tracks.length === 0) return;
+    const result = startBatchDownload(tracks);
+    if (result.queued > 0) {
+      toast.success(t('collectionBatchQueued', { count: result.queued }));
+    } else {
+      toast(t('collectionAllAlreadyQueued'));
+    }
+  }, [startBatchDownload, t]);
+
+  const handleCollectionDownloadTrack = useCallback((track: Track) => {
+    if (isTrackBusy(track.id)) return;
+    if (track.youtubeId) {
+      startDownloadWithVideoId(track, track.youtubeId);
+    } else {
+      startBatchDownload([track]);
+    }
+  }, [isTrackBusy, startBatchDownload, startDownloadWithVideoId]);
+
   const handleDirectUrl = useCallback(async (rawUrl: string) => {
     const trimmed = rawUrl.trim();
     if (!trimmed) return;
+    if (lastHandledDirectUrlRef.current === trimmed) return;
+    lastHandledDirectUrlRef.current = trimmed;
+    const reqId = ++directUrlRequestId.current;
+
+    if (isSupportedCollectionUrl(trimmed)) {
+      const colReqId = ++collectionRequestId.current;
+      setIsLoadingCollection(true);
+      toast.loading(t('resolvingCollection'), { id: 'url-resolve' });
+      try {
+        const collection = await resolveCollectionFromUrl(trimmed);
+        if (reqId !== directUrlRequestId.current || colReqId !== collectionRequestId.current) return;
+        if (collection && collection.tracks.length > 0) {
+          setActiveCollection(collection);
+          animeModeRef.current = false;
+          setAnimeMode(false);
+          setSelectedAnime(null);
+          setAnimeThemes([]);
+          setAnimeSeasons([]);
+          setSelectedSeasonNumber(null);
+          toast.success(
+            t('collectionResolved', { title: collection.title, count: collection.tracks.length }),
+            { id: 'url-resolve' },
+          );
+        } else {
+          lastHandledDirectUrlRef.current = null;
+          toast.error(t('collectionLoadError'), { id: 'url-resolve' });
+        }
+      } catch {
+        if (reqId !== directUrlRequestId.current || colReqId !== collectionRequestId.current) return;
+        lastHandledDirectUrlRef.current = null;
+        toast.error(t('collectionLoadError'), { id: 'url-resolve' });
+      } finally {
+        if (reqId === directUrlRequestId.current && colReqId === collectionRequestId.current) {
+          setIsLoadingCollection(false);
+        }
+      }
+      return;
+    }
 
     if (isUnsupportedCollectionUrl(trimmed)) {
+      collectionRequestId.current++;
+      setActiveCollection(null);
+      setIsLoadingCollection(false);
       toast.error(t('invalidMediaUrl'), { id: 'url-resolve' });
       return;
     }
 
+    collectionRequestId.current++;
+    setActiveCollection(null);
+    setIsLoadingCollection(false);
     toast.loading(t('resolvingUrl'), { id: 'url-resolve' });
     try {
       const resolvedTrack = await resolveTrackFromUrl(trimmed);
+      if (reqId !== directUrlRequestId.current) return;
       if (resolvedTrack) {
         // Validación de podcasts / audios extensos (>20 min)
         if ((resolvedTrack.isLongAudio || resolvedTrack.isPodcast) && !allowLongAudioDownloads) {
@@ -320,28 +541,33 @@ export default function SearchPage() {
         if (autoDownload) {
           if (resolvedTrack.youtubeId) {
             startDownloadWithVideoId(resolvedTrack, resolvedTrack.youtubeId);
-          } else if (resolvedTrack.sourceUrl) {
-            startDownloadWithSourceUrl(resolvedTrack, resolvedTrack.sourceUrl);
           } else {
-            startDownload(resolvedTrack);
+            startBatchDownload([resolvedTrack]);
           }
         }
       } else {
+        lastHandledDirectUrlRef.current = null;
         toast.error(t('noResults'), { id: 'url-resolve' });
       }
     } catch (err) {
+      if (reqId !== directUrlRequestId.current) return;
+      lastHandledDirectUrlRef.current = null;
       console.error('Error resolving URL:', err);
       toast.error(t('noResults'), { id: 'url-resolve' });
     }
-  }, [allowLongAudioDownloads, autoDownload, setDirectTrack, startDownload, startDownloadWithSourceUrl, startDownloadWithVideoId, t]);
+  }, [allowLongAudioDownloads, autoDownload, setDirectTrack, startBatchDownload, startDownloadWithVideoId, t]);
 
   const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
     const pastedText = e.clipboardData.getData('text').trim();
     if (pastedText) {
       setQuery(pastedText);
-      if (isDirectMediaUrl(pastedText)) {
+      if (
+        isDirectMediaUrl(pastedText)
+        || isSupportedCollectionUrl(pastedText)
+        || isUnsupportedCollectionUrl(pastedText)
+      ) {
         e.preventDefault();
-        handleDirectUrl(pastedText);
+        void handleDirectUrl(pastedText);
       }
     }
   };
@@ -352,9 +578,15 @@ export default function SearchPage() {
         const text = (await navigator.clipboard.readText()).trim();
         if (text) {
           setQuery(text);
-          if (isDirectMediaUrl(text)) {
-            handleDirectUrl(text);
+          if (
+            isDirectMediaUrl(text)
+            || isSupportedCollectionUrl(text)
+            || isUnsupportedCollectionUrl(text)
+          ) {
+            void handleDirectUrl(text);
           } else {
+            directUrlRequestId.current++;
+            clearActiveCollection();
             performSearch(text);
             refreshRecent();
           }
@@ -375,11 +607,17 @@ export default function SearchPage() {
       .trim();
     if (!sanitized || isSearching) return;
     
-    if (isDirectMediaUrl(sanitized)) {
-      handleDirectUrl(sanitized);
+    if (
+      isDirectMediaUrl(sanitized)
+      || isSupportedCollectionUrl(sanitized)
+      || isUnsupportedCollectionUrl(sanitized)
+    ) {
+      void handleDirectUrl(sanitized);
       return;
     }
     
+    directUrlRequestId.current++;
+    clearActiveCollection();
     performSearch(sanitized);
     refreshRecent();
   };
@@ -389,6 +627,8 @@ export default function SearchPage() {
   };
 
   const handleSuggestionClick = (term: string) => {
+    directUrlRequestId.current++;
+    clearActiveCollection();
     setQuery(term);
     performSearch(term);
     refreshRecent();
@@ -398,18 +638,6 @@ export default function SearchPage() {
     setArtistExclusions((current) => [...current, ...suggestedSearches].slice(-300));
     setArtistRotation((current) => current + 1);
   };
-
-  const isDownloading = useCallback(
-    (trackId: string) =>
-      downloads.some((d) => d.track.id === trackId && d.status === 'downloading'),
-    [downloads],
-  );
-
-  const isDownloaded = useCallback(
-    (trackId: string) =>
-      downloads.some((d) => d.track.id === trackId && d.status === 'completed'),
-    [downloads],
-  );
 
   useEffect(() => {
     scheduler.startSession();
@@ -478,14 +706,21 @@ export default function SearchPage() {
   useEffect(() => {
     const trimmed = query.trim();
     if (!trimmed) {
+      animeBypassQueryRef.current = null;
+      animeModeRef.current = false;
+      directUrlRequestId.current++;
+      lastHandledDirectUrlRef.current = null;
       animeRequestId.current++;
       themesRequestId.current++;
       setAnimeMode(false);
       setAnimeResults([]);
       setSelectedAnime(null);
       setAnimeThemes([]);
+      setAnimeSeasons([]);
+      setSelectedSeasonNumber(null);
       setIsSearchingAnime(false);
       setIsLoadingThemes(false);
+      clearActiveCollection();
       if (searchQuery) {
         const timeout = window.setTimeout(() => {
           performSearch('');
@@ -494,24 +729,57 @@ export default function SearchPage() {
       }
       return;
     }
+    if (animeBypassQueryRef.current && animeBypassQueryRef.current !== trimmed) {
+      animeBypassQueryRef.current = null;
+    }
     if (trimmed.length < 2) return;
+
+    // Direct/collection/unsupported URLs MUST be checked BEFORE anime heuristics
+    // so URLs containing words like "anime"/"opening"/"ost" never trigger AniList
+    // or destroy an open CollectionPanel.
+    if (
+      isDirectMediaUrl(trimmed)
+      || isSupportedCollectionUrl(trimmed)
+      || isUnsupportedCollectionUrl(trimmed)
+    ) {
+      if (lastHandledDirectUrlRef.current === trimmed) return;
+      const timeout = window.setTimeout(() => {
+        void handleDirectUrl(trimmed);
+      }, 300);
+      return () => window.clearTimeout(timeout);
+    }
+
+    // Query is regular text (not a URL): cancel any in-flight direct URL resolution.
+    if (lastHandledDirectUrlRef.current !== null) {
+      lastHandledDirectUrlRef.current = null;
+    }
+    directUrlRequestId.current++;
 
     // Anime mode (opt-in): if the toggle is on and the query smells like anime,
     // call searchAnime() and render the anime grid instead of the songs grid.
-    if (animeSearchEnabled && looksAnimeLikeQuery(trimmed)) {
+    if (
+      animeSearchEnabled
+      && looksAnimeLikeQuery(trimmed)
+      && animeBypassQueryRef.current !== trimmed
+    ) {
       const myRequest = ++animeRequestId.current;
       const timeout = window.setTimeout(() => {
         if (myRequest !== animeRequestId.current) return;
+        clearActiveCollection();
         setIsSearchingAnime(true);
         setSelectedAnime(null);
         setAnimeThemes([]);
+        setAnimeSeasons([]);
+        setSelectedSeasonNumber(null);
         searchAnime(trimmed, 25).then((response) => {
           if (myRequest !== animeRequestId.current) return;
           if (response.success && response.results) {
             setAnimeResults(response.results);
+            animeModeRef.current = true;
             setAnimeMode(true);
           } else {
             setAnimeResults([]);
+            animeModeRef.current = true;
             setAnimeMode(true);
             if (response.error && response.error !== 'Empty query') {
               toast.error(t('animeEmpty'));
@@ -530,26 +798,37 @@ export default function SearchPage() {
 
     // If we were in anime mode and the user toggled it off or changed the query
     // to no longer match, clear anime state so the badge hides.
-    if (animeMode) {
+    if (animeModeRef.current) {
+      animeModeRef.current = false;
       setAnimeMode(false);
       setAnimeResults([]);
       setSelectedAnime(null);
       setAnimeThemes([]);
+      setAnimeSeasons([]);
+      setSelectedSeasonNumber(null);
     }
 
     if (trimmed === searchQuery) return;
     const timeout = window.setTimeout(() => {
-      if (isDirectMediaUrl(trimmed)) {
-        handleDirectUrl(trimmed);
-        return;
-      }
+      clearActiveCollection();
       performSearch(trimmed);
       refreshRecent();
     }, 300);
     return () => window.clearTimeout(timeout);
-  }, [query, searchQuery, performSearch, refreshRecent, animeSearchEnabled, animeMode, handleDirectUrl, t]);
+  }, [query, searchQuery, performSearch, refreshRecent, animeSearchEnabled, handleDirectUrl, clearActiveCollection, t]);
 
-  const showEmpty = !query.trim() && searchResults.length === 0 && !isSearching;
+  const activeSeason = useMemo(() => {
+    if (animeSeasons.length <= 1 || selectedSeasonNumber === null) return null;
+    return animeSeasons.find((s) => s.seasonNumber === selectedSeasonNumber) ?? null;
+  }, [animeSeasons, selectedSeasonNumber]);
+
+  const displayedAnimeThemes = useMemo(
+    () => (activeSeason ? activeSeason.themes : animeThemes),
+    [activeSeason, animeThemes],
+  );
+
+  const activeSeasonCover = activeSeason?.cover || selectedAnime?.cover || '';
+  const showEmpty = !activeCollection && !isLoadingCollection && !query.trim() && searchResults.length === 0 && !isSearching;
 
   return (
     <motion.div
@@ -582,12 +861,7 @@ export default function SearchPage() {
             placeholder={t('searchPlaceholder')}
             value={query}
             onChange={(e) => {
-              const val = e.target.value;
-              setQuery(val);
-              const trimmed = val.trim();
-              if (isDirectMediaUrl(trimmed)) {
-                handleDirectUrl(trimmed);
-              }
+              setQuery(e.target.value);
             }}
             onPaste={handlePaste}
             onKeyDown={handleKeyDown}
@@ -598,11 +872,18 @@ export default function SearchPage() {
             autoCorrect="off"
             spellCheck="false"
           />
-          {isSearching ? (
+          {isSearching || isLoadingCollection ? (
             <Loader2 className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#C8F04B] animate-spin" />
           ) : query ? (
             <button
-              onMouseDown={(e) => { e.preventDefault(); setQuery(''); clearSearch(); }}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                animeBypassQueryRef.current = null;
+                directUrlRequestId.current++;
+                setQuery('');
+                clearActiveCollection();
+                clearSearch();
+              }}
               className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-white/[0.08] hover:bg-white/[0.14] flex items-center justify-center transition-colors"
               aria-label={t('clearSearch')}
             >
@@ -704,14 +985,39 @@ export default function SearchPage() {
         </section>
       )}
 
-      {searchResults.length > 0 && !isSearching && (
+      {!activeCollection && !isLoadingCollection && !animeMode && searchResults.length > 0 && !isSearching && (
         <p className="text-[11px] text-[#555] mb-3">
           {t('resultsFor', { count: searchResults.length, query: searchQuery })}
         </p>
       )}
 
       <AnimatePresence>
-        {animeMode && (
+        {activeCollection ? (
+          <CollectionPanel
+            key={activeCollection.id}
+            collection={activeCollection}
+            onBack={clearActiveCollection}
+            onDownloadAll={handleCollectionDownloadAll}
+            onDownloadTrack={handleCollectionDownloadTrack}
+            isTrackDownloaded={isDownloaded}
+            isTrackDownloading={isTrackBusy}
+          />
+        ) : isLoadingCollection ? (
+          <motion.div
+            key="collection-loading"
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            className="mb-4 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] p-5 flex items-center justify-center gap-2.5 text-xs text-[#A0A098]"
+          >
+            <Loader2 className="w-4 h-4 text-[#C8F04B] animate-spin" />
+            <span>{t('resolvingCollection')}</span>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {!activeCollection && animeMode && (
           <motion.div
             key="anime-mode"
             initial={{ opacity: 0, y: 8 }}
@@ -740,9 +1046,9 @@ export default function SearchPage() {
                   {t('search')}
                 </button>
                 <div className="flex gap-4 items-start">
-                  {selectedAnime.cover ? (
+                  {activeSeasonCover ? (
                     <img
-                      src={selectedAnime.cover}
+                      src={activeSeasonCover}
                       alt=""
                       className="w-20 h-28 sm:w-28 sm:h-40 object-cover rounded-lg flex-shrink-0"
                     />
@@ -757,10 +1063,12 @@ export default function SearchPage() {
                     </h2>
                     <p className="text-[11px] text-[#666660] mt-1">
                       {[
-                        selectedAnime.year != null ? t('animeDetailYear', { year: selectedAnime.year }) : null,
+                        (activeSeason?.year ?? selectedAnime.year) != null
+                          ? t('animeDetailYear', { year: (activeSeason?.year ?? selectedAnime.year)! })
+                          : null,
                         t(`animeDetailType${selectedAnime.type}` as const),
-                        selectedAnime.episodes != null
-                          ? t('animeDetailEpisodes', { n: selectedAnime.episodes })
+                        (activeSeason?.episodes ?? selectedAnime.episodes) != null
+                          ? t('animeDetailEpisodes', { n: (activeSeason?.episodes ?? selectedAnime.episodes)! })
                           : null,
                       ].filter(Boolean).join(' · ')}
                     </p>
@@ -772,9 +1080,89 @@ export default function SearchPage() {
                   </div>
                 </div>
 
-                <div className="mt-5 space-y-4">
+                {animeSeasons.length > 1 && (
+                  <div className="mt-4 flex items-center gap-1.5 overflow-x-auto pb-1">
+                    {animeSeasons.map((season) => {
+                      const isActive = selectedSeasonNumber === season.seasonNumber;
+                      return (
+                        <button
+                          key={season.anilistId}
+                          type="button"
+                          onClick={() => setSelectedSeasonNumber(season.seasonNumber)}
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium whitespace-nowrap transition-colors flex-shrink-0 ${
+                            isActive
+                              ? 'bg-[#C8F04B] text-[#080808] font-semibold'
+                              : 'bg-white/[0.04] text-[#A0A098] border border-[rgba(255,255,255,0.06)] hover:text-[#F5F5F0] hover:bg-white/[0.07]'
+                          }`}
+                        >
+                          <span>{t('animeSeasonLabel', { n: season.seasonNumber })}</span>
+                          {season.year != null && (
+                            <span className={isActive ? 'text-[#080808]/70' : 'text-[#666660]'}>
+                              · {season.year}
+                            </span>
+                          )}
+                          <span
+                            className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                              isActive
+                                ? 'bg-[#080808]/15 text-[#080808]'
+                                : 'bg-white/[0.06] text-[#8E8E88]'
+                            }`}
+                          >
+                            {season.themes.length}
+                          </span>
+                        </button>
+                      );
+                    })}
+                    <button
+                      type="button"
+                      onClick={() => setSelectedSeasonNumber(null)}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium whitespace-nowrap transition-colors flex-shrink-0 ${
+                        selectedSeasonNumber === null
+                          ? 'bg-[#C8F04B] text-[#080808] font-semibold'
+                          : 'bg-white/[0.04] text-[#A0A098] border border-[rgba(255,255,255,0.06)] hover:text-[#F5F5F0] hover:bg-white/[0.07]'
+                      }`}
+                    >
+                      <span>{t('animeAllSeasons')}</span>
+                      <span
+                        className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                          selectedSeasonNumber === null
+                            ? 'bg-[#080808]/15 text-[#080808]'
+                            : 'bg-white/[0.06] text-[#8E8E88]'
+                        }`}
+                      >
+                        {animeThemes.length}
+                      </span>
+                    </button>
+                  </div>
+                )}
+
+                {!isLoadingThemes && displayedAnimeThemes.length > 0 && (
+                  <div className="mt-4 flex items-center justify-between gap-2 flex-wrap">
+                    {activeSeason ? (
+                      <p className="text-xs text-[#A0A098] truncate">
+                        {activeSeason.titleEnglish || activeSeason.titleRomaji}
+                      </p>
+                    ) : <span />}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleDownloadSeason(
+                          displayedAnimeThemes,
+                          selectedAnime.titleEnglish || selectedAnime.titleRomaji,
+                          activeSeasonCover,
+                        )
+                      }
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#C8F04B] text-[#080808] hover:bg-[#d4f56a] active:scale-[0.98] text-[11px] font-semibold transition-all"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>{t('animeDownloadSeason', { n: displayedAnimeThemes.length })}</span>
+                    </button>
+                  </div>
+                )}
+
+                <div className="mt-4 space-y-4">
                   {(['OP', 'ED'] as const).map((kind) => {
-                    const section = animeThemes.filter((th) => th.type === kind);
+                    const section = displayedAnimeThemes.filter((th) => th.type === kind);
                     if (section.length === 0) return null;
                     return (
                       <div key={kind}>
@@ -785,15 +1173,24 @@ export default function SearchPage() {
                           {section.map((theme) => {
                             const key = `${theme.animeId}-${theme.type}-${theme.sequence}`;
                             const downloaded = downloads.some(
-                              (d) => d.track.id === `anime-${key}` && d.status === 'completed',
+                              (d) => d.status === 'completed' && isAnimeThemeDownloadMatch(d.track, theme, key),
                             );
+                            const downloading =
+                              downloadingThemeKey === key
+                              || downloads.some(
+                                (d) =>
+                                  (d.status === 'downloading' || d.status === 'queued')
+                                  && isAnimeThemeDownloadMatch(d.track, theme, key),
+                              );
+                            const themeTitle = theme.seasonTitle || selectedAnime.titleEnglish || selectedAnime.titleRomaji;
+                            const themeCover = seasonCoverMap.get(theme.animeId) || activeSeasonCover;
                             return (
                               <ThemeRow
                                 key={key}
                                 theme={theme}
-                                animeTitle={selectedAnime.titleEnglish || selectedAnime.titleRomaji}
-                                onDownload={() => handleThemeDownload(theme, selectedAnime.titleEnglish || selectedAnime.titleRomaji)}
-                                downloading={downloadingThemeKey === key}
+                                animeTitle={themeTitle}
+                                onDownload={() => handleThemeDownload(theme, themeTitle, themeCover)}
+                                downloading={downloading}
                                 downloaded={downloaded}
                               />
                             );
@@ -809,7 +1206,7 @@ export default function SearchPage() {
                     </div>
                   )}
 
-                  {!isLoadingThemes && animeThemes.length === 0 && (
+                  {!isLoadingThemes && displayedAnimeThemes.length === 0 && (
                     <p className="text-xs text-[#666660] text-center py-4">{t('animeEmpty')}</p>
                   )}
                 </div>
@@ -843,7 +1240,7 @@ export default function SearchPage() {
       </AnimatePresence>
 
       <AnimatePresence mode="wait">
-        {!animeMode && searchResults.length > 0 ? (
+        {!activeCollection && !isLoadingCollection && !animeMode && searchResults.length > 0 ? (
           <motion.div key="results-container" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <motion.div
               key="results-grid"
@@ -898,6 +1295,20 @@ export default function SearchPage() {
                           )}
                         </div>
                         <div className="absolute top-2 right-2 flex items-center gap-1">
+                          {track.albumId != null && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void handleOpenAlbum(track.albumId!);
+                              }}
+                              className="p-2 rounded-lg bg-black/60 text-[#A0A098] hover:text-[#C8F04B] hover:bg-black/80 transition-colors shadow-md flex items-center justify-center"
+                              aria-label={t('viewAlbum')}
+                              title={t('viewAlbum')}
+                            >
+                              <Disc3 className="w-4 h-4" />
+                            </button>
+                          )}
                           <button
                             onClick={(e) => {
                               if (downloading || downloaded) return;
@@ -1042,6 +1453,20 @@ export default function SearchPage() {
                       {formatDuration(track.duration)}
                     </span>
                     <div className="flex items-center gap-1 flex-shrink-0">
+                      {track.albumId != null && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void handleOpenAlbum(track.albumId!);
+                          }}
+                          className="p-2 rounded-xl text-[#8E8E88] hover:text-[#C8F04B] active:text-[#C8F04B] bg-white/[0.04] transition-colors flex items-center justify-center min-w-[38px] min-h-[38px]"
+                          aria-label={t('viewAlbum')}
+                          title={t('viewAlbum')}
+                        >
+                          <Disc3 className="w-4 h-4" />
+                        </button>
+                      )}
                       <button
                         onClick={(e) => {
                           if (downloading || downloaded) return;
@@ -1107,7 +1532,7 @@ export default function SearchPage() {
               )}
             </div>
           </motion.div>
-        ) : !isSearching && query.trim() ? (
+        ) : !activeCollection && !isLoadingCollection && !animeMode && !isSearching && query.trim() ? (
           <motion.p
             key="no-results"
             initial={{ opacity: 0 }}

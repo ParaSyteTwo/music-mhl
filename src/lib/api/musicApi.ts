@@ -168,6 +168,7 @@ function mapRawDeezerTrack(t: RawDeezerTrack): Track {
   return {
     id: `dz-${t.id}`,
     deezerId: t.id == null ? undefined : Number(t.id),
+    albumId: typeof album.id === 'number' ? album.id : undefined,
     title: typeof t.title === 'string' ? t.title : 'Unknown',
     canonicalTitle: typeof t.title_short === 'string' ? t.title_short : (typeof t.title === 'string' ? t.title : 'Unknown'),
     artist: typeof artist.name === 'string' ? artist.name : 'Unknown',

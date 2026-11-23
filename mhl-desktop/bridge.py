@@ -3,7 +3,7 @@ MHL Music — Python bridge expuesto al frontend React via pywebview.
 Todas las llamadas externas (Deezer, YouTube/yt-dlp, filesystem) pasan por aquí.
 """
 import base64
-from collections import OrderedDict
+from collections import OrderedDict, deque
 import concurrent.futures
 import ipaddress
 import json
@@ -18,12 +18,12 @@ import threading
 import time
 import uuid
 from pathlib import Path
-from urllib.parse import quote_plus, urljoin, urlparse
+from urllib.parse import parse_qs, quote_plus, urljoin, urlparse
 
 # CREATE_NO_WINDOW para evitar popup de consola en Windows
 CREATE_NO_WINDOW = 0x08000000 if sys.platform == 'win32' else 0
 
-APP_VERSION = '1.5.6-beta.5'
+APP_VERSION = '1.5.6-beta.6'
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -317,16 +317,30 @@ def _metadata_text(data: dict, *keys: str) -> str:
     return ''
 
 
-# ── Anime client (AniList + animethemes.moe) ─────────────────────────────────
+# ── Anime client (AniList + Jikan/MAL + animethemes.moe) ─────────────────────
 # Implementación síncrona con `requests`, que ya forma parte del runtime Desktop.
 
 _ANILIST_ENDPOINT = 'https://graphql.anilist.co'
+_JIKAN_ENDPOINT = 'https://api.jikan.moe/v4'
 _ANIMETHEMES_ENDPOINT = 'https://api.animethemes.moe'
 _ANIME_HEADERS = {
     'Content-Type': 'application/json',
     'User-Agent': f'MHLMusic/{APP_VERSION}',
 }
 _ANIME_TIMEOUT = 10
+_ANIME_MAX_SEASONS = 8
+_ANIME_MAX_EXPLORED_NODES = 12
+_ANIME_TRAVERSABLE_FORMATS = {'TV', 'MOVIE', 'OVA', 'ONA', 'TV_SHORT'}
+_ANIME_FORMAT_PRIORITY = {
+    'TV': 0,
+    'ONA': 1,
+    'MOVIE': 2,
+    'OVA': 3,
+    'TV_SHORT': 4,
+}
+_ANIME_RICH_META_KEYS = (
+    'idMal', 'format', 'relations', 'episodes', 'startDate', 'coverImage',
+)
 
 _ANILIST_SEARCH_QUERY = """
 query ($search: String!, $perPage: Int!) {
@@ -348,12 +362,42 @@ _ANILIST_BY_ID_QUERY = """
 query ($id: Int!) {
   Media(id: $id, type: ANIME) {
     id
+    idMal
     title { romaji english native }
+    format
+    episodes
+    startDate { year }
+    coverImage { extraLarge large }
+    relations {
+      edges {
+        relationType
+        node {
+          id
+          idMal
+          title { romaji english native }
+          format
+          episodes
+          startDate { year }
+          coverImage { extraLarge large }
+        }
+      }
+    }
   }
 }
 """
 
 _HTML_TAG_RE = re.compile(r'<[^>]+>')
+_JP_PAREN_RE = re.compile(
+    r'\s*\((?!\s*(?:feat|ft)(?:\.|\s))[^)]*[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uff00-\uffef][^)]*\)',
+    re.IGNORECASE,
+)
+_JIKAN_SEQ_RE = re.compile(r'^(\d+)\s*:\s*')
+_JIKAN_TRAILING_BRACKET_RE = re.compile(r'(?:\s*\[[^\]]*\])+\s*$')
+_JIKAN_EPS_RE = re.compile(
+    r'\s*\((?:eps?\.?|episodes?)\s*([^)]+)\)(?=\s*(?:\[[^\]]*\]|\([^)]*\))*\s*$)',
+    re.IGNORECASE,
+)
+_JIKAN_QUOTED_RE = re.compile(r'^["“](.+?)["”]\s*(?:by\s+(.+))?$', re.IGNORECASE)
 
 
 def _strip_html(text):
@@ -466,6 +510,352 @@ def _anime_fetch_meta(anilist_id):
     return data.get('Media') or None
 
 
+def _is_rich_anilist_meta(meta) -> bool:
+    return isinstance(meta, dict) and any(key in meta for key in _ANIME_RICH_META_KEYS)
+
+
+def _iter_traversable_edges(meta: dict) -> list[tuple[str, int, dict]]:
+    relations = meta.get('relations')
+    if not isinstance(relations, dict):
+        return []
+    edges = relations.get('edges')
+    if not isinstance(edges, list):
+        return []
+    candidates: list[tuple[int, int, str, int, dict]] = []
+    for idx, edge in enumerate(edges):
+        if not isinstance(edge, dict):
+            continue
+        rel_type = str(edge.get('relationType') or '').upper()
+        if rel_type not in {'PREQUEL', 'SEQUEL'}:
+            continue
+        node = edge.get('node')
+        if not isinstance(node, dict):
+            continue
+        node_id = node.get('id')
+        if isinstance(node_id, bool) or not isinstance(node_id, int) or node_id <= 0:
+            continue
+        fmt = str(node.get('format') or '').upper()
+        if fmt not in _ANIME_TRAVERSABLE_FORMATS:
+            continue
+        priority = _ANIME_FORMAT_PRIORITY.get(fmt, 99)
+        candidates.append((priority, idx, rel_type, node_id, node))
+    candidates.sort(key=lambda item: (item[0], item[1]))
+    return [(rel_type, node_id, node) for _prio, _idx, rel_type, node_id, node in candidates]
+
+
+def _is_season_node(node: dict, is_root: bool, root_format: str) -> bool:
+    fmt = str(node.get('format') or '').upper()
+    if fmt == 'TV':
+        return True
+    if fmt == 'ONA':
+        if is_root or root_format == 'ONA':
+            return True
+        eps = node.get('episodes')
+        if isinstance(eps, int) and not isinstance(eps, bool) and eps > 1:
+            return True
+    return False
+
+
+def _node_start_year(node: dict) -> int | None:
+    start_date = node.get('startDate')
+    if not isinstance(start_date, dict):
+        return None
+    year_raw = start_date.get('year')
+    if isinstance(year_raw, int) and not isinstance(year_raw, bool):
+        return int(year_raw)
+    return None
+
+
+def _build_anime_season_dict(node: dict, season_number: int, fallback_id: int = 0) -> dict:
+    node_id_raw = node.get('id')
+    node_id = (
+        int(node_id_raw)
+        if isinstance(node_id_raw, int) and not isinstance(node_id_raw, bool) and node_id_raw > 0
+        else int(fallback_id)
+    )
+    mal_raw = node.get('idMal')
+    mal_id = (
+        int(mal_raw)
+        if isinstance(mal_raw, int) and not isinstance(mal_raw, bool) and mal_raw > 0
+        else None
+    )
+    romaji, english, _native = _anime_titles(node.get('title'))
+    year = _node_start_year(node)
+    episodes_raw = node.get('episodes')
+    episodes = (
+        int(episodes_raw)
+        if isinstance(episodes_raw, int) and not isinstance(episodes_raw, bool)
+        else None
+    )
+    return {
+        'anilistId': node_id,
+        'malId': mal_id,
+        'seasonNumber': season_number,
+        'titleRomaji': romaji,
+        'titleEnglish': english,
+        'year': year,
+        'episodes': episodes,
+        'cover': _anime_cover(node.get('coverImage')),
+        'themes': [],
+    }
+
+
+def _anime_collect_seasons(anilist_id: int) -> list[dict]:
+    root_meta = _anime_fetch_meta(anilist_id)
+    if root_meta is None:
+        return []
+    return _anime_collect_seasons_from_meta(root_meta, anilist_id)
+
+
+def _anime_collect_seasons_from_meta(root_meta: dict, anilist_id: int) -> list[dict]:
+    root_id_raw = root_meta.get('id')
+    root_id = (
+        int(root_id_raw)
+        if isinstance(root_id_raw, int) and not isinstance(root_id_raw, bool) and root_id_raw > 0
+        else int(anilist_id)
+    )
+    relations = root_meta.get('relations')
+    if not isinstance(relations, dict):
+        return [_build_anime_season_dict(root_meta, 1, fallback_id=root_id)]
+
+    root_edges = _iter_traversable_edges(root_meta)
+    if not root_edges:
+        return [_build_anime_season_dict(root_meta, 1, fallback_id=root_id)]
+
+    root_format = str(root_meta.get('format') or '').upper()
+    visited: set[int] = {root_id}
+    kept_entries: list[tuple[dict, int, int]] = []
+    discovery_counter = 0
+
+    if _is_season_node(root_meta, is_root=True, root_format=root_format):
+        kept_entries.append((root_meta, 0, discovery_counter))
+
+    queue: deque[tuple[dict, int]] = deque([(root_meta, 0)])
+    while (
+        queue
+        and len(visited) < _ANIME_MAX_EXPLORED_NODES
+        and len(kept_entries) < _ANIME_MAX_SEASONS
+    ):
+        curr_meta, curr_order = queue.popleft()
+        edges_to_walk = root_edges if curr_meta is root_meta else _iter_traversable_edges(curr_meta)
+        for rel_type, neighbor_id, neighbor_stub in edges_to_walk:
+            if neighbor_id in visited:
+                continue
+            if len(visited) >= _ANIME_MAX_EXPLORED_NODES or len(kept_entries) >= _ANIME_MAX_SEASONS:
+                break
+            visited.add(neighbor_id)
+            discovery_counter += 1
+            next_order = curr_order - 1 if rel_type == 'PREQUEL' else curr_order + 1
+            try:
+                fetched = _anime_fetch_meta(neighbor_id)
+            except Exception:
+                fetched = None
+            resolved_node = fetched if isinstance(fetched, dict) else neighbor_stub
+            if _is_season_node(resolved_node, is_root=False, root_format=root_format):
+                kept_entries.append((resolved_node, next_order, discovery_counter))
+            if isinstance(fetched, dict):
+                queue.append((fetched, next_order))
+
+    if not kept_entries:
+        return [_build_anime_season_dict(root_meta, 1, fallback_id=root_id)]
+
+    all_have_year = all(_node_start_year(node) is not None for node, _ord, _disc in kept_entries)
+    if all_have_year:
+        kept_entries.sort(key=lambda item: (_node_start_year(item[0]) or 0, item[1], item[2]))
+    else:
+        kept_entries.sort(
+            key=lambda item: (
+                item[1],
+                _node_start_year(item[0]) if _node_start_year(item[0]) is not None else 999999,
+                item[2],
+            )
+        )
+
+    ordered_nodes = [node for node, _ord, _disc in kept_entries[:_ANIME_MAX_SEASONS]]
+    return [
+        _build_anime_season_dict(node, idx, fallback_id=root_id if node is root_meta else 0)
+        for idx, node in enumerate(ordered_nodes, start=1)
+    ]
+
+
+def _clean_jikan_label(value: str) -> str:
+    raw = value.strip()
+    if not raw:
+        return ''
+    cleaned = _JP_PAREN_RE.sub('', raw).strip()
+    return cleaned or raw
+
+
+def _parse_jikan_theme_entry(raw: str, theme_type: str, default_seq: int) -> dict | None:
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    text = raw.strip()
+    norm_type = 'OP' if str(theme_type or '').upper().startswith('OP') else 'ED'
+
+    sequence = int(default_seq) if isinstance(default_seq, int) and default_seq > 0 else 1
+    seq_match = _JIKAN_SEQ_RE.match(text)
+    if seq_match:
+        try:
+            sequence = int(seq_match.group(1))
+        except (TypeError, ValueError):
+            pass
+        text = text[seq_match.end():].strip()
+
+    # Elimina sufijos finales tipo [Broadcast], [TV], [BD] antes de parsear episodios
+    text = _JIKAN_TRAILING_BRACKET_RE.sub('', text).strip()
+
+    episodes_from: int | None = None
+    episodes_to: int | None = None
+    eps_match = _JIKAN_EPS_RE.search(text)
+    if eps_match:
+        ep_spec = eps_match.group(1).strip()
+        text = (text[:eps_match.start()] + ' ' + text[eps_match.end():]).strip()
+        text = _JIKAN_TRAILING_BRACKET_RE.sub('', text).strip()
+        raw_nums = re.findall(r'\d+(?:\.\d+)?', ep_spec)
+        nums = [int(float(n)) for n in raw_nums]
+        if nums:
+            episodes_from = min(nums)
+            if re.search(r'\d+\s*-\s*$', ep_spec):
+                episodes_to = None
+            else:
+                episodes_to = max(nums)
+
+    raw_title = ''
+    raw_artist = ''
+    quoted_match = _JIKAN_QUOTED_RE.match(text)
+    if quoted_match:
+        raw_title = (quoted_match.group(1) or '').strip()
+        raw_artist = (quoted_match.group(2) or '').strip()
+    else:
+        parts = re.split(r'\s+by\s+', text, maxsplit=1, flags=re.IGNORECASE)
+        raw_title = (parts[0] or '').strip().strip('"“”')
+        raw_artist = (parts[1] or '').strip() if len(parts) > 1 else ''
+
+    # Limpia posibles anotaciones residuales de episodios o corchetes en el artista
+    if raw_artist:
+        raw_artist = _JIKAN_TRAILING_BRACKET_RE.sub('', raw_artist).strip()
+        trailing_eps = _JIKAN_EPS_RE.search(raw_artist)
+        if trailing_eps:
+            raw_artist = (
+                raw_artist[:trailing_eps.start()] + ' ' + raw_artist[trailing_eps.end():]
+            ).strip()
+            raw_artist = _JIKAN_TRAILING_BRACKET_RE.sub('', raw_artist).strip()
+
+    title = _clean_jikan_label(raw_title) or f'{norm_type} {sequence}'
+    artist = _clean_jikan_label(raw_artist)
+    return {
+        'type': norm_type,
+        'sequence': sequence,
+        'title': title,
+        'artist': artist,
+        'episodesFrom': episodes_from,
+        'episodesTo': episodes_to,
+    }
+
+
+def _anime_fetch_themes_jikan(mal_id: int, anilist_id: int) -> list[dict]:
+    if isinstance(mal_id, bool) or not isinstance(mal_id, int) or mal_id <= 0:
+        return []
+    jikan_url = f'{_JIKAN_ENDPOINT}/anime/{mal_id}/themes'
+    jikan_headers = {
+        'User-Agent': _ANIME_HEADERS['User-Agent'],
+        'Accept': 'application/json',
+    }
+    try:
+        response = _http_get(
+            jikan_url,
+            headers=jikan_headers,
+            timeout=_ANIME_TIMEOUT,
+        )
+        if getattr(response, 'status_code', None) == 429:
+            retry_delay = 0.5
+            headers = getattr(response, 'headers', None)
+            raw_ra = headers.get('Retry-After') if headers is not None and hasattr(headers, 'get') else None
+            if raw_ra is not None:
+                try:
+                    parsed_ra = float(raw_ra)
+                    if parsed_ra >= 0:
+                        retry_delay = min(parsed_ra, 1.5)
+                except (TypeError, ValueError):
+                    retry_delay = 0.5
+            time.sleep(retry_delay)
+            response = _http_get(
+                jikan_url,
+                headers=jikan_headers,
+                timeout=_ANIME_TIMEOUT,
+            )
+        response.raise_for_status()
+        payload = response.json()
+    except Exception:
+        return []
+
+    data = payload.get('data') if isinstance(payload, dict) else None
+    if not isinstance(data, dict):
+        return []
+
+    themes: list[dict] = []
+    for theme_type, key in (('OP', 'openings'), ('ED', 'endings')):
+        raw_items = data.get(key)
+        if not isinstance(raw_items, list):
+            continue
+        for idx, raw_entry in enumerate(raw_items, start=1):
+            parsed = _parse_jikan_theme_entry(raw_entry, theme_type, idx)
+            if parsed is None:
+                continue
+            themes.append({
+                'animeId': anilist_id,
+                'type': parsed['type'],
+                'sequence': parsed['sequence'],
+                'title': parsed['title'],
+                'artist': parsed['artist'],
+                'episodesFrom': parsed['episodesFrom'],
+                'episodesTo': parsed['episodesTo'],
+                'audioUrl': None,
+                'videoUrl': None,
+            })
+    return themes
+
+
+def _anime_fetch_themes_by_anilist_id(anilist_id: int) -> list[dict]:
+    if isinstance(anilist_id, bool) or not isinstance(anilist_id, int) or anilist_id <= 0:
+        return []
+    try:
+        response = _http_get(
+            f'{_ANIMETHEMES_ENDPOINT}/anime',
+            params={
+                'filter[has]': 'resources',
+                'filter[site]': 'AniList',
+                'filter[external_id]': str(anilist_id),
+                'include': (
+                    'animethemes.song.artists,'
+                    'animethemes.animethemeentries.videos.audio'
+                ),
+            },
+            headers=_ANIME_HEADERS,
+            timeout=_ANIME_TIMEOUT,
+        )
+        response.raise_for_status()
+        payload = response.json()
+    except Exception:
+        return []
+
+    anime_list = payload.get('anime') if isinstance(payload, dict) else None
+    if not isinstance(anime_list, list):
+        return []
+    for anime_node in anime_list:
+        if not isinstance(anime_node, dict):
+            continue
+        raw_themes = anime_node.get('animethemes')
+        if isinstance(raw_themes, list) and raw_themes:
+            shaped = _anime_shape_themes(
+                [t for t in raw_themes if isinstance(t, dict)],
+                anilist_id,
+            )
+            if shaped:
+                return shaped
+    return []
+
+
 def _anime_search_animethemes(name):
     response = _http_get(
         f'{_ANIMETHEMES_ENDPOINT}/anime',
@@ -479,12 +869,35 @@ def _anime_search_animethemes(name):
     if not results:
         return None
     normalized_name = re.sub(r'\W+', '', name).casefold()
+    if not normalized_name:
+        return None
     for result in results:
         if not isinstance(result, dict):
             continue
         candidate = re.sub(r'\W+', '', str(result.get('name') or '')).casefold()
         if candidate == normalized_name:
             return result
+    if len(normalized_name) >= 4:
+        best = None
+        best_diff = None
+        for result in results:
+            if not isinstance(result, dict):
+                continue
+            candidate = re.sub(r'\W+', '', str(result.get('name') or '')).casefold()
+            if not candidate or len(candidate) < 4:
+                continue
+            if (
+                candidate.startswith(normalized_name)
+                or normalized_name.startswith(candidate)
+                or normalized_name in candidate
+                or candidate in normalized_name
+            ):
+                diff = abs(len(candidate) - len(normalized_name))
+                if best_diff is None or diff < best_diff:
+                    best = result
+                    best_diff = diff
+        if best is not None:
+            return best
     return None
 
 
@@ -576,27 +989,91 @@ def _anime_shape_themes(raw_themes, anilist_id):
     return shaped
 
 
-def _anime_get_themes(anilist_id):
-    if not isinstance(anilist_id, int) or anilist_id <= 0:
+def _anime_fetch_themes_by_name(romaji: str, english: str | None, anilist_id: int) -> list[dict]:
+    candidate_names: list[str] = []
+    for name in (english, romaji):
+        if isinstance(name, str) and name.strip() and name.strip() not in candidate_names:
+            candidate_names.append(name.strip())
+    for search_name in candidate_names:
+        anime_node = _anime_search_animethemes(search_name)
+        if anime_node is None:
+            continue
+        anime_slug = anime_node.get('slug')
+        if not isinstance(anime_slug, str) or not anime_slug:
+            continue
+        raw_themes = _anime_fetch_themes(anime_slug)
+        shaped = _anime_shape_themes(raw_themes, anilist_id)
+        if shaped:
+            return shaped
+    return []
+
+
+def _resolve_season_themes(season: dict, include_season_fields: bool) -> list[dict]:
+    sid = season['anilistId']
+    mal_id = season['malId']
+    themes: list[dict] = []
+
+    if mal_id:
+        themes = _anime_fetch_themes_jikan(mal_id, sid)
+
+    if not themes:
+        themes = _anime_fetch_themes_by_anilist_id(sid)
+
+    if not themes:
+        themes = _anime_fetch_themes_by_name(
+            season.get('titleRomaji') or '',
+            season.get('titleEnglish'),
+            sid,
+        )
+
+    if include_season_fields:
+        season_title = season.get('titleEnglish') or season.get('titleRomaji') or ''
+        for theme in themes:
+            theme['seasonNumber'] = season['seasonNumber']
+            theme['seasonTitle'] = season_title
+            theme['malId'] = mal_id
+
+    return themes
+
+
+def _anime_get_themes_with_seasons(anilist_id: int) -> tuple[list[dict], list[dict], bool]:
+    if isinstance(anilist_id, bool) or not isinstance(anilist_id, int) or anilist_id <= 0:
         raise ValueError('anilist_id must be a positive integer')
 
-    meta = _anime_fetch_meta(anilist_id)
-    if meta is None:
-        return []
-    romaji, english, _native = _anime_titles(meta.get('title'))
-    search_name = english or romaji
-    if not search_name:
-        return []
+    root_meta = _anime_fetch_meta(anilist_id)
+    if root_meta is None:
+        return [], [], False
 
-    anime_node = _anime_search_animethemes(search_name)
-    if anime_node is None:
-        return []
-    anime_slug = anime_node.get('slug')
-    if not isinstance(anime_slug, str) or not anime_slug:
-        return []
+    is_rich = _is_rich_anilist_meta(root_meta)
+    seasons = _anime_collect_seasons_from_meta(root_meta, anilist_id)
+    if not seasons:
+        return [], [], is_rich
 
-    raw_themes = _anime_fetch_themes(anime_slug)
-    return _anime_shape_themes(raw_themes, anilist_id)
+    def _safe_resolve(season_item: dict, include_season_fields: bool) -> list[dict]:
+        try:
+            return _resolve_season_themes(season_item, include_season_fields=include_season_fields)
+        except Exception:
+            return []
+
+    if len(seasons) == 1:
+        seasons[0]['themes'] = _safe_resolve(seasons[0], include_season_fields=is_rich)
+    else:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            resolved_lists = list(
+                executor.map(lambda item: _safe_resolve(item, include_season_fields=True), seasons)
+            )
+        for season_item, season_themes in zip(seasons, resolved_lists):
+            season_item['themes'] = season_themes
+
+    flat_themes: list[dict] = []
+    for season_item in seasons:
+        flat_themes.extend(season_item['themes'])
+    return flat_themes, seasons, is_rich
+
+
+def _anime_get_themes(anilist_id):
+    flat_themes, _seasons, _is_rich = _anime_get_themes_with_seasons(anilist_id)
+    return flat_themes
 
 
 
@@ -718,15 +1195,49 @@ class Bridge:
             return {'data': [], 'total': 0, 'error': str(e)}
 
     def deezer_track(self, track_id: str) -> dict:
+        if isinstance(track_id, bool) or not isinstance(track_id, (str, int)):
+            return {'error': 'Invalid track_id'}
+        tid = str(track_id).strip()
+        if not re.fullmatch(r'^\d+$', tid, re.ASCII):
+            return {'error': 'Invalid track_id'}
         try:
-            r = _http_get(f'https://api.deezer.com/track/{track_id}', timeout=10)
+            r = _http_get(f'https://api.deezer.com/track/{tid}', timeout=10, allow_redirects=False)
+            r.raise_for_status()
+            status_code = getattr(r, 'status_code', 200)
+            if isinstance(status_code, int) and status_code >= 300:
+                return {'error': f'Deezer HTTP {status_code}'}
             return r.json()
         except Exception as e:
             return {'error': str(e)}
 
     def deezer_album(self, album_id: str) -> dict:
+        if isinstance(album_id, bool) or not isinstance(album_id, (str, int)):
+            return {'error': 'Invalid album_id'}
+        aid = str(album_id).strip()
+        if not re.fullmatch(r'^\d+$', aid, re.ASCII):
+            return {'error': 'Invalid album_id'}
         try:
-            r = _http_get(f'https://api.deezer.com/album/{album_id}', timeout=10)
+            r = _http_get(f'https://api.deezer.com/album/{aid}', timeout=10, allow_redirects=False)
+            r.raise_for_status()
+            status_code = getattr(r, 'status_code', 200)
+            if isinstance(status_code, int) and status_code >= 300:
+                return {'error': f'Deezer HTTP {status_code}'}
+            return r.json()
+        except Exception as e:
+            return {'error': str(e)}
+
+    def deezer_playlist(self, playlist_id: str) -> dict:
+        if isinstance(playlist_id, bool) or not isinstance(playlist_id, (str, int)):
+            return {'error': 'Invalid playlist_id'}
+        pid = str(playlist_id).strip()
+        if not re.fullmatch(r'^\d+$', pid, re.ASCII):
+            return {'error': 'Invalid playlist_id'}
+        try:
+            r = _http_get(f'https://api.deezer.com/playlist/{pid}', timeout=10, allow_redirects=False)
+            r.raise_for_status()
+            status_code = getattr(r, 'status_code', 200)
+            if isinstance(status_code, int) and status_code >= 300:
+                return {'error': f'Deezer HTTP {status_code}'}
             return r.json()
         except Exception as e:
             return {'error': str(e)}
@@ -897,12 +1408,15 @@ class Bridge:
 
     def anime_get_themes(self, anilist_id: int) -> dict:
         """
-        Devuelve la lista de OP/ED de un anime (anilist_id) usando animethemes.moe.
-        Devuelve {"success": True, "themes": [...]} o {"success": False, "error": str}.
+        Devuelve la lista de OP/ED de un anime (anilist_id) por temporadas usando
+        AniList + Jikan/MAL + animethemes.moe.
+        Devuelve {"success": True, "themes": [...], "seasons": [...]} o {"success": False, "error": str}.
         """
         try:
-            themes = _anime_get_themes(anilist_id=anilist_id)
-            return {'success': True, 'themes': themes}
+            themes, seasons, is_rich = _anime_get_themes_with_seasons(anilist_id=anilist_id)
+            if not is_rich and not themes:
+                return {'success': True, 'themes': []}
+            return {'success': True, 'themes': themes, 'seasons': seasons}
         except ValueError as e:
             return {'success': False, 'error': str(e)}
         except Exception as e:
@@ -1033,6 +1547,139 @@ class Bridge:
         except Exception:
             return
 
+    def get_playlist_items(self, url: str, limit: int = 50) -> dict:
+        """Extrae ítems de una playlist de YouTube / YouTube Music con validación OWASP."""
+        if not isinstance(url, str) or not url.strip():
+            return {'success': False, 'error': 'Invalid playlist URL'}
+
+        parsed = urlparse(url.strip())
+        host = (parsed.hostname or '').rstrip('.').lower()
+        if (
+            parsed.scheme != 'https'
+            or host not in {'www.youtube.com', 'youtube.com', 'm.youtube.com', 'music.youtube.com'}
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.port not in (None, 443)
+        ):
+            return {'success': False, 'error': 'Unsupported YouTube playlist host'}
+
+        query_params = parse_qs(parsed.query, keep_blank_values=False)
+        list_values = query_params.get('list') or []
+        list_id = list_values[0].strip() if list_values else ''
+        if not list_id or not re.fullmatch(r'[a-zA-Z0-9_-]{8,128}', list_id):
+            return {'success': False, 'error': 'Invalid YouTube playlist list parameter'}
+
+        try:
+            if isinstance(limit, bool):
+                clamped_limit = 50
+            else:
+                clamped_limit = min(max(1, int(limit)), 50)
+        except (TypeError, ValueError):
+            clamped_limit = 50
+
+        canonical_url = f'https://www.youtube.com/playlist?list={list_id}'
+        args = [
+            _bin('yt-dlp.exe'),
+            canonical_url,
+            '--flat-playlist',
+            '--dump-json',
+            '--playlist-end', str(clamped_limit),
+            '--socket-timeout', '12',
+            '--retries', '2',
+            '--quiet',
+            '--no-warnings',
+        ]
+        try:
+            r = subprocess.run(
+                args,
+                capture_output=True,
+                text=True,
+                creationflags=CREATE_NO_WINDOW,
+                timeout=25,
+                encoding='utf-8',
+                errors='replace',
+            )
+            if r.returncode != 0:
+                err_text = (r.stderr or '').strip()
+                if _is_outdated_ytdlp_error(err_text) and self._try_reactive_ytdlp_update():
+                    args[0] = _bin('yt-dlp.exe')
+                    r = subprocess.run(
+                        args,
+                        capture_output=True,
+                        text=True,
+                        creationflags=CREATE_NO_WINDOW,
+                        timeout=25,
+                        encoding='utf-8',
+                        errors='replace',
+                    )
+                if r.returncode != 0:
+                    return {'success': False, 'error': (r.stderr or 'yt-dlp playlist fetch failed').strip()}
+
+            playlist_title = ''
+            playlist_count: int | None = None
+            items: list[dict] = []
+            for line in (r.stdout or '').splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    d = json.loads(line)
+                except Exception:
+                    continue
+                if not isinstance(d, dict):
+                    continue
+                if not playlist_title:
+                    raw_pl_title = d.get('playlist_title') or d.get('playlist') or ''
+                    if isinstance(raw_pl_title, str) and raw_pl_title.strip():
+                        playlist_title = raw_pl_title.strip()
+                if playlist_count is None:
+                    raw_count = d.get('playlist_count')
+                    if raw_count is None:
+                        raw_count = d.get('n_entries')
+                    if isinstance(raw_count, int) and not isinstance(raw_count, bool) and raw_count >= 0:
+                        playlist_count = raw_count
+
+                video_id = str(d.get('id') or '').strip()
+                if not video_id:
+                    continue
+                channel = _metadata_text(
+                    d, 'channel', 'uploader', 'artist', 'artists', 'creator',
+                )
+                thumbnail = ''
+                raw_thumb = d.get('thumbnail')
+                if isinstance(raw_thumb, str) and raw_thumb.strip():
+                    thumbnail = raw_thumb.strip()
+                else:
+                    thumbs = d.get('thumbnails')
+                    if isinstance(thumbs, list):
+                        for thumb in reversed(thumbs):
+                            if isinstance(thumb, dict) and isinstance(thumb.get('url'), str) and thumb['url'].strip():
+                                thumbnail = thumb['url'].strip()
+                                break
+                if not thumbnail and re.fullmatch(r'[a-zA-Z0-9_-]{11}', video_id):
+                    thumbnail = f'https://i.ytimg.com/vi/{video_id}/hqdefault.jpg'
+
+                items.append({
+                    'videoId': video_id,
+                    'title': str(d.get('title') or '').strip(),
+                    'channel': channel,
+                    'duration': d.get('duration') or 0,
+                    'thumbnail': thumbnail,
+                })
+                if len(items) >= clamped_limit:
+                    break
+
+            has_more = (
+                playlist_count > len(items)
+                if playlist_count is not None
+                else len(items) >= clamped_limit
+            )
+            return {'success': True, 'title': playlist_title, 'items': items, 'hasMore': has_more}
+        except subprocess.TimeoutExpired:
+            return {'success': False, 'error': 'Playlist fetch timeout'}
+        except Exception as exc:
+            return {'success': False, 'error': str(exc)}
+
     def letras_fetch(self, url: str) -> dict:
         parsed = urlparse(url or '')
         if parsed.scheme != 'https' or parsed.netloc not in {
@@ -1064,14 +1711,48 @@ class Bridge:
             response = _http_get(
                 url,
                 timeout=12,
+                allow_redirects=False,
                 headers={
                     'User-Agent': f'MHLMusic/{APP_VERSION} (https://github.com/ParaSyteTwo/music-mhl)',
                     'Lrclib-Client': f'MHLMusic/{APP_VERSION} (https://github.com/ParaSyteTwo/music-mhl)',
                 },
             )
-            if not response.ok:
-                return {'success': False, 'status': response.status_code, 'error': f'lrclib respondió HTTP {response.status_code}'}
+            status_code = getattr(response, 'status_code', 200)
+            if not response.ok or (isinstance(status_code, int) and status_code >= 300):
+                return {'success': False, 'status': status_code, 'error': f'lrclib respondió HTTP {status_code}'}
             return {'success': True, 'data': response.json()}
+        except Exception as exc:
+            return {'success': False, 'error': str(exc)}
+
+    def spotify_embed_fetch(self, url: str) -> dict:
+        """Descarga HTML de embed oficial de Spotify (album/playlist) sin redirects ciegos."""
+        if not isinstance(url, str):
+            return {'success': False, 'error': 'Invalid Spotify embed URL'}
+        clean_url = url.strip()
+        if not re.fullmatch(
+            r'https://open\.spotify\.com/embed/(album|playlist)/([a-zA-Z0-9]{8,40})',
+            clean_url,
+        ):
+            return {'success': False, 'error': 'URL de Spotify embed inválida'}
+
+        try:
+            response = _http_get(
+                clean_url,
+                timeout=12,
+                allow_redirects=False,
+                headers={
+                    'User-Agent': (
+                        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                        'AppleWebKit/537.36 (KHTML, like Gecko) '
+                        'Chrome/124.0.0.0 Safari/537.36'
+                    ),
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                },
+            )
+            status_code = getattr(response, 'status_code', 200)
+            if not response.ok or (isinstance(status_code, int) and status_code >= 300):
+                return {'success': False, 'error': f'Spotify respondió HTTP {status_code}'}
+            return {'success': True, 'html': response.text}
         except Exception as exc:
             return {'success': False, 'error': str(exc)}
 
@@ -1097,7 +1778,7 @@ class Bridge:
         if not video_id and not source_url:
             return {'success': False, 'error': 'candidate_invalid: resolved videoId required'}
 
-        if video_id and not re.match(r'^[a-zA-Z0-9_-]+$', video_id):
+        if video_id and (not isinstance(video_id, str) or not re.fullmatch(r'[a-zA-Z0-9_-]+', video_id)):
             return {'success': False, 'error': 'candidate_invalid: invalid videoId format'}
 
         is_mp3 = str(audio_format).lower() == 'mp3'

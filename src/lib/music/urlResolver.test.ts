@@ -1,5 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { isDirectMediaUrl, cleanVideoTitle, resolveTrackFromUrl } from './urlResolver';
+import {
+  isDirectMediaUrl,
+  cleanVideoTitle,
+  resolveTrackFromUrl,
+  extractYouTubePlaylistId,
+  extractDeezerCollection,
+  extractSpotifyCollection,
+  isSupportedCollectionUrl,
+  isUnsupportedCollectionUrl,
+} from './urlResolver';
 
 vi.mock('@/lib/api/musicApi', () => ({
   searchDeezer: vi.fn(),
@@ -181,6 +190,100 @@ describe('urlResolver', () => {
       expect(track).not.toBeNull();
       expect(track?.title).toBe('Stay');
       expect(track?.artist).toBe('The Kid LAROI');
+    });
+
+    it('returns null for supported collection URLs so collectionResolver handles them', async () => {
+      expect(await resolveTrackFromUrl('https://www.deezer.com/album/302127')).toBeNull();
+      expect(await resolveTrackFromUrl('https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M')).toBeNull();
+      expect(await resolveTrackFromUrl('https://www.youtube.com/playlist?list=PLMC9KNkIncKtPzgY-5rmhvj7fax8fdxoj')).toBeNull();
+    });
+
+    it('returns null for Apple Music album URLs without track parameter ?i=', async () => {
+      const fetchSpy = vi.fn();
+      global.fetch = fetchSpy;
+      expect(await resolveTrackFromUrl('https://music.apple.com/us/album/discovery/697194953')).toBeNull();
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it('returns null for unresolved deezer.page.link short URLs instead of Audio Directo fallback', async () => {
+      global.fetch = vi.fn().mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+      });
+
+      const track = await resolveTrackFromUrl('https://deezer.page.link/abcXYZ123');
+      expect(track).toBeNull();
+    });
+  });
+
+  describe('collection URL extractors & classification', () => {
+    it('extracts valid YouTube and YouTube Music playlist IDs and rejects watch URLs or unsafe IDs', () => {
+      expect(extractYouTubePlaylistId('https://www.youtube.com/playlist?list=PLMC9KNkIncKtPzgY-5rmhvj7fax8fdxoj')).toBe('PLMC9KNkIncKtPzgY-5rmhvj7fax8fdxoj');
+      expect(extractYouTubePlaylistId('https://music.youtube.com/playlist?list=OLAK5uy_n0xyz123456')).toBe('OLAK5uy_n0xyz123456');
+      expect(extractYouTubePlaylistId('https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PLMC9KNkIncKtPzgY-5rmhvj7fax8fdxoj')).toBeNull();
+      expect(extractYouTubePlaylistId('https://www.youtube.com/playlist?list=short')).toBeNull();
+      expect(extractYouTubePlaylistId('https://www.youtube.com/playlist?list=--exec=calc123')).toBeNull();
+      expect(extractYouTubePlaylistId('https://evil.com/playlist?list=PLMC9KNkIncKtPzgY-5rmhvj7fax8fdxoj')).toBeNull();
+    });
+
+    it('extracts Deezer album and playlist collections with optional locale prefix', () => {
+      expect(extractDeezerCollection('https://www.deezer.com/album/302127')).toEqual({ type: 'album', id: '302127' });
+      expect(extractDeezerCollection('https://www.deezer.com/es/playlist/908622995?utm=share')).toEqual({ type: 'playlist', id: '908622995' });
+      expect(extractDeezerCollection('https://www.deezer.com/artist/27')).toBeNull();
+      expect(extractDeezerCollection('https://www.deezer.com/track/3135556')).toBeNull();
+    });
+
+    it('extracts Spotify album and playlist collections including intl and embed prefixes', () => {
+      expect(extractSpotifyCollection('https://open.spotify.com/album/4aawyAB9vmqN3uQ7FjRGTy')).toEqual({
+        type: 'album',
+        id: '4aawyAB9vmqN3uQ7FjRGTy',
+      });
+      expect(extractSpotifyCollection('https://open.spotify.com/intl-es/playlist/37i9dQZF1DXcBWIGoYBM5M?si=abc')).toEqual({
+        type: 'playlist',
+        id: '37i9dQZF1DXcBWIGoYBM5M',
+      });
+      expect(extractSpotifyCollection('https://open.spotify.com/embed/album/4aawyAB9vmqN3uQ7FjRGTy')).toEqual({
+        type: 'album',
+        id: '4aawyAB9vmqN3uQ7FjRGTy',
+      });
+      expect(extractSpotifyCollection('https://open.spotify.com/artist/0OdUWJ0sBjDrqHygGUXeCF')).toBeNull();
+      expect(extractSpotifyCollection('https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT')).toBeNull();
+    });
+
+    it('classifies supported vs unsupported collection URLs accurately', () => {
+      // Supported collections -> isSupportedCollectionUrl = true, isUnsupportedCollectionUrl = false
+      const supported = [
+        'https://www.deezer.com/album/302127',
+        'https://www.deezer.com/es/playlist/908622995',
+        'https://open.spotify.com/album/4aawyAB9vmqN3uQ7FjRGTy',
+        'https://open.spotify.com/intl-es/playlist/37i9dQZF1DXcBWIGoYBM5M',
+        'https://www.youtube.com/playlist?list=PLMC9KNkIncKtPzgY-5rmhvj7fax8fdxoj',
+        'https://music.youtube.com/playlist?list=OLAK5uy_n0xyz123456',
+      ];
+      for (const url of supported) {
+        expect(isSupportedCollectionUrl(url)).toBe(true);
+        expect(isUnsupportedCollectionUrl(url)).toBe(false);
+      }
+
+      // Unsupported collections / profiles -> isSupportedCollectionUrl = false, isUnsupportedCollectionUrl = true
+      const unsupported = [
+        'https://open.spotify.com/artist/0OdUWJ0sBjDrqHygGUXeCF',
+        'https://open.spotify.com/user/someone123',
+        'https://www.deezer.com/artist/27',
+        'https://tidal.com/browse/album/123456',
+        'https://tidal.com/playlist/abc-123',
+        'https://music.apple.com/us/playlist/todays-hits/pl.f4d106fed2bd41149aaacabb233eb5eb',
+        'https://music.apple.com/us/album/discovery/697194953',
+        'https://music.apple.com/album/discovery/697194953',
+        'https://soundcloud.com/someartist/sets/my-playlist',
+      ];
+      for (const url of unsupported) {
+        expect(isSupportedCollectionUrl(url)).toBe(false);
+        expect(isUnsupportedCollectionUrl(url)).toBe(true);
+      }
+
+      // Apple Music album URL with ?i= points to a single song, NOT an unsupported collection
+      expect(isUnsupportedCollectionUrl('https://music.apple.com/us/album/stay/1574984448?i=1574984450')).toBe(false);
     });
   });
 });

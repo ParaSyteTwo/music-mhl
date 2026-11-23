@@ -16,6 +16,19 @@ export interface YtDlpSearchResult {
   sourceAbr?: number;
 }
 
+export interface YtDlpPlaylistItem {
+  videoId: string;
+  title: string;
+  channel: string;
+  duration: number;
+  thumbnail?: string;
+}
+
+export interface YtDlpPlaylistResult {
+  title: string;
+  items: YtDlpPlaylistItem[];
+}
+
 export interface YtDlpProgressEvent {
   progress: number;  // 0-100
   eta: number;       // segundos restantes
@@ -47,6 +60,7 @@ interface YtDlpPluginInterface {
   update(): Promise<{ success: boolean; status: string }>;
   getVersion(): Promise<{ success: boolean; version: string }>;
   search(options: { query: string; limit?: number; source?: 'youtube_music' | 'youtube'; enrich?: boolean }): Promise<{ success: boolean; results: YtDlpSearchResult[] }>;
+  getPlaylistItems(options: { url: string; limit?: number }): Promise<{ success: boolean; title?: string; items: YtDlpPlaylistItem[] }>;
   downloadAudio(options: { videoId?: string; sourceUrl?: string; expectedDuration?: number; format?: 'm4a' | 'mp3'; skipBase64?: boolean; downloadId?: string }): Promise<{ success: boolean; data?: string; tempPath?: string; size: number; fileName?: string }>;
   cleanupTempAudio(options: { tempPath: string }): Promise<{ success: boolean }>;
   saveTaggedAudioToMusic(options: { fileName: string; data: string }): Promise<{ success: boolean; uri: string }>;
@@ -93,6 +107,39 @@ export async function searchYouTubeNative(
     console.error('[ytdlpBridge.searchYouTubeNative] Error:', err);
     throw err;
   }
+}
+
+export async function getPlaylistItemsNative(
+  url: string,
+  limit = 50,
+): Promise<YtDlpPlaylistResult> {
+  if (!Capacitor.isNativePlatform()) {
+    throw new Error('Not on native platform');
+  }
+  if (!initialized) await initYtDlp();
+  const normalizedLimit = Number.isFinite(limit)
+    ? Math.max(1, Math.min(Math.trunc(limit), 50))
+    : 50;
+  const operation = YtDlp.getPlaylistItems({ url, limit: normalizedLimit });
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const result = await Promise.race([
+    operation,
+    new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(
+        () => reject(new Error('Playlist fetch timeout')),
+        30_000,
+      );
+    }),
+  ]).finally(() => {
+    if (timeoutId) clearTimeout(timeoutId);
+  });
+  if (!result || !result.success) {
+    throw new Error('Failed to fetch YouTube playlist items');
+  }
+  return {
+    title: result.title || '',
+    items: Array.isArray(result.items) ? result.items : [],
+  };
 }
 
 export async function downloadMp3Native(

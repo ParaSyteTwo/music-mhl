@@ -47,6 +47,7 @@ export interface DownloadSlice {
   startDownload: (track: Track) => void;
   startDownloadWithVideoId: (track: Track, videoId: string) => void;
   startDownloadWithSourceUrl: (track: Track, sourceUrl: string) => void;
+  startBatchDownload: (tracks: Track[]) => { queued: number; skipped: number; truncated: boolean };
   removeDownload: (id: string) => void;
   processDownloadQueue: () => Promise<void>;
   _executeDownload: (

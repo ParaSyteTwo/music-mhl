@@ -12,6 +12,7 @@ export interface Track {
   cover: string;
   preview?: string;
   deezerId?: number;
+  albumId?: number;
   youtubeId?: string;
   sourceUrl?: string;
   isrc?: string;
@@ -32,4 +33,16 @@ export interface Download {
   speed?: string;    // e.g. "1.2 MB/s" — solo durante descarga nativa
   eta?: number;      // segundos restantes — solo durante descarga nativa
   mediaUri?: string; // content:// URI de MediaStore para abrir en reproductores externos
+}
+
+export interface ResolvedCollection {
+  id: string;
+  type: 'album' | 'playlist';
+  source: 'deezer' | 'youtube' | 'spotify';
+  title: string;
+  subtitle: string;
+  cover: string;
+  tracks: Track[];
+  totalTracks: number;
+  truncated?: boolean;
 }

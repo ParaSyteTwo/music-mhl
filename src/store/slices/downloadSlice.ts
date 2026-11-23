@@ -26,10 +26,54 @@ import { resolveSystemLanguage } from '@/lib/language';
 let isProcessingDownloadQueue = false;
 let rateLimitCooldownUntil = 0;
 let retryDelayMs = 2000;
+let cooldownResumeTimer: ReturnType<typeof setTimeout> | null = null;
+
+function clearCooldownResumeTimer(): void {
+  if (cooldownResumeTimer !== null) {
+    clearTimeout(cooldownResumeTimer);
+    cooldownResumeTimer = null;
+  }
+}
+
+function scheduleCooldownResume(resumeFn: () => void): void {
+  const remaining = rateLimitCooldownUntil - Date.now();
+  if (remaining <= 0) return;
+  clearCooldownResumeTimer();
+  const delay = Math.max(50, remaining + 50);
+  cooldownResumeTimer = setTimeout(() => {
+    cooldownResumeTimer = null;
+    if (Date.now() < rateLimitCooldownUntil) {
+      scheduleCooldownResume(resumeFn);
+      return;
+    }
+    resumeFn();
+  }, delay);
+}
+
+function sanitizeSourceUrl(url?: string): string | undefined {
+  if (!url || typeof url !== 'string') return undefined;
+  const trimmed = url.trim();
+  try {
+    const parsed = new URL(trimmed);
+    if (
+      parsed.protocol === 'https:'
+      && parsed.hostname.toLowerCase() === 'a.animethemes.moe'
+      && parsed.pathname.length > 1
+      && !parsed.username
+      && !parsed.password
+    ) {
+      return trimmed;
+    }
+  } catch {
+    // invalid URL
+  }
+  return undefined;
+}
 
 export const __downloadSliceTesting = {
   resetRateLimitCooldown: () => {
     rateLimitCooldownUntil = 0;
+    clearCooldownResumeTimer();
   },
   setRateLimitCooldownUntil: (timestamp: number) => {
     rateLimitCooldownUntil = timestamp;
@@ -39,7 +83,10 @@ export const __downloadSliceTesting = {
   },
 };
 
+export const MAX_BATCH_DOWNLOAD_SIZE = 50;
+
 function pickDownloadCandidate(candidates: DownloadCandidate[]): DownloadCandidate | undefined {
+  if (!Array.isArray(candidates)) return undefined;
   return (
     candidates.find((c) => canDownloadWithOneTap(c)) ||
     candidates.find((c) => c.verification !== 'rejected')
@@ -106,11 +153,23 @@ export const createDownloadSlice: StateCreator<
                 ? { ...download, status: 'error', error: storeText(get().uiLanguageMode, 'rateLimitCooldown', { seconds }) }
                 : download),
             }));
+            if (get().downloadQueue.length > 0) {
+              scheduleCooldownResume(() => {
+                void get().processDownloadQueue();
+              });
+            }
             return;
           }
 
+          const updateDl = (patch: Partial<Download>) =>
+            set((s) => ({
+              downloads: s.downloads.map((d) => (d.id === id ? { ...d, ...patch } : d)),
+            }));
+
+          updateDl({ status: 'downloading', progress: 5 });
+
           let resolvedVideoId = videoIdOverride;
-          const cleanSourceUrl = sourceUrlOverride && !sourceUrlOverride.includes('spotify.com') ? sourceUrlOverride : undefined;
+          const cleanSourceUrl = sanitizeSourceUrl(sourceUrlOverride);
           const preferredTitle = track.canonicalTitle?.trim() || track.title;
 
           // Si no hay videoId ni sourceUrl válido, resolver dinámicamente el mejor candidato de YouTube Music
@@ -123,18 +182,12 @@ export const createDownloadSlice: StateCreator<
               const best = pickDownloadCandidate(candidates);
               if (best) {
                 resolvedVideoId = best.videoId;
+                updateDl({ videoIdOverride: resolvedVideoId });
               }
             } catch {
               // fallback
             }
           }
-
-          const updateDl = (patch: Partial<Download>) =>
-            set((s) => ({
-              downloads: s.downloads.map((d) => (d.id === id ? { ...d, ...patch } : d)),
-            }));
-
-          updateDl({ status: 'downloading', progress: 5 });
 
           if (track.isLongAudio || (track.duration && track.duration > 1200)) {
             toast.warning(storeText(get().uiLanguageMode, 'longAudioWarning'), { duration: 6000 });
@@ -232,6 +285,7 @@ export const createDownloadSlice: StateCreator<
                       const best = pickDownloadCandidate(candidates);
                       if (best) {
                         resolvedVideoId = best.videoId;
+                        updateDl({ videoIdOverride: resolvedVideoId });
                       }
                     } catch {
                       // fallback
@@ -343,6 +397,7 @@ export const createDownloadSlice: StateCreator<
                         const best = pickDownloadCandidate(candidates);
                         if (best) {
                           resolvedVideoId = best.videoId;
+                          updateDl({ videoIdOverride: resolvedVideoId });
                         }
                       } catch {
                         // fallback
@@ -474,17 +529,18 @@ export const createDownloadSlice: StateCreator<
                 const alternatives = await getDownloadCandidates(track, get().animeSearchEnabled, {
                   depth: 'deep', editionPreference: get().editionPreference,
                 }).catch(() => []);
-                const alternative =
-                  alternatives.find((candidate) =>
-                    candidate.videoId !== resolvedVideoId && canDownloadWithOneTap(candidate)) ||
-                  alternatives.find((candidate) =>
-                    candidate.videoId !== resolvedVideoId && candidate.verification !== 'rejected');
+                const alternative = pickDownloadCandidate(
+                  Array.isArray(alternatives)
+                    ? alternatives.filter((candidate) => candidate.videoId !== resolvedVideoId)
+                    : [],
+                );
                 if (!alternative) {
                   updateDl({ status: 'error', error: msg });
                   toast.error(storeText(get().uiLanguageMode, 'downloadError', { error: msg }), { duration: 5000 });
                   return;
                 }
                 resolvedVideoId = alternative.videoId;
+                updateDl({ videoIdOverride: resolvedVideoId });
               }
 
               console.error(`Download attempt ${attempt}/${maxAttempts} failed:`, msg);
@@ -517,6 +573,10 @@ export const createDownloadSlice: StateCreator<
             set((s) => ({ activeDownloads: Math.max(0, s.activeDownloads - 1) }));
             if (Date.now() >= rateLimitCooldownUntil) {
               void get().processDownloadQueue();
+            } else if (get().downloadQueue.length > 0) {
+              scheduleCooldownResume(() => {
+                void get().processDownloadQueue();
+              });
             }
           }
         },
@@ -528,12 +588,13 @@ export const createDownloadSlice: StateCreator<
           );
           if (isAlreadyActive) return;
 
-          if (track.sourceUrl) {
-            get().startDownloadWithSourceUrl(track, track.sourceUrl);
-            return;
-          }
           if (track.youtubeId) {
             get().startDownloadWithVideoId(track, track.youtubeId);
+            return;
+          }
+          const safeSourceUrl = sanitizeSourceUrl(track.sourceUrl);
+          if (safeSourceUrl) {
+            get().startDownloadWithSourceUrl(track, safeSourceUrl);
             return;
           }
 
@@ -556,7 +617,7 @@ export const createDownloadSlice: StateCreator<
               {
                 id,
                 track,
-                sourceUrlOverride: sourceUrl,
+                sourceUrlOverride: sanitizeSourceUrl(sourceUrl),
                 progress: 0,
                 status: 'queued' as const,
               },
@@ -587,6 +648,51 @@ export const createDownloadSlice: StateCreator<
             downloadQueue: [...s.downloadQueue, id],
           }));
           void get().processDownloadQueue();
+        },
+
+        startBatchDownload: (tracks) => {
+          const activeTrackIds = new Set(
+            get()
+              .downloads
+              .filter((d) => d.status === 'downloading' || d.status === 'queued')
+              .map((d) => d.track.id),
+          );
+          const seenBatchIds = new Set<string>();
+          const uniqueValid: Track[] = [];
+          let skipped = 0;
+
+          for (const track of tracks) {
+            if (!track?.id || activeTrackIds.has(track.id) || seenBatchIds.has(track.id)) {
+              skipped += 1;
+              continue;
+            }
+            seenBatchIds.add(track.id);
+            uniqueValid.push(track);
+          }
+
+          const truncated = uniqueValid.length > MAX_BATCH_DOWNLOAD_SIZE;
+          const toEnqueue = truncated ? uniqueValid.slice(0, MAX_BATCH_DOWNLOAD_SIZE) : uniqueValid;
+
+          if (toEnqueue.length === 0) {
+            return { queued: 0, skipped, truncated: false };
+          }
+
+          const newDownloads: Download[] = toEnqueue.map((track) => ({
+            id: crypto.randomUUID(),
+            track,
+            videoIdOverride: track.youtubeId || undefined,
+            sourceUrlOverride: sanitizeSourceUrl(track.sourceUrl),
+            progress: 0,
+            status: 'queued' as const,
+          }));
+
+          set((s) => ({
+            downloads: [...s.downloads, ...newDownloads],
+            downloadQueue: [...s.downloadQueue, ...newDownloads.map((d) => d.id)],
+          }));
+          void get().processDownloadQueue();
+
+          return { queued: toEnqueue.length, skipped, truncated };
         },
 
         removeDownload: (id) =>

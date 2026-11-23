@@ -69,6 +69,7 @@ public class YtDlpPlugin extends Plugin {
     private final ExecutorService executor = Executors.newFixedThreadPool(4);
     private final ExecutorService searchExecutor = Executors.newFixedThreadPool(3);
     private final ExecutorService enrichExecutor = Executors.newFixedThreadPool(2);
+    private final ExecutorService playlistExecutor = Executors.newFixedThreadPool(2);
     private final Map<String, byte[]> coverCache = new LinkedHashMap<String, byte[]>(16, 0.75f, true);
     private long coverCacheTotalBytes = 0L;
 
@@ -80,6 +81,8 @@ public class YtDlpPlugin extends Plugin {
         "(bot|403|forbidden|extractor|n-sig|cipher|signature|unable to extract)",
         Pattern.CASE_INSENSITIVE
     );
+    private static final Pattern PLAYLIST_ID_PATTERN = Pattern.compile("\\A[a-zA-Z0-9_-]{8,128}\\z");
+    private static final Pattern VIDEO_ID_PATTERN = Pattern.compile("\\A[a-zA-Z0-9_-]+\\z");
 
     private static boolean isOutdatedYtDlpError(String errorMsg) {
         if (errorMsg == null || errorMsg.isEmpty()) return false;
@@ -615,6 +618,174 @@ public class YtDlpPlugin extends Plugin {
         return results;
     }
 
+    private static String extractValidatedPlaylistId(String rawUrl) {
+        if (rawUrl == null) return null;
+        String trimmed = rawUrl.trim();
+        if (trimmed.isEmpty() || trimmed.indexOf('\\') >= 0) return null;
+        try {
+            Uri uri = Uri.parse(trimmed);
+            if (uri == null) return null;
+            if (!"https".equalsIgnoreCase(uri.getScheme())) return null;
+            if (uri.getUserInfo() != null) return null;
+            int port = uri.getPort();
+            if (port != -1 && port != 443) return null;
+            String host = uri.getHost();
+            if (host == null || host.isEmpty()) return null;
+            String authority = uri.getAuthority();
+            if (authority == null
+                    || (!authority.equalsIgnoreCase(host) && !authority.equalsIgnoreCase(host + ":443"))) {
+                return null;
+            }
+            String lowerHost = host.toLowerCase(Locale.ROOT);
+            boolean allowedHost = "youtube.com".equals(lowerHost)
+                || "www.youtube.com".equals(lowerHost)
+                || "m.youtube.com".equals(lowerHost)
+                || "music.youtube.com".equals(lowerHost);
+            if (!allowedHost) return null;
+            String listId = uri.getQueryParameter("list");
+            if (listId == null || !PLAYLIST_ID_PATTERN.matcher(listId).matches()) {
+                return null;
+            }
+            return listId;
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private static String extractBestThumbnail(JSONObject json) {
+        if (json == null) return "";
+        JSONArray thumbnails = json.optJSONArray("thumbnails");
+        String bestUrl = "";
+        long bestScore = -1L;
+        if (thumbnails != null) {
+            for (int i = 0; i < thumbnails.length(); i++) {
+                JSONObject thumb = thumbnails.optJSONObject(i);
+                if (thumb == null || thumb.isNull("url")) continue;
+                String url = thumb.optString("url", "").trim();
+                if (url.isEmpty()) continue;
+                long width = thumb.optLong("width", 0L);
+                long height = thumb.optLong("height", 0L);
+                long score = (width > 0 && height > 0) ? (width * height) : i;
+                if (score >= bestScore) {
+                    bestScore = score;
+                    bestUrl = url;
+                }
+            }
+        }
+        if (!bestUrl.isEmpty()) {
+            return bestUrl;
+        }
+        if (!json.isNull("thumbnail")) {
+            String direct = json.optString("thumbnail", "").trim();
+            if (!direct.isEmpty()) {
+                return direct;
+            }
+        }
+        return "";
+    }
+
+    @PluginMethod
+    public void getPlaylistItems(PluginCall call) {
+        String url = call.getString("url");
+        Integer requestedLimit = call.getInt("limit");
+        int limit = requestedLimit != null ? Math.max(1, Math.min(requestedLimit, 50)) : 50;
+
+        String listId = extractValidatedPlaylistId(url);
+        if (listId == null) {
+            call.reject("Invalid YouTube playlist URL");
+            return;
+        }
+        String canonicalUrl = "https://www.youtube.com/playlist?list=" + listId;
+
+        playlistExecutor.execute(() -> {
+            try {
+                ensureInitialized();
+
+                YoutubeDLRequest request = new YoutubeDLRequest(canonicalUrl);
+                request.addOption("--dump-json");
+                request.addOption("--flat-playlist");
+                request.addOption("--playlist-end", String.valueOf(limit));
+                request.addOption("--no-download");
+                request.addOption("--socket-timeout", "12");
+                request.addOption("--retries", "2");
+
+                Log.i(TAG, "Fetching playlist items: list=" + listId + " limit=" + limit);
+                YoutubeDLResponse response;
+                try {
+                    response = YoutubeDL.getInstance().execute(request);
+                } catch (Exception e) {
+                    if (isOutdatedYtDlpError(e.getMessage()) && tryReactiveAutoUpdate()) {
+                        response = YoutubeDL.getInstance().execute(request);
+                    } else {
+                        throw e;
+                    }
+                }
+
+                String output = response.getOut();
+                String errOutput = response.getErr();
+                Log.i(TAG, "Playlist stdout length: " + (output != null ? output.length() : 0));
+                if (errOutput != null && !errOutput.isEmpty()) {
+                    Log.w(TAG, "Playlist stderr: " + errOutput.substring(0, Math.min(500, errOutput.length())));
+                }
+
+                String playlistTitle = "";
+                JSArray items = new JSArray();
+                if (output != null && !output.isEmpty()) {
+                    String[] lines = output.split("\n");
+                    for (String line : lines) {
+                        if (items.length() >= limit) break;
+                        line = line.trim();
+                        if (line.isEmpty() || !line.startsWith("{")) continue;
+                        try {
+                            JSONObject json = new JSONObject(line);
+                            if (playlistTitle.isEmpty()) {
+                                String detectedTitle = metadataText(json, "playlist_title", "playlist");
+                                if (!detectedTitle.isEmpty()) {
+                                    playlistTitle = detectedTitle;
+                                }
+                            }
+                            String videoId = json.isNull("id") ? "" : json.optString("id", "").trim();
+                            if (videoId.isEmpty() && !json.isNull("url")) {
+                                videoId = json.optString("url", "").trim();
+                            }
+                            if (videoId.isEmpty()) continue;
+
+                            String title = json.isNull("title") ? "" : json.optString("title", "").trim();
+                            String channel = metadataText(
+                                json, "channel", "uploader", "artist", "artists", "creator"
+                            );
+                            double duration = json.optDouble("duration", 0);
+                            if (Double.isNaN(duration) || Double.isInfinite(duration) || duration < 0) {
+                                duration = 0;
+                            }
+                            String thumbnail = extractBestThumbnail(json);
+
+                            JSObject item = new JSObject();
+                            item.put("videoId", videoId);
+                            item.put("title", title);
+                            item.put("channel", channel);
+                            item.put("duration", duration);
+                            item.put("thumbnail", thumbnail);
+                            items.put(item);
+                        } catch (Exception e) {
+                            Log.w(TAG, "Parse playlist line error: " + e.getMessage());
+                        }
+                    }
+                }
+
+                Log.i(TAG, "Playlist found " + items.length() + " items");
+                JSObject result = new JSObject();
+                result.put("success", true);
+                result.put("title", playlistTitle);
+                result.put("items", items);
+                bridge.getActivity().runOnUiThread(() -> call.resolve(result));
+            } catch (Exception e) {
+                Log.e(TAG, "getPlaylistItems failed: " + e.getMessage(), e);
+                bridge.getActivity().runOnUiThread(() -> call.reject("Playlist fetch failed: " + e.getMessage()));
+            }
+        });
+    }
+
     private String metadataText(JSONObject json, String... keys) {
         for (String key : keys) {
             Object value = json.opt(key);
@@ -645,7 +816,7 @@ public class YtDlpPlugin extends Plugin {
     private void enrichCandidate(JSONObject item) {
         try {
             String videoId = item.getString("videoId");
-            if (videoId == null || videoId.isEmpty()) return;
+            if (videoId == null || videoId.isEmpty() || !VIDEO_ID_PATTERN.matcher(videoId).matches()) return;
             YoutubeDLRequest detailRequest = new YoutubeDLRequest("https://www.youtube.com/watch?v=" + videoId);
             detailRequest.addOption("--dump-single-json");
             detailRequest.addOption("--skip-download");
@@ -693,7 +864,7 @@ public class YtDlpPlugin extends Plugin {
             call.reject("Missing videoId or sourceUrl parameter");
             return;
         }
-        if (videoId != null && !videoId.isEmpty() && !videoId.matches("^[a-zA-Z0-9_-]+$")) {
+        if (videoId != null && !videoId.isEmpty() && !VIDEO_ID_PATTERN.matcher(videoId).matches()) {
             call.reject("Invalid videoId format");
             return;
         }

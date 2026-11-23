@@ -1178,6 +1178,456 @@ describe('useMusicStore', () => {
         '/data/user/0/com.mhl.music/cache/ytdlp/async-err/audio.m4a',
       );
     });
+
+    it('enqueues a batch of 6 tracks respecting <=2 pool limit outside PyWebView and <=3 inside PyWebView and drains all 6', async () => {
+      vi.mocked(getDeezerTrackMeta).mockResolvedValue({
+        albumArtist: 'Artist',
+        composer: null,
+        genre: 'Pop',
+        year: 2025,
+        trackNumber: 1,
+        trackTotal: 6,
+        discNumber: 1,
+        discTotal: 1,
+      });
+      vi.mocked(getLyrics).mockResolvedValue({ synced: null, plain: null });
+      vi.mocked(tagAndSaveM4A).mockResolvedValue('content://media/external/audio/batch');
+
+      // 1) Outside PyWebView (Android native): pool limit <= 2
+      vi.mocked(Capacitor.isNativePlatform).mockReturnValue(true);
+      const androidResolvers: Array<() => void> = [];
+      let androidPeakActive = 0;
+      vi.mocked(downloadAudioToTempNative).mockImplementation(
+        async (videoId) =>
+          await new Promise((resolve) => {
+            androidPeakActive = Math.max(androidPeakActive, useMusicStore.getState().activeDownloads);
+            androidResolvers.push(() =>
+              resolve({ tempPath: `/cache/ytdlp/${videoId}/audio.m4a`, size: 32768 }),
+            );
+          }),
+      );
+
+      const androidBatch = Array.from({ length: 6 }, (_, idx) => ({
+        id: `batch-android-${idx + 1}`,
+        title: `Android Batch ${idx + 1}`,
+        artist: 'Batch Artist',
+        album: 'Batch Album',
+        duration: 180,
+        cover: '',
+        youtubeId: `avid_${idx + 1}`,
+      }));
+
+      const androidResult = useMusicStore.getState().startBatchDownload(androidBatch);
+      expect(androidResult).toEqual({ queued: 6, skipped: 0, truncated: false });
+
+      await vi.waitFor(() => {
+        expect(androidResolvers).toHaveLength(2);
+      });
+      expect(useMusicStore.getState().activeDownloads).toBe(2);
+      expect(useMusicStore.getState().downloadQueue).toHaveLength(4);
+      expect(androidPeakActive).toBe(2);
+
+      // Drain 2 at a time
+      androidResolvers[0]();
+      androidResolvers[1]();
+      await vi.waitFor(() => {
+        expect(androidResolvers).toHaveLength(4);
+      });
+      expect(androidPeakActive).toBe(2);
+
+      androidResolvers[2]();
+      androidResolvers[3]();
+      await vi.waitFor(() => {
+        expect(androidResolvers).toHaveLength(6);
+      });
+      expect(androidPeakActive).toBe(2);
+
+      androidResolvers[4]();
+      androidResolvers[5]();
+      await vi.waitFor(() => {
+        const state = useMusicStore.getState();
+        expect(state.activeDownloads).toBe(0);
+        expect(state.downloadQueue).toHaveLength(0);
+        expect(state.downloads).toHaveLength(6);
+        expect(state.downloads.every((d) => d.status === 'completed')).toBe(true);
+      });
+      expect(androidPeakActive).toBe(2);
+
+      // 2) Inside PyWebView (Desktop): pool limit <= 3
+      useMusicStore.setState({ downloads: [], downloadQueue: [], activeDownloads: 0 });
+      vi.mocked(Capacitor.isNativePlatform).mockReturnValue(false);
+
+      const desktopResolvers: Array<() => void> = [];
+      let desktopPeakActive = 0;
+      const pyApi = {
+        get_settings: vi.fn().mockResolvedValue({ download_folder: 'C:/Music/MHL' }),
+        get_raw_audio: vi.fn().mockImplementation(
+          async (videoId: string) =>
+            await new Promise((resolve) => {
+              desktopPeakActive = Math.max(desktopPeakActive, useMusicStore.getState().activeDownloads);
+              desktopResolvers.push(() =>
+                resolve({
+                  success: true,
+                  temp_path: `C:/Temp/mhl_audio_cache/${videoId}/audio.m4a`,
+                  ext: 'm4a',
+                  size: 32768,
+                }),
+              );
+            }),
+        ),
+        tag_and_save_m4a: vi.fn().mockResolvedValue({ success: true, size: 32768 }),
+        cleanup_temp_audio: vi.fn().mockResolvedValue({ success: true }),
+      };
+      (window as unknown as { pywebview: { api: typeof pyApi } }).pywebview = { api: pyApi };
+
+      const desktopBatch = Array.from({ length: 6 }, (_, idx) => ({
+        id: `batch-desktop-${idx + 1}`,
+        title: `Desktop Batch ${idx + 1}`,
+        artist: 'Batch Artist',
+        album: 'Batch Album',
+        duration: 180,
+        cover: '',
+        youtubeId: `dvid_${idx + 1}`,
+      }));
+
+      const desktopResult = useMusicStore.getState().startBatchDownload(desktopBatch);
+      expect(desktopResult).toEqual({ queued: 6, skipped: 0, truncated: false });
+
+      await vi.waitFor(() => {
+        expect(desktopResolvers).toHaveLength(3);
+      });
+      expect(useMusicStore.getState().activeDownloads).toBe(3);
+      expect(useMusicStore.getState().downloadQueue).toHaveLength(3);
+      expect(desktopPeakActive).toBe(3);
+
+      desktopResolvers[0]();
+      desktopResolvers[1]();
+      desktopResolvers[2]();
+      await vi.waitFor(() => {
+        expect(desktopResolvers).toHaveLength(6);
+      });
+      expect(desktopPeakActive).toBe(3);
+
+      desktopResolvers[3]();
+      desktopResolvers[4]();
+      desktopResolvers[5]();
+      await vi.waitFor(() => {
+        const state = useMusicStore.getState();
+        expect(state.activeDownloads).toBe(0);
+        expect(state.downloadQueue).toHaveLength(0);
+        expect(state.downloads).toHaveLength(6);
+        expect(state.downloads.every((d) => d.status === 'completed')).toBe(true);
+      });
+      expect(desktopPeakActive).toBe(3);
+    });
+
+    it('deduplicates active downloads and intra-batch duplicates in startBatchDownload', () => {
+      const mkTrack = (id: string) => ({
+        id,
+        title: `Track ${id}`,
+        artist: 'Artist',
+        album: 'Album',
+        duration: 180,
+        cover: '',
+      });
+
+      const activeTrack = mkTrack('t-active');
+      const queuedTrack = mkTrack('t-queued');
+      const completedTrack = mkTrack('t-completed');
+      const fresh1 = mkTrack('t-fresh-1');
+      const fresh2 = mkTrack('t-fresh-2');
+
+      // Block queue execution by filling active slots
+      useMusicStore.setState({
+        activeDownloads: 2,
+        downloads: [
+          { id: 'dl-active', track: activeTrack, progress: 50, status: 'downloading' },
+          { id: 'dl-queued', track: queuedTrack, progress: 0, status: 'queued' },
+          { id: 'dl-completed', track: completedTrack, progress: 100, status: 'completed' },
+        ],
+        downloadQueue: ['dl-queued'],
+      });
+
+      const res = useMusicStore.getState().startBatchDownload([
+        activeTrack,      // skipped (downloading)
+        queuedTrack,      // skipped (queued)
+        completedTrack,   // allowed (completed is not active)
+        fresh1,           // queued
+        fresh1,           // skipped (intra-batch duplicate)
+        fresh2,           // queued
+      ]);
+
+      expect(res).toEqual({ queued: 3, skipped: 3, truncated: false });
+      expect(useMusicStore.getState().downloads).toHaveLength(6);
+      expect(useMusicStore.getState().downloadQueue).toHaveLength(4);
+    });
+
+    it('truncates batches larger than 50 tracks to 50 with truncated=true', () => {
+      // Block queue execution so items remain inspectable in queued state
+      useMusicStore.setState({ activeDownloads: 2, downloads: [], downloadQueue: [] });
+
+      const tracks = Array.from({ length: 65 }, (_, idx) => ({
+        id: `big-batch-${idx + 1}`,
+        title: `Track ${idx + 1}`,
+        artist: 'Artist',
+        album: 'Big Album',
+        duration: 180,
+        cover: '',
+      }));
+
+      const res = useMusicStore.getState().startBatchDownload(tracks);
+
+      expect(res).toEqual({ queued: 50, skipped: 0, truncated: true });
+      expect(useMusicStore.getState().downloads).toHaveLength(50);
+      expect(useMusicStore.getState().downloadQueue).toHaveLength(50);
+      expect(useMusicStore.getState().downloads[0].track.id).toBe('big-batch-1');
+      expect(useMusicStore.getState().downloads[49].track.id).toBe('big-batch-50');
+    });
+
+    it('preserves youtubeId as videoIdOverride and ignores spotify.com in sourceUrlOverride', () => {
+      useMusicStore.setState({ activeDownloads: 2, downloads: [], downloadQueue: [] });
+
+      const res = useMusicStore.getState().startBatchDownload([
+        {
+          id: 'yt-pl-1',
+          title: 'YouTube Playlist Track',
+          artist: 'YT Artist',
+          album: 'YT Playlist',
+          duration: 200,
+          cover: '',
+          youtubeId: 'ytVid123456',
+        },
+        {
+          id: 'sp-pl-1',
+          title: 'Spotify Playlist Track',
+          artist: 'Spotify Artist',
+          album: 'Spotify Playlist',
+          duration: 210,
+          cover: '',
+          sourceUrl: 'https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT',
+        },
+        {
+          id: 'curated-1',
+          title: 'Curated Audio Track',
+          artist: 'Anime Artist',
+          album: 'Anime OST',
+          duration: 90,
+          cover: '',
+          sourceUrl: 'https://a.animethemes.moe/Example-OP1.ogg',
+        },
+      ]);
+
+      expect(res).toEqual({ queued: 3, skipped: 0, truncated: false });
+      const [ytDl, spDl, curatedDl] = useMusicStore.getState().downloads;
+      expect(ytDl.videoIdOverride).toBe('ytVid123456');
+      expect(ytDl.sourceUrlOverride).toBeUndefined();
+      expect(spDl.videoIdOverride).toBeUndefined();
+      expect(spDl.sourceUrlOverride).toBeUndefined();
+      expect(curatedDl.videoIdOverride).toBeUndefined();
+      expect(curatedDl.sourceUrlOverride).toBe('https://a.animethemes.moe/Example-OP1.ogg');
+    });
+
+    it('resolves Deezer album tracks without youtubeId via light->deep fallback cleanly on Desktop and Android', async () => {
+      vi.mocked(getDeezerTrackMeta).mockResolvedValue({
+        albumArtist: 'Album Artist',
+        composer: null,
+        genre: 'J-Pop',
+        year: 2024,
+        trackNumber: 1,
+        trackTotal: 10,
+        discNumber: 1,
+        discTotal: 1,
+      });
+      vi.mocked(getLyrics).mockResolvedValue({ synced: null, plain: null });
+
+      const deepCandidate = {
+        videoId: 'deep_resolved_vid',
+        title: 'Album Track',
+        channel: 'Album Artist - Topic',
+        duration: 210,
+        source: 'youtube_music' as const,
+        edition: 'unknown' as const,
+        verification: 'verified' as const,
+        evidence: {
+          isrcMatch: false,
+          titleMatch: true,
+          artistMatch: true,
+          albumMatch: true,
+          durationDifference: 1,
+          official: true,
+          youtubeMusicSong: true,
+          editionMatch: null,
+          contradictions: [],
+        },
+        rejectionReasons: [],
+        score: 850,
+        confidence: 'alta' as const,
+      };
+
+      // Return empty on light, verified candidate on deep
+      vi.mocked(getDownloadCandidates).mockImplementation(async (_track, _anime, opts) => {
+        if (opts?.depth === 'deep') return [deepCandidate];
+        return [];
+      });
+
+      const deezerAlbumTrack = {
+        id: 'dz-777001',
+        deezerId: 777001,
+        albumId: 55500,
+        title: 'Album Track',
+        artist: 'Album Artist',
+        album: 'Full Album',
+        duration: 210,
+        cover: 'https://cdn.example/cover.jpg',
+      };
+
+      // 1) Desktop PyWebView
+      const pyApi = {
+        get_settings: vi.fn().mockResolvedValue({ download_folder: 'C:/Music/MHL' }),
+        get_raw_audio: vi.fn().mockResolvedValue({
+          success: true,
+          temp_path: 'C:/Temp/mhl_audio_cache/dz777001/audio.m4a',
+          ext: 'm4a',
+          size: 65536,
+        }),
+        tag_and_save_m4a: vi.fn().mockResolvedValue({ success: true, size: 65536 }),
+        cleanup_temp_audio: vi.fn().mockResolvedValue({ success: true }),
+      };
+      (window as unknown as { pywebview: { api: typeof pyApi } }).pywebview = { api: pyApi };
+
+      useMusicStore.getState().startBatchDownload([deezerAlbumTrack]);
+      await vi.waitFor(() => {
+        expect(useMusicStore.getState().downloads[0]?.status).toBe('completed');
+        expect(useMusicStore.getState().activeDownloads).toBe(0);
+      });
+      expect(pyApi.get_raw_audio.mock.calls[0][0]).toBe('deep_resolved_vid');
+
+      // 2) Android Capacitor Native
+      delete (window as { pywebview?: unknown }).pywebview;
+      useMusicStore.setState({ downloads: [], downloadQueue: [], activeDownloads: 0 });
+      vi.mocked(Capacitor.isNativePlatform).mockReturnValue(true);
+      vi.mocked(downloadAudioToTempNative).mockResolvedValue({
+        tempPath: '/cache/ytdlp/deep_resolved_vid/audio.m4a',
+        size: 65536,
+      });
+      vi.mocked(tagAndSaveM4A).mockResolvedValue('content://media/external/audio/777');
+
+      useMusicStore.getState().startBatchDownload([deezerAlbumTrack]);
+      await vi.waitFor(() => {
+        expect(useMusicStore.getState().downloads[0]?.status).toBe('completed');
+        expect(useMusicStore.getState().activeDownloads).toBe(0);
+      });
+      expect(downloadAudioToTempNative).toHaveBeenCalledWith(
+        'deep_resolved_vid',
+        expect.objectContaining({ expectedDuration: 210, format: 'm4a' }),
+      );
+      expect(useMusicStore.getState().downloads[0]?.videoIdOverride).toBe('deep_resolved_vid');
+    });
+
+    it('drops YouTube URLs from sourceUrlOverride in startBatchDownload and prioritizes youtubeId in startDownload', async () => {
+      useMusicStore.setState({ activeDownloads: 2, downloads: [], downloadQueue: [] });
+
+      const ytTrackWithUrl = {
+        id: 'yt-both-1',
+        title: 'YouTube Video With Both Fields',
+        artist: 'Artist',
+        album: 'Playlist',
+        duration: 200,
+        cover: '',
+        youtubeId: 'dQw4w9WgXcQ',
+        sourceUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+      };
+
+      const batchRes = useMusicStore.getState().startBatchDownload([ytTrackWithUrl]);
+      expect(batchRes).toEqual({ queued: 1, skipped: 0, truncated: false });
+      expect(useMusicStore.getState().downloads[0]?.videoIdOverride).toBe('dQw4w9WgXcQ');
+      expect(useMusicStore.getState().downloads[0]?.sourceUrlOverride).toBeUndefined();
+
+      // Also verify startDownload prioritizes youtubeId over sourceUrl
+      useMusicStore.setState({ activeDownloads: 2, downloads: [], downloadQueue: [] });
+      await useMusicStore.getState().startDownload(ytTrackWithUrl);
+      expect(useMusicStore.getState().downloads[0]?.videoIdOverride).toBe('dQw4w9WgXcQ');
+      expect(useMusicStore.getState().downloads[0]?.sourceUrlOverride).toBeUndefined();
+    });
+
+    it('automatically resumes downloadQueue when rateLimitCooldownUntil expires', async () => {
+      vi.useFakeTimers();
+      try {
+        vi.mocked(getDeezerTrackMeta).mockResolvedValue({
+          albumArtist: 'Artist',
+          composer: null,
+          genre: null,
+          year: null,
+          trackNumber: null,
+          trackTotal: null,
+          discNumber: 1,
+          discTotal: 1,
+        });
+        vi.mocked(getLyrics).mockResolvedValue({ synced: null, plain: null });
+
+        const pyApi = {
+          get_settings: vi.fn().mockResolvedValue({ download_folder: 'C:/Music/MHL' }),
+          get_raw_audio: vi
+            .fn()
+            .mockResolvedValueOnce({
+              success: false,
+              error: 'HTTP Error 403: Forbidden',
+            })
+            .mockResolvedValueOnce({
+              success: true,
+              temp_path: 'C:/Temp/mhl_audio_cache/resumed/audio.m4a',
+              ext: 'm4a',
+              size: 65536,
+            }),
+          tag_and_save_m4a: vi.fn().mockResolvedValue({ success: true, size: 65536 }),
+          cleanup_temp_audio: vi.fn().mockResolvedValue({ success: true }),
+        };
+        (window as unknown as { pywebview: { api: typeof pyApi } }).pywebview = { api: pyApi };
+
+        const track1 = {
+          id: 'cd-resume-1',
+          title: 'First 403 Song',
+          artist: 'Artist',
+          album: 'Album',
+          duration: 180,
+          cover: '',
+        };
+        const track2 = {
+          id: 'cd-resume-2',
+          title: 'Second Resumed Song',
+          artist: 'Artist',
+          album: 'Album',
+          duration: 180,
+          cover: '',
+        };
+
+        useMusicStore.setState({
+          activeDownloads: 1,
+          downloads: [
+            { id: 'res-dl-1', track: track1, progress: 0, status: 'downloading', videoIdOverride: 'vid_403_r1' },
+            { id: 'res-dl-2', track: track2, progress: 0, status: 'queued', videoIdOverride: 'vid_ok_r2' },
+          ],
+          downloadQueue: ['res-dl-2'],
+        });
+
+        await useMusicStore.getState()._executeDownload(track1, 'res-dl-1', 'vid_403_r1');
+
+        expect(useMusicStore.getState().downloads.find((d) => d.id === 'res-dl-1')?.status).toBe('error');
+        expect(useMusicStore.getState().downloads.find((d) => d.id === 'res-dl-2')?.status).toBe('queued');
+        expect(pyApi.get_raw_audio).toHaveBeenCalledTimes(1);
+
+        // Advance past the 5-minute cooldown + resume buffer
+        await vi.advanceTimersByTimeAsync(5 * 60 * 1000 + 200);
+
+        expect(pyApi.get_raw_audio).toHaveBeenCalledTimes(2);
+        expect(pyApi.get_raw_audio.mock.calls[1][0]).toBe('vid_ok_r2');
+        expect(useMusicStore.getState().downloads.find((d) => d.id === 'res-dl-2')?.status).toBe('completed');
+        expect(useMusicStore.getState().downloadQueue).toHaveLength(0);
+        expect(useMusicStore.getState().activeDownloads).toBe(0);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   describe('Download Folder', () => {

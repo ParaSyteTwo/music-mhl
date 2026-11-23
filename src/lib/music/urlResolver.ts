@@ -6,13 +6,95 @@ export function isDirectMediaUrl(input: string): boolean {
   return /^https?:\/\/(www\.|m\.|music\.|open\.|listen\.|vt\.|[a-z0-9-]+\.)?(youtube\.com|youtu\.be|spotify\.com|apple\.com|deezer\.com|deezer\.page\.link|tidal\.com|amazon\.[a-z.]+|soundcloud\.com|bandcamp\.com|tiktok\.com)\/.+/i.test(trimmed);
 }
 
+export function extractYouTubePlaylistId(urlStr: string): string | null {
+  const cleaned = urlStr.trim().replace(/^[<"']+|[>"']+$/g, '');
+  try {
+    const url = new URL(cleaned);
+    const host = url.hostname.toLowerCase();
+    if (host === 'youtube.com' || host.endsWith('.youtube.com')) {
+      const normalizedPath = url.pathname.replace(/\/+$/, '');
+      if (normalizedPath !== '/playlist') return null;
+      if (url.searchParams.has('v')) return null;
+      const list = url.searchParams.get('list')?.trim() ?? '';
+      if (/^[a-zA-Z0-9_-]{8,128}$/.test(list) && !list.startsWith('-')) {
+        return list;
+      }
+    }
+  } catch {
+    // invalid URL
+  }
+  return null;
+}
+
+export function extractDeezerCollection(urlStr: string): { type: 'album' | 'playlist'; id: string } | null {
+  const cleaned = urlStr.trim().replace(/^[<"']+|[>"']+$/g, '');
+  try {
+    const url = new URL(cleaned);
+    const host = url.hostname.toLowerCase();
+    if (host === 'deezer.com' || host.endsWith('.deezer.com')) {
+      const match = url.pathname.match(/^\/(?:[a-zA-Z0-9_-]+\/)?(album|playlist)\/(\d{1,20})(?:\/|$)/i);
+      if (match) {
+        return {
+          type: match[1].toLowerCase() as 'album' | 'playlist',
+          id: match[2],
+        };
+      }
+    }
+  } catch {
+    // regex fallback
+  }
+  const match = cleaned.match(/^https?:\/\/(?:[a-z0-9-]+\.)?deezer\.com\/(?:[a-zA-Z0-9_-]+\/)?(album|playlist)\/(\d{1,20})(?:[/?#]|$)/i);
+  if (!match) return null;
+  return {
+    type: match[1].toLowerCase() as 'album' | 'playlist',
+    id: match[2],
+  };
+}
+
+export function extractSpotifyCollection(urlStr: string): { type: 'album' | 'playlist'; id: string } | null {
+  const cleaned = urlStr.trim().replace(/^[<"']+|[>"']+$/g, '');
+  try {
+    const url = new URL(cleaned);
+    const host = url.hostname.toLowerCase();
+    if (host === 'open.spotify.com' || host === 'play.spotify.com' || host === 'spotify.com') {
+      const match = url.pathname.match(/^\/(?:(?:intl-[a-zA-Z0-9_-]+|embed|user\/[^/]+)\/)?(album|playlist)\/([a-zA-Z0-9]{8,40})(?:\/|$)/i);
+      if (match) {
+        return {
+          type: match[1].toLowerCase() as 'album' | 'playlist',
+          id: match[2],
+        };
+      }
+    }
+  } catch {
+    // regex fallback
+  }
+  const match = cleaned.match(/^https?:\/\/(?:open|play)?\.?spotify\.com\/(?:(?:intl-[a-zA-Z0-9_-]+|embed|user\/[^/]+)\/)?(album|playlist)\/([a-zA-Z0-9]{8,40})(?:[/?#]|$)/i);
+  if (!match) return null;
+  return {
+    type: match[1].toLowerCase() as 'album' | 'playlist',
+    id: match[2],
+  };
+}
+
+export function isSupportedCollectionUrl(input: string): boolean {
+  const trimmed = input.trim().replace(/^[<"']+|[>"']+$/g, '');
+  if (!trimmed) return false;
+  return Boolean(
+    extractYouTubePlaylistId(trimmed)
+    || extractDeezerCollection(trimmed)
+    || extractSpotifyCollection(trimmed),
+  );
+}
+
 export function isUnsupportedCollectionUrl(input: string): boolean {
-  const trimmed = input.trim();
+  const trimmed = input.trim().replace(/^[<"']+|[>"']+$/g, '');
+  if (!trimmed || isSupportedCollectionUrl(trimmed)) return false;
   return (
     (/[?&]list=/i.test(trimmed) && !/[?&]v=/i.test(trimmed)) ||
-    /open\.spotify\.com\/(?:[a-zA-Z0-9_-]+\/)?(album|playlist|artist|user)\//i.test(trimmed) ||
+    /open\.spotify\.com\/(?:[a-zA-Z0-9_-]+\/)?(artist|user)\//i.test(trimmed) ||
     /music\.apple\.com\/(?:[a-zA-Z0-9_-]+\/)?(playlist|artist|curator)\//i.test(trimmed) ||
-    /deezer\.com\/(?:[a-zA-Z0-9_-]+\/)?(album|playlist|artist)\//i.test(trimmed) ||
+    (/music\.apple\.com\/(?:[a-zA-Z0-9_-]+\/)?album\//i.test(trimmed) && !/[?&]i=\d+/i.test(trimmed)) ||
+    /deezer\.com\/(?:[a-zA-Z0-9_-]+\/)?artist\//i.test(trimmed) ||
     /tidal\.com\/(?:browse\/)?(album|playlist|artist)\//i.test(trimmed) ||
     /soundcloud\.com\/[^/]+\/sets\//i.test(trimmed)
   );
@@ -183,7 +265,12 @@ function detectLongAudioFromTitle(title: string): boolean {
 
 export async function resolveTrackFromUrl(url: string): Promise<Track | null> {
   const trimmed = url.trim().replace(/^[<"']+|[>"']+$/g, '');
-  if (!isDirectMediaUrl(trimmed) || isNonPlayableMediaUrl(trimmed) || isUnsupportedCollectionUrl(trimmed)) {
+  if (
+    !isDirectMediaUrl(trimmed)
+    || isNonPlayableMediaUrl(trimmed)
+    || isSupportedCollectionUrl(trimmed)
+    || isUnsupportedCollectionUrl(trimmed)
+  ) {
     return null;
   }
 
@@ -374,7 +461,8 @@ export async function resolveTrackFromUrl(url: string): Promise<Track | null> {
 
     // 4. Deezer Direct URL
     const deezerTrackId = extractDeezerTrackId(trimmed);
-    if (deezerTrackId || trimmed.includes('deezer.com/')) {
+    const isDeezerShortLink = /^https?:\/\/(?:[a-z0-9-]+\.)?deezer\.page\.link\//i.test(trimmed);
+    if (deezerTrackId || trimmed.includes('deezer.com/') || isDeezerShortLink) {
       let oembedTitle = '';
       let oembedAuthor = '';
       try {
@@ -397,6 +485,10 @@ export async function resolveTrackFromUrl(url: string): Promise<Track | null> {
         if (results.length > 0) {
           return results[0];
         }
+      }
+
+      if (isDeezerShortLink && !deezerTrackId) {
+        return null;
       }
     }
 
