@@ -625,6 +625,8 @@ def test_jikan_429_double_failure_falls_back_to_animethemes_without_crashing():
 
     def fake_get(url, **kwargs):
         params = kwargs.get("params") or {}
+        if url == "https://myanimelist.net/anime/50001":
+            return _mock_response("", status_code=404)
         if url == "https://api.jikan.moe/v4/anime/50001/themes":
             return _mock_response({"status": 429}, status_code=429, headers={"Retry-After": "0.25"})
         if url == "https://api.animethemes.moe/anime" and params.get("filter[site]") == "AniList":
@@ -653,7 +655,7 @@ def test_jikan_429_double_failure_falls_back_to_animethemes_without_crashing():
     assert len(res["themes"]) == 1
     assert res["themes"][0]["title"] == "Fallback OP"
     mock_sleep.assert_called_once_with(0.25)
-    assert mock_get.call_count == 3  # 2 Jikan attempts + 1 AnimeThemes by AniList ID
+    assert mock_get.call_count == 4  # 1 MAL HTML + 2 Jikan attempts + 1 AnimeThemes by AniList ID
 
 
 def test_single_season_transient_animethemes_error_does_not_crash_anime_get_themes():
@@ -825,3 +827,95 @@ def test_get_playlist_items_reports_has_more_on_truncation():
         )
     assert res_more["success"] is True
     assert res_more["hasMore"] is True
+
+
+def test_anime_get_themes_uses_anisongdb_primary_and_filters_dubs():
+    single = _season_node(
+        127230, 44511, "Chainsaw Man", "Chainsaw Man", year=2022, episodes=12, edges=[],
+    )
+
+    def fake_post(url, **kwargs):
+        if "graphql.anilist.co" in url:
+            return _mock_response({"data": {"Media": single}})
+        if "anisongdb.com" in url:
+            return _mock_response([
+                {
+                    "linked_ids": {"anilist": 127230, "myanimelist": 44511},
+                    "songType": "Opening 1",
+                    "songName": "KICK BACK",
+                    "songArtist": "Kenshi Yonezu",
+                    "isDub": False,
+                },
+                {
+                    "linked_ids": {"anilist": 127230, "myanimelist": 44511},
+                    "songType": "Opening 1",
+                    "songName": "Dub OP",
+                    "songArtist": "English Dub",
+                    "isDub": True,
+                },
+                {
+                    "linked_ids": {"anilist": 127230, "myanimelist": 44511},
+                    "songType": "Ending 1",
+                    "songName": "CHAINSAW BLOOD",
+                    "songArtist": "Vaundy",
+                    "isDub": False,
+                },
+            ])
+        raise AssertionError(f"Unexpected POST {url}")
+
+    with (
+        patch("bridge.requests.post", side_effect=fake_post),
+        patch("bridge.requests.get", side_effect=AssertionError("Should not hit GET when AnisongDB succeeds")),
+    ):
+        res = Bridge().anime_get_themes(127230)
+
+    assert res["success"] is True
+    assert [(t["type"], t["sequence"], t["title"], t["artist"]) for t in res["themes"]] == [
+        ("OP", 1, "KICK BACK", "Kenshi Yonezu"),
+        ("ED", 1, "CHAINSAW BLOOD", "Vaundy"),
+    ]
+
+
+def test_anime_get_themes_falls_back_to_mal_html_when_anisongdb_empty():
+    single = _season_node(
+        127230, 44511, "Chainsaw Man", "Chainsaw Man", year=2022, episodes=12, edges=[],
+    )
+    mal_html = """
+    <div class="theme-songs js-theme-songs opnening">
+      <table>
+        <tr><td>1: &nbsp; "KICK BACK" by Kenshi Yonezu &nbsp; (eps 1-12)</td></tr>
+        <tr><td>Spotify Apple Music</td></tr>
+      </table>
+    </div>
+    <div class="theme-songs js-theme-songs ending">
+      <table>
+        <tr><td>1: &nbsp; "CHAINSAW BLOOD" by Vaundy &nbsp; (ep 1)</td></tr>
+      </table>
+    </div>
+    """
+
+    def fake_post(url, **kwargs):
+        if "graphql.anilist.co" in url:
+            return _mock_response({"data": {"Media": single}})
+        if "anisongdb.com" in url:
+            return _mock_response([])
+        raise AssertionError(f"Unexpected POST {url}")
+
+    def fake_get(url, **kwargs):
+        if url == "https://myanimelist.net/anime/44511":
+            resp = _mock_response({}, status_code=200)
+            resp.text = mal_html
+            return resp
+        raise AssertionError(f"Unexpected GET {url}")
+
+    with (
+        patch("bridge.requests.post", side_effect=fake_post),
+        patch("bridge.requests.get", side_effect=fake_get),
+    ):
+        res = Bridge().anime_get_themes(127230)
+
+    assert res["success"] is True
+    assert [(t["type"], t["sequence"], t["title"], t["artist"]) for t in res["themes"]] == [
+        ("OP", 1, "KICK BACK", "Kenshi Yonezu"),
+        ("ED", 1, "CHAINSAW BLOOD", "Vaundy"),
+    ]

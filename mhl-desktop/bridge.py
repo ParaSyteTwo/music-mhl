@@ -5,6 +5,7 @@ Todas las llamadas externas (Deezer, YouTube/yt-dlp, filesystem) pasan por aquí
 import base64
 from collections import OrderedDict, deque
 import concurrent.futures
+import html as html_lib
 import ipaddress
 import json
 import os
@@ -23,7 +24,7 @@ from urllib.parse import parse_qs, quote_plus, urljoin, urlparse
 # CREATE_NO_WINDOW para evitar popup de consola en Windows
 CREATE_NO_WINDOW = 0x08000000 if sys.platform == 'win32' else 0
 
-APP_VERSION = '1.5.6-beta.6'
+APP_VERSION = '1.5.6-beta.7'
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -321,6 +322,8 @@ def _metadata_text(data: dict, *keys: str) -> str:
 # Implementación síncrona con `requests`, que ya forma parte del runtime Desktop.
 
 _ANILIST_ENDPOINT = 'https://graphql.anilist.co'
+_ANISONGDB_ENDPOINT = 'https://anisongdb.com/api/search_request'
+_MAL_BASE_URL = 'https://myanimelist.net/anime'
 _JIKAN_ENDPOINT = 'https://api.jikan.moe/v4'
 _ANIMETHEMES_ENDPOINT = 'https://api.animethemes.moe'
 _ANIME_HEADERS = {
@@ -1008,23 +1011,181 @@ def _anime_fetch_themes_by_name(romaji: str, english: str | None, anilist_id: in
     return []
 
 
+_ANISONGDB_SONG_TYPE_RE = re.compile(r'^(Opening|Ending)\s*(\d+)?', re.IGNORECASE)
+_MAL_STREAMING_NOISE_RE = re.compile(
+    r'^(?:Spotify|Apple Music|Amazon Music|Youtube Music|YouTube)(?:\s+(?:Spotify|Apple Music|Amazon Music|Youtube Music|YouTube))*$',
+    re.IGNORECASE,
+)
+
+
+def _anime_fetch_themes_anisongdb(
+    anilist_id: int,
+    mal_id: int | None,
+    romaji: str,
+    english: str | None,
+) -> list[dict]:
+    candidate_names: list[str] = []
+    for name in (romaji, english):
+        if isinstance(name, str) and name.strip() and name.strip() not in candidate_names:
+            candidate_names.append(name.strip())
+    if not candidate_names:
+        return []
+
+    headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'User-Agent': _ANIME_HEADERS['User-Agent'],
+    }
+    for search_name in candidate_names:
+        try:
+            response = _http_post(
+                _ANISONGDB_ENDPOINT,
+                json={
+                    'anime_search_filter': {
+                        'search': search_name,
+                        'partial_match': True,
+                        'max_other_artist': 99,
+                        'group_by_site': False,
+                        'and_logic': False,
+                    },
+                    'and_logic': False,
+                    'ignore_duplicate': False,
+                    'opening_filter': True,
+                    'ending_filter': True,
+                    'insert_filter': False,
+                },
+                headers=headers,
+                timeout=_ANIME_TIMEOUT,
+            )
+            if not getattr(response, 'ok', False):
+                continue
+            items = response.json()
+            if not isinstance(items, list):
+                continue
+        except Exception:
+            continue
+
+        seen: set[tuple[str, int, str]] = set()
+        themes: list[dict] = []
+        for entry in items:
+            if not isinstance(entry, dict) or entry.get('isDub') is True:
+                continue
+            linked = entry.get('linked_ids')
+            if not isinstance(linked, dict):
+                continue
+            linked_al = linked.get('anilist')
+            linked_mal = linked.get('myanimelist')
+            if linked_al != anilist_id and not (mal_id and linked_mal == mal_id):
+                continue
+
+            raw_type = str(entry.get('songType') or '').strip()
+            type_match = _ANISONGDB_SONG_TYPE_RE.match(raw_type)
+            if not type_match:
+                continue
+            norm_type = 'OP' if type_match.group(1).lower().startswith('open') else 'ED'
+            seq = int(type_match.group(2)) if type_match.group(2) else 1
+            title = _clean_jikan_label(str(entry.get('songName') or '')) or f'{norm_type} {seq}'
+            artist = _clean_jikan_label(str(entry.get('songArtist') or ''))
+            dedupe_key = (norm_type, seq, title.lower())
+            if dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+            themes.append({
+                'animeId': anilist_id,
+                'type': norm_type,
+                'sequence': seq,
+                'title': title,
+                'artist': artist,
+                'episodesFrom': None,
+                'episodesTo': None,
+                'audioUrl': None,
+                'videoUrl': None,
+            })
+
+        if themes:
+            themes.sort(key=lambda t: (0 if t['type'] == 'OP' else 1, t['sequence'], t['title'].lower()))
+            return themes
+    return []
+
+
+def _anime_fetch_themes_mal_html(mal_id: int, anilist_id: int) -> list[dict]:
+    if isinstance(mal_id, bool) or not isinstance(mal_id, int) or mal_id <= 0:
+        return []
+    try:
+        response = _http_get(
+            f'{_MAL_BASE_URL}/{mal_id}',
+            headers={
+                'User-Agent': (
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                    'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+                ),
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            },
+            timeout=_ANIME_TIMEOUT,
+        )
+        if not getattr(response, 'ok', False):
+            return []
+        page_html = getattr(response, 'text', '') or ''
+    except Exception:
+        return []
+
+    if not page_html:
+        return []
+
+    themes: list[dict] = []
+    for norm_type, cls_name in (('OP', 'opnening'), ('ED', 'ending')):
+        block_match = re.search(
+            rf'class="theme-songs js-theme-songs {cls_name}"[\s\S]*?</table>',
+            page_html,
+            re.IGNORECASE,
+        )
+        if not block_match:
+            continue
+        rows = re.findall(r'<tr[^>]*>([\s\S]*?)</tr>', block_match.group(0), re.IGNORECASE)
+        seq_counter = 0
+        for row_html in rows:
+            text = html_lib.unescape(_HTML_TAG_RE.sub(' ', row_html))
+            text = re.sub(r'\s+', ' ', text).strip()
+            if not text or _MAL_STREAMING_NOISE_RE.match(text):
+                continue
+            seq_counter += 1
+            parsed = _parse_jikan_theme_entry(text, norm_type, seq_counter)
+            if parsed is None or _MAL_STREAMING_NOISE_RE.match(parsed['title']):
+                continue
+            themes.append({
+                'animeId': anilist_id,
+                'type': parsed['type'],
+                'sequence': parsed['sequence'],
+                'title': parsed['title'],
+                'artist': parsed['artist'],
+                'episodesFrom': parsed['episodesFrom'],
+                'episodesTo': parsed['episodesTo'],
+                'audioUrl': None,
+                'videoUrl': None,
+            })
+    return themes
+
+
 def _resolve_season_themes(season: dict, include_season_fields: bool) -> list[dict]:
     sid = season['anilistId']
     mal_id = season['malId']
+    romaji = season.get('titleRomaji') or ''
+    english = season.get('titleEnglish')
     themes: list[dict] = []
 
-    if mal_id:
+    themes = _anime_fetch_themes_anisongdb(sid, mal_id, romaji, english)
+
+    if not themes and mal_id:
+        themes = _anime_fetch_themes_mal_html(mal_id, sid)
+
+    if not themes and mal_id:
         themes = _anime_fetch_themes_jikan(mal_id, sid)
 
     if not themes:
         themes = _anime_fetch_themes_by_anilist_id(sid)
 
     if not themes:
-        themes = _anime_fetch_themes_by_name(
-            season.get('titleRomaji') or '',
-            season.get('titleEnglish'),
-            sid,
-        )
+        themes = _anime_fetch_themes_by_name(romaji, english, sid)
 
     if include_season_fields:
         season_title = season.get('titleEnglish') or season.get('titleRomaji') or ''

@@ -87,6 +87,8 @@ const themesCache = new Map<string, TimedCacheEntry<CachedAnimeThemesPayload>>()
 const themesRequests = new Map<string, Promise<AnimeThemesResponse>>();
 
 const ANILIST_ENDPOINT = 'https://graphql.anilist.co';
+const ANISONGDB_ENDPOINT = 'https://anisongdb.com/api/search_request';
+const MAL_BASE_URL = 'https://myanimelist.net/anime';
 const JIKAN_ENDPOINT = 'https://api.jikan.moe/v4';
 const ANIMETHEMES_ENDPOINT = 'https://api.animethemes.moe';
 const ANIMETHEMES_INCLUDE = 'animethemes.song.artists,animethemes.animethemeentries.videos.audio';
@@ -811,6 +813,169 @@ async function fetchThemesFromAnimeThemes(
   return [];
 }
 
+interface AnisongDbEntry {
+  isDub?: boolean;
+  songType?: string;
+  songName?: string;
+  songArtist?: string;
+  linked_ids?: {
+    anilist?: number;
+    myanimelist?: number;
+  };
+}
+
+const ANISONGDB_SONG_TYPE_RE = /^(Opening|Ending)\s*(\d+)?/i;
+const MAL_STREAMING_NOISE_RE = /^(?:Spotify|Apple Music|Amazon Music|Youtube Music|YouTube)(?:\s+(?:Spotify|Apple Music|Amazon Music|Youtube Music|YouTube))*$/i;
+
+function decodeBasicHtmlEntities(value: string): string {
+  return value
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#0*39;|&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&nbsp;/g, ' ');
+}
+
+async function fetchThemesFromAnisongDb(
+  node: AniListSeasonNode,
+): Promise<AnimeTheme[]> {
+  const candidateNames = Array.from(
+    new Set([node.titleRomaji, node.titleEnglish].filter((v): v is string => Boolean(v && v.trim()))),
+  );
+  if (candidateNames.length === 0) return [];
+
+  for (const searchName of candidateNames) {
+    try {
+      const res = await fetchWithTimeout(
+        ANISONGDB_ENDPOINT,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            'X-User-Agent': MHL_USER_AGENT,
+          },
+          body: JSON.stringify({
+            anime_search_filter: {
+              search: searchName.trim(),
+              partial_match: true,
+              max_other_artist: 99,
+              group_by_site: false,
+              and_logic: false,
+            },
+            and_logic: false,
+            ignore_duplicate: false,
+            opening_filter: true,
+            ending_filter: true,
+            insert_filter: false,
+          }),
+        },
+        NETWORK_TIMEOUT_MS,
+      );
+      if (!res.ok) continue;
+      const payload = await res.json() as unknown;
+      if (!Array.isArray(payload)) continue;
+
+      const seen = new Set<string>();
+      const themes: AnimeTheme[] = [];
+      for (const rawItem of payload) {
+        if (!rawItem || typeof rawItem !== 'object') continue;
+        const item = rawItem as AnisongDbEntry;
+        if (item.isDub === true) continue;
+        const linked = item.linked_ids;
+        if (!linked) continue;
+        const matchesAnilist = linked.anilist === node.anilistId;
+        const matchesMal = Boolean(node.malId && linked.myanimelist === node.malId);
+        if (!matchesAnilist && !matchesMal) continue;
+
+        const typeMatch = String(item.songType ?? '').trim().match(ANISONGDB_SONG_TYPE_RE);
+        if (!typeMatch) continue;
+        const type: 'OP' | 'ED' = typeMatch[1].toLowerCase().startsWith('open') ? 'OP' : 'ED';
+        const sequence = typeMatch[2] ? Number(typeMatch[2]) : 1;
+        const title = stripNativeParenthetical(String(item.songName ?? '').trim()) || `${type} ${sequence}`;
+        const artist = stripNativeParenthetical(String(item.songArtist ?? '').trim());
+        const dedupeKey = `${type}:${sequence}:${title.toLowerCase()}`;
+        if (seen.has(dedupeKey)) continue;
+        seen.add(dedupeKey);
+
+        themes.push({
+          animeId: node.anilistId,
+          type,
+          sequence,
+          title,
+          artist,
+          episodesFrom: null,
+          episodesTo: null,
+          audioUrl: null,
+          videoUrl: null,
+        });
+      }
+
+      if (themes.length > 0) {
+        themes.sort((a, b) => {
+          if (a.type !== b.type) return a.type === 'OP' ? -1 : 1;
+          if (a.sequence !== b.sequence) return a.sequence - b.sequence;
+          return a.title.localeCompare(b.title);
+        });
+        return themes;
+      }
+    } catch {
+      // Try next candidate name or fall back
+    }
+  }
+  return [];
+}
+
+async function fetchThemesFromMalHtml(
+  node: AniListSeasonNode,
+): Promise<AnimeTheme[]> {
+  if (!node.malId) return [];
+  try {
+    const res = await fetchWithTimeout(
+      `${MAL_BASE_URL}/${node.malId}`,
+      {
+        headers: {
+          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'X-User-Agent': MHL_USER_AGENT,
+        },
+      },
+      NETWORK_TIMEOUT_MS,
+    );
+    if (!res.ok) return [];
+    const htmlText = await res.text();
+    if (!htmlText) return [];
+
+    const themes: AnimeTheme[] = [];
+    for (const [normType, clsName] of [['OP', 'opnening'], ['ED', 'ending']] as const) {
+      const blockMatch = htmlText.match(
+        new RegExp(`class="theme-songs js-theme-songs ${clsName}"[\\s\\S]*?<\\/table>`, 'i'),
+      );
+      if (!blockMatch) continue;
+      const rows = blockMatch[0].match(/<tr[^>]*>[\s\S]*?<\/tr>/gi) ?? [];
+      let seqCounter = 0;
+      for (const rowHtml of rows) {
+        const text = decodeBasicHtmlEntities(rowHtml.replace(/<[^>]+>/g, ' '))
+          .replace(/\s+/g, ' ')
+          .trim();
+        if (!text || MAL_STREAMING_NOISE_RE.test(text)) continue;
+        seqCounter += 1;
+        const parsed = parseJikanThemeEntry(text, normType, seqCounter);
+        if (!parsed.title || MAL_STREAMING_NOISE_RE.test(parsed.title)) continue;
+        themes.push({
+          animeId: node.anilistId,
+          ...parsed,
+          audioUrl: null,
+          videoUrl: null,
+        });
+      }
+    }
+    return themes;
+  } catch {
+    return [];
+  }
+}
+
 async function getAnimeThemesDirect(
   anilistId: number,
 ): Promise<{ themes: AnimeTheme[]; seasons: AnimeSeason[] }> {
@@ -826,9 +991,17 @@ async function getAnimeThemesDirect(
       const seasonNumber = index + 1;
       const seasonTitle = node.titleEnglish || node.titleRomaji;
 
-      // Primary: Jikan (MAL) when malId is available
-      let rawThemes = await fetchThemesFromJikan(node);
-      // Fallback: AnimeThemes (by AniList external ID, then by title)
+      // Primary: AnisongDB (fast, accurate linked_ids for AniList & MAL)
+      let rawThemes = await fetchThemesFromAnisongDb(node);
+      // Fallback 1: MyAnimeList HTML page
+      if (rawThemes.length === 0) {
+        rawThemes = await fetchThemesFromMalHtml(node);
+      }
+      // Fallback 2: Jikan (MAL) when malId is available
+      if (rawThemes.length === 0) {
+        rawThemes = await fetchThemesFromJikan(node);
+      }
+      // Fallback 3: AnimeThemes (by AniList external ID, then by title)
       if (rawThemes.length === 0) {
         rawThemes = await fetchThemesFromAnimeThemes(node);
       }
