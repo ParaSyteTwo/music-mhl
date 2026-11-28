@@ -30,15 +30,18 @@ export function AppUpdateNotice() {
     : t('appUpdateAvailableNotice', { version: remoteBuild.versionName });
 
   return (
-    <div className="relative z-40 flex items-center gap-3 border-b border-[#C8F04B]/20 bg-[#C8F04B]/10 px-4 py-2.5">
-      <Link to="/settings" className="flex-1 text-xs font-medium text-[#DDF986]">
+    <div
+      className="relative z-40 flex items-center gap-3 border-b border-[var(--accent-primary)]/25 bg-[var(--accent-primary)]/10 px-4 py-2.5 sm:!pt-2.5"
+      style={{ paddingTop: 'calc(var(--sat, 0px) + 10px)' }}
+    >
+      <Link to="/settings" className="flex-1 text-xs font-medium text-[#F5F5F0] hover:text-[var(--accent-primary)] transition-colors">
         {message}
       </Link>
       <button
         type="button"
         onClick={dismissCurrentBuild}
         aria-label={t('dismiss')}
-        className="rounded p-1 text-[#9AAE5A] hover:text-[#F5F5F0]"
+        className="rounded p-1 text-[#A0A098] hover:text-[#F5F5F0]"
       >
         <X className="h-3.5 w-3.5" />
       </button>

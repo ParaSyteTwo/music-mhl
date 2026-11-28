@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveEffectiveLanguage, resolveSystemLanguage, translate } from './i18n';
+import { resolveEffectiveLanguage, resolveSystemLanguage, translate, translations } from './i18n';
 import { getBrowserLanguages, setNativeLocale, SUPPORTED_LANGUAGES } from './language';
 
 describe('i18n language resolution', () => {
@@ -79,6 +79,41 @@ describe('i18n language resolution', () => {
       expect(esVal).not.toBe(key);
       expect(enVal).not.toBe(key);
       expect(esVal).not.toBe(enVal);
+    }
+  });
+
+  it('has 100% key parity, non-empty strings, and identical placeholders across all 7 languages', () => {
+    const enKeys = Object.keys(translations.en).sort();
+    expect(Object.keys(translations.es).sort()).toEqual(enKeys);
+
+    const extractPlaceholders = (s: string) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
+
+    for (const lang of SUPPORTED_LANGUAGES) {
+      const dict = translations[lang];
+      expect(Object.keys(dict).sort()).toEqual(enKeys);
+      for (const key of enKeys) {
+        expect(dict[key].trim().length, `${lang}.${key} should be non-empty`).toBeGreaterThan(0);
+        expect(extractPlaceholders(dict[key]), `${lang}.${key} placeholders`).toEqual(
+          extractPlaceholders(translations.en[key]),
+        );
+      }
+    }
+  });
+
+  it('does not leave key UI sections untranslated in pt, fr, de, it, or ja', () => {
+    const uiKeys = [
+      'candidateResultsTitle',
+      'backupDesc',
+      'videoSettingsTitle',
+      'collectionDownloadAll',
+      'appUpdateAvailableNotice',
+      'longAudioBlocked',
+      'animeDownloadSeason',
+    ];
+    for (const lang of ['pt', 'fr', 'de', 'it', 'ja'] as const) {
+      for (const key of uiKeys) {
+        expect(translations[lang][key], `${lang}.${key} should be translated`).not.toBe(translations.en[key]);
+      }
     }
   });
 });

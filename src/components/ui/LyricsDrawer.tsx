@@ -40,7 +40,7 @@ export function LyricsDrawer({ open, onClose }: LyricsDrawerProps) {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/75 backdrop-blur-md p-0 sm:p-6"
+          className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/75 backdrop-blur-md p-0 sm:p-6"
           onClick={onClose}
         >
           <motion.div
@@ -80,7 +80,11 @@ export function LyricsDrawer({ open, onClose }: LyricsDrawerProps) {
               </button>
             </div>
 
-            <div ref={containerRef} className="flex-1 overflow-y-auto px-5 py-6 space-y-4">
+            <div
+              ref={containerRef}
+              className="flex-1 overflow-y-auto px-5 py-6 space-y-4"
+              style={{ paddingBottom: 'calc(var(--sab, 0px) + 24px)' }}
+            >
               {lines.length === 0 ? (
                 <p className="text-center text-sm text-[#8E8E88] py-12">{t('noEmbeddedLyrics')}</p>
               ) : (

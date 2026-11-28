@@ -65,6 +65,7 @@ export function detectLatinLyricLanguage(text: string): LyricSourceLang {
 }
 
 export function detectLyricSourceLanguage(text: string, script = detectScript(text)): LyricSourceLang {
+  if (script === 'japanese') return 'ja'
   return script === 'latin' ? detectLatinLyricLanguage(text) : 'unknown'
 }
 

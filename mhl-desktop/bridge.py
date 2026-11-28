@@ -24,7 +24,7 @@ from urllib.parse import parse_qs, quote_plus, urljoin, urlparse
 # CREATE_NO_WINDOW para evitar popup de consola en Windows
 CREATE_NO_WINDOW = 0x08000000 if sys.platform == 'win32' else 0
 
-APP_VERSION = '1.5.7-beta.4'
+APP_VERSION = '1.5.7-beta.5'
 
 import requests
 from requests.adapters import HTTPAdapter

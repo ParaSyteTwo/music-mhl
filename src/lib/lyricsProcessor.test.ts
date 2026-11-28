@@ -21,6 +21,21 @@ describe('lyrics language decisions', () => {
   it('does not translate when source and target match', () => {
     expect(shouldTranslateLyrics('es', 'es', true)).toBe(false);
     expect(shouldTranslateLyrics('en', 'en', true)).toBe(false);
+    expect(shouldTranslateLyrics('ja', 'ja', true)).toBe(false);
+  });
+
+  it('skips MyMemory translation when Japanese song already targets Japanese', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    const result = await processLyrics('[00:01.00]君のことが好きだよ', '', {
+      lyricOriginal: true,
+      lyricRomanization: false,
+      lyricTranslation: true,
+      deviceLang: 'ja',
+    });
+
+    expect(result.synced).toBe('[00:01.00]君のことが好きだよ');
+    expect(fetchMock).not.toHaveBeenCalled();
+    fetchMock.mockRestore();
   });
 
   it('translates when source and target differ', () => {
