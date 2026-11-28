@@ -247,7 +247,7 @@ export const useAppUpdateStore = create<AppUpdateState>()(
             }
 
             const eligibleAt =
-              get().updateChannel === 'beta'
+              get().updateChannel === 'beta' || get().updateChannel === 'experimental'
                 ? new Date(trustedTimeMs || now).toISOString()
                 : new Date(Date.parse(remote.assetUpdatedAt) + 7 * 24 * 60 * 60 * 1000).toISOString();
             const isWaiting = get().updateChannel === 'stable' && now < Date.parse(eligibleAt);

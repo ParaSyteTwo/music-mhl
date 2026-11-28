@@ -2678,3 +2678,87 @@ if (Test-Path -LiteralPath $targetExe) {
             shutil.rmtree(update_temp_dir, ignore_errors=True)
             return {'success': False, 'error': str(exc)}
 
+    def export_backup(self, json_content: str, default_name: str = '') -> dict:
+        """Guarda una copia de seguridad JSON usando diálogo nativo o Documentos/MHL Music."""
+        if not isinstance(json_content, str) or not json_content.strip():
+            return {'success': False, 'error': 'Empty backup content'}
+        try:
+            json.loads(json_content)
+        except Exception:
+            return {'success': False, 'error': 'Invalid backup JSON'}
+
+        raw_name = str(default_name or '').strip()
+        safe_name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', raw_name).strip(' .')
+        if not safe_name:
+            safe_name = f"mhl-music-backup-{time.strftime('%Y-%m-%d')}.json"
+        if not safe_name.lower().endswith('.json'):
+            safe_name = f'{safe_name}.json'
+
+        fallback_dir = (Path.home() / 'Documents' / 'MHL Music').resolve()
+        dest_path: Path | None = None
+        try:
+            import webview
+            windows = getattr(webview, 'windows', None)
+            if windows:
+                save_dialog = getattr(webview, 'SAVE_DIALOG', None)
+                if save_dialog is not None:
+                    fallback_dir.mkdir(parents=True, exist_ok=True)
+                    result = windows[0].create_file_dialog(
+                        save_dialog,
+                        directory=str(fallback_dir),
+                        save_filename=safe_name,
+                        file_types=('JSON Backup (*.json)',),
+                    )
+                    if not result:
+                        return {'success': False, 'cancelled': True}
+                    picked = result[0] if isinstance(result, (list, tuple)) else result
+                    if isinstance(picked, str) and picked.strip():
+                        dest_path = Path(picked.strip()).resolve()
+        except Exception:
+            dest_path = None
+
+        if dest_path is None:
+            fallback_dir.mkdir(parents=True, exist_ok=True)
+            dest_path = (fallback_dir / safe_name).resolve()
+
+        if not str(dest_path).lower().endswith('.json'):
+            dest_path = Path(f'{dest_path}.json')
+
+        try:
+            dest_path.parent.mkdir(parents=True, exist_ok=True)
+            dest_path.write_text(json_content, encoding='utf-8')
+            return {'success': True, 'filePath': str(dest_path), 'fileName': dest_path.name}
+        except Exception as exc:
+            return {'success': False, 'error': str(exc)}
+
+    def import_backup(self) -> dict:
+        """Abre un diálogo nativo para seleccionar y validar una copia de seguridad JSON."""
+        fallback_dir = (Path.home() / 'Documents' / 'MHL Music').resolve()
+        try:
+            import webview
+            windows = getattr(webview, 'windows', None)
+            if not windows:
+                return {'success': False, 'error': 'Desktop window not available'}
+            open_dialog = getattr(webview, 'OPEN_DIALOG', None)
+            result = windows[0].create_file_dialog(
+                open_dialog,
+                directory=str(fallback_dir) if fallback_dir.exists() else '',
+                allow_multiple=False,
+                file_types=('JSON Backup (*.json)', 'All files (*.*)'),
+            )
+            if not result:
+                return {'success': False, 'cancelled': True}
+            picked = result[0] if isinstance(result, (list, tuple)) else result
+            src_path = Path(str(picked)).resolve()
+            if not src_path.exists() or not src_path.is_file():
+                return {'success': False, 'error': 'Selected backup file not found'}
+            if src_path.stat().st_size > 10 * 1024 * 1024:
+                return {'success': False, 'error': 'Backup file exceeds 10 MB limit'}
+            raw_text = src_path.read_text(encoding='utf-8')
+            json.loads(raw_text)
+            return {'success': True, 'data': raw_text, 'filePath': str(src_path)}
+        except json.JSONDecodeError:
+            return {'success': False, 'error': 'Corrupt backup JSON'}
+        except Exception as exc:
+            return {'success': False, 'error': str(exc)}
+

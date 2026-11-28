@@ -38,6 +38,9 @@ const App = () => {
       import('@/lib/ytdlpBridge').then(({ checkAndAutoUpdateYtDlpIfOutdated }) => {
         void checkAndAutoUpdateYtDlpIfOutdated();
       });
+      if ('pywebview' in window) {
+        void useAppUpdateStore.getState().checkForUpdate(false);
+      }
     };
     refreshNativeLocale();
     markFrontendReady();
