@@ -253,4 +253,67 @@ describe('official GitHub Android release', () => {
       error: { code: 'NO_COMPATIBLE_APK' },
     });
   });
+
+  it('excludes -exp releases from beta channel while accepting them on experimental channel', async () => {
+    const expManifest = {
+      ...createManifest(),
+      versionName: '1.5.7-exp.1',
+      versionCode: 74,
+      apkAssetName: 'MHL-Music-1.5.7-exp.1.apk',
+    };
+    const expRelease = {
+      ...createRelease(),
+      id: 99,
+      tag_name: 'v1.5.7-exp.1',
+      prerelease: true,
+      assets: [
+        {
+          id: 200,
+          name: 'MHL-Music-Android.json',
+          state: 'uploaded',
+          size: 150,
+          digest: `sha256:${'b'.repeat(64)}`,
+          updated_at: '2026-11-28T05:00:00Z',
+          browser_download_url:
+            'https://github.com/ParaSyteTwo/music-mhl/releases/download/v1.5.7-exp.1/MHL-Music-Android.json',
+        },
+        {
+          id: 201,
+          name: 'MHL-Music-1.5.7-exp.1.apk',
+          state: 'uploaded',
+          size: 170_000_000,
+          digest,
+          updated_at: '2026-11-28T05:00:00Z',
+          browser_download_url:
+            'https://github.com/ParaSyteTwo/music-mhl/releases/download/v1.5.7-exp.1/MHL-Music-1.5.7-exp.1.apk',
+        },
+      ],
+    };
+
+    const betaFetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify([expRelease, createRelease()]), {
+        status: 200,
+        headers: { date: 'Sat, 28 Nov 2026 06:00:00 GMT' },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(createManifest()), { status: 200 }));
+
+    const betaResult = await fetchLatestOfficialAndroidRelease('beta', betaFetchMock);
+    expect(betaResult).toMatchObject({
+      success: true,
+      data: { build: { channel: 'beta', versionName: '1.3.6' } },
+    });
+
+    const expFetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify([expRelease, createRelease()]), {
+        status: 200,
+        headers: { date: 'Sat, 28 Nov 2026 06:00:00 GMT' },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(expManifest), { status: 200 }));
+
+    const expResult = await fetchLatestOfficialAndroidRelease('experimental', expFetchMock);
+    expect(expResult).toMatchObject({
+      success: true,
+      data: { build: { channel: 'experimental', versionName: '1.5.7-exp.1' } },
+    });
+  });
 });

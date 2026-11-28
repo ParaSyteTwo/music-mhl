@@ -137,6 +137,24 @@ function normalizeDigest(value: string | null): Sha256Digest | null {
     : null;
 }
 
+export function isExperimentalReleaseTag(tagName: string): boolean {
+  return /-(?:exp(?:\.|$)|experimental\b)/i.test(tagName.trim());
+}
+
+function selectReleaseForChannel(
+  releases: unknown[],
+  channel: AppUpdateChannel,
+): unknown {
+  return releases.find((value) => {
+    const candidate = parseRelease(value);
+    if (!candidate || candidate.draft) return false;
+    if (channel === 'beta' && isExperimentalReleaseTag(candidate.tag_name)) {
+      return false;
+    }
+    return true;
+  }) ?? null;
+}
+
 function isOfficialAssetUrl(url: string, tag: string, assetName: string): boolean {
   try {
     const parsed = new URL(url);
@@ -204,10 +222,7 @@ export async function fetchLatestOfficialAndroidRelease(
     const releaseValue = channel === 'stable'
       ? responseValue
       : Array.isArray(responseValue)
-        ? responseValue.find((value) => {
-            const candidate = parseRelease(value);
-            return candidate && !candidate.draft;
-          })
+        ? selectReleaseForChannel(responseValue, channel)
         : null;
     const release = parseRelease(releaseValue);
     if (
@@ -307,7 +322,8 @@ export function parseOfficialAndroidRelease(
   if (
     !release ||
     release.draft ||
-    (channel === 'stable' && release.prerelease)
+    (channel === 'stable' && release.prerelease) ||
+    (channel === 'beta' && isExperimentalReleaseTag(release.tag_name))
   ) {
     return {
       success: false,
@@ -393,7 +409,8 @@ export function parseOfficialDesktopRelease(
   if (
     !release ||
     release.draft ||
-    (channel === 'stable' && release.prerelease)
+    (channel === 'stable' && release.prerelease) ||
+    (channel === 'beta' && isExperimentalReleaseTag(release.tag_name))
   ) {
     return {
       success: false,
@@ -480,10 +497,7 @@ export async function fetchLatestOfficialDesktopRelease(
       channel === 'stable'
         ? responseValue
         : Array.isArray(responseValue)
-          ? responseValue.find((value) => {
-              const candidate = parseRelease(value);
-              return candidate && !candidate.draft;
-            })
+          ? selectReleaseForChannel(responseValue, channel)
           : null;
 
     const parsed = parseOfficialDesktopRelease(releaseValue, channel);

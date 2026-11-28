@@ -11,6 +11,11 @@ import { isPyWebView } from '@/lib/platform';
 import type { AudioPlayer } from '@/lib/openFileBridge';
 import { useAppUpdateStore } from '@/store/appUpdateStore';
 import { getRemainingSafetyDays } from '@/lib/appUpdatePolicy';
+import {
+  exportAppBackup,
+  importAppBackupDesktop,
+  parseAndValidateBackup,
+} from '@/lib/backupBridge';
 
 const isAndroid = Capacitor.getPlatform() === 'android';
 
@@ -77,6 +82,8 @@ export default function SettingsPage() {
   const [showDefaultPlayer, setShowDefaultPlayer] = useState(false);
   const [audioPlayers, setAudioPlayers] = useState<AudioPlayer[]>([]);
   const [loadingPlayers, setLoadingPlayers] = useState(false);
+  const [lastBackupLocation, setLastBackupLocation] = useState<string | null>(null);
+  const [backupBusy, setBackupBusy] = useState(false);
   const appUpdateStatus = useAppUpdateStore((state) => state.status);
 
   const appUpdateError = useAppUpdateStore((state) => state.error);
@@ -594,60 +601,106 @@ export default function SettingsPage() {
             {/* Backup Section */}
             <section>
               <h2 className="text-xs font-mono uppercase tracking-widest text-[#666660] mb-3">{t('backupRestore')}</h2>
-              <div className="p-4 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] flex flex-col gap-4">
+              <div className="p-4 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] flex flex-col gap-3">
                 <p className="text-xs text-[#8A8A8A]">
                   {t('backupDesc')}
                 </p>
+                <p className="text-[11px] text-[#666660]">
+                  {t('backupHowItWorks')}
+                </p>
                 <div className="flex gap-2">
                   <button
-                    onClick={() => {
+                    type="button"
+                    disabled={backupBusy}
+                    onClick={async () => {
                       const state = localStorage.getItem('mhl-store');
-                      if (!state) return;
-                      const blob = new Blob([state], { type: 'application/json' });
-                      const url = URL.createObjectURL(blob);
-                      const a = document.createElement('a');
-                      a.href = url;
-                      a.download = `mhl-music-backup-${new Date().toISOString().split('T')[0]}.json`;
-                      document.body.appendChild(a);
-                      a.click();
-                      document.body.removeChild(a);
-                      URL.revokeObjectURL(url);
+                      if (!state) {
+                        toast.error(t('backupNothingToExport'));
+                        return;
+                      }
+                      setBackupBusy(true);
+                      try {
+                        const res = await exportAppBackup(state);
+                        if (res.cancelled) return;
+                        if (res.success && res.location) {
+                          setLastBackupLocation(res.location);
+                          toast.success(t('backupSavedAt', { location: res.location }));
+                        } else {
+                          toast.error(res.error || t('backupExportFailed'));
+                        }
+                      } finally {
+                        setBackupBusy(false);
+                      }
                     }}
-                    className="flex-1 py-2 rounded-md bg-[#232325] text-xs font-semibold text-[#F5F5F0] border border-[rgba(255,255,255,0.05)] hover:bg-[#2A2A2D]"
+                    className="flex-1 py-2 rounded-md bg-[#232325] text-xs font-semibold text-[#F5F5F0] border border-[rgba(255,255,255,0.05)] hover:bg-[#2A2A2D] disabled:opacity-50"
                   >
                     {t('exportBackup')}
                   </button>
-                  <label className="flex-1 cursor-pointer">
-                    <div className="w-full text-center py-2 rounded-md bg-[#C8F04B] text-xs font-semibold text-[#18181A] hover:bg-[#d4f56a]">
-                      {t('importBackup')}
-                    </div>
-                    <input
-                      type="file"
-                      accept=".json"
-                      className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-                        const reader = new FileReader();
-                        reader.onload = (event) => {
-                          try {
-                            const data = event.target?.result as string;
-                            const parsed = JSON.parse(data);
-                            if (parsed && parsed.state && parsed.state.downloads) {
-                              localStorage.setItem('mhl-store', data);
-                              window.location.reload();
-                            } else {
-                              toast.error(t('invalidBackup'));
-                            }
-                          } catch {
-                            toast.error(t('corruptBackup'));
+                  {isPyWebView ? (
+                    <button
+                      type="button"
+                      disabled={backupBusy}
+                      onClick={async () => {
+                        setBackupBusy(true);
+                        try {
+                          const res = await importAppBackupDesktop();
+                          if (res.cancelled) return;
+                          if (!res.success || !res.data) {
+                            toast.error(res.error || t('corruptBackup'));
+                            return;
                           }
-                        };
-                        reader.readAsText(file);
+                          const parsed = parseAndValidateBackup(res.data);
+                          if (parsed.valid === false) {
+                            toast.error(t(parsed.reason === 'corrupt' ? 'corruptBackup' : 'invalidBackup'));
+                            return;
+                          }
+                          localStorage.setItem('mhl-store', parsed.normalized);
+                          toast.success(t('backupRestored', { count: parsed.trackCount }));
+                          window.setTimeout(() => window.location.reload(), 600);
+                        } finally {
+                          setBackupBusy(false);
+                        }
                       }}
-                    />
-                  </label>
+                      className="flex-1 py-2 rounded-md bg-[#C8F04B] text-xs font-semibold text-[#18181A] hover:bg-[#d4f56a] disabled:opacity-50"
+                    >
+                      {t('importBackup')}
+                    </button>
+                  ) : (
+                    <label className="flex-1 cursor-pointer">
+                      <div className="w-full text-center py-2 rounded-md bg-[#C8F04B] text-xs font-semibold text-[#18181A] hover:bg-[#d4f56a]">
+                        {t('importBackup')}
+                      </div>
+                      <input
+                        type="file"
+                        accept="application/json,text/plain,.json,*/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          e.target.value = '';
+                          if (!file) return;
+                          const reader = new FileReader();
+                          reader.onload = (event) => {
+                            const data = event.target?.result as string;
+                            const parsed = parseAndValidateBackup(data);
+                            if (parsed.valid === false) {
+                              toast.error(t(parsed.reason === 'corrupt' ? 'corruptBackup' : 'invalidBackup'));
+                              return;
+                            }
+                            localStorage.setItem('mhl-store', parsed.normalized);
+                            toast.success(t('backupRestored', { count: parsed.trackCount }));
+                            window.setTimeout(() => window.location.reload(), 600);
+                          };
+                          reader.readAsText(file);
+                        }}
+                      />
+                    </label>
+                  )}
                 </div>
+                {lastBackupLocation && (
+                  <p className="text-[11px] text-[#C8F04B] break-all">
+                    {t('backupSavedAt', { location: lastBackupLocation })}
+                  </p>
+                )}
               </div>
             </section>
           </div>
@@ -816,7 +869,11 @@ export default function SettingsPage() {
               </p>
               <p className="text-xs text-[#8A8A8A] mt-1">
                 {t('updateChannelActive', {
-                  channel: updateChannel === 'beta' ? t('updateChannelBeta') : t('updateChannelStable'),
+                  channel: updateChannel === 'experimental'
+                    ? t('updateChannelExperimental')
+                    : updateChannel === 'beta'
+                      ? t('updateChannelBeta')
+                      : t('updateChannelStable'),
                 })}
                 {remoteBuild ? ` · ${t('remoteVersion', { version: remoteBuild.versionName })}` : ''}
               </p>
@@ -906,8 +963,8 @@ export default function SettingsPage() {
               )}
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-2 mt-2">
-            {(['stable', 'beta'] as const).map((channel) => (
+          <div className="grid grid-cols-3 gap-2 mt-2">
+            {(['stable', 'beta', 'experimental'] as const).map((channel) => (
               <button
                 key={channel}
                 type="button"
@@ -924,12 +981,20 @@ export default function SettingsPage() {
                     : 'bg-[#18181A] border border-[#232325] text-[#8A8A8A]'
                 }`}
               >
-                {channel === 'stable' ? t('updateChannelStable') : t('updateChannelBeta')}
+                {channel === 'experimental'
+                  ? t('updateChannelExperimental')
+                  : channel === 'beta'
+                    ? t('updateChannelBeta')
+                    : t('updateChannelStable')}
               </button>
             ))}
           </div>
           <p className="text-xs text-[#666660] mt-2">
-            {updateChannel === 'beta' ? t('updateChannelBetaHelp') : t('updateChannelStableHelp')}
+            {updateChannel === 'experimental'
+              ? t('updateChannelExperimentalHelp')
+              : updateChannel === 'beta'
+                ? t('updateChannelBetaHelp')
+                : t('updateChannelStableHelp')}
           </p>
         </section>
       )}
