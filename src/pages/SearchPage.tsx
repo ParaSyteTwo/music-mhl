@@ -873,7 +873,7 @@ export default function SearchPage() {
             spellCheck="false"
           />
           {isSearching || isLoadingCollection ? (
-            <Loader2 className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#C8F04B] animate-spin" />
+            <Loader2 className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--accent-primary)] animate-spin" />
           ) : query ? (
             <button
               onMouseDown={(e) => {
@@ -893,7 +893,7 @@ export default function SearchPage() {
             <button
               type="button"
               onClick={handlePasteFromClipboard}
-              className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-[#6E6E68] hover:text-[#C8F04B] hover:bg-white/[0.06] transition-colors"
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-[#6E6E68] hover:text-[var(--accent-primary)] hover:bg-white/[0.06] transition-colors"
               title={t('pasteFromClipboard')}
               aria-label={t('pasteLink')}
             >
@@ -1010,7 +1010,7 @@ export default function SearchPage() {
             exit={{ opacity: 0, y: -6 }}
             className="mb-4 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] p-5 flex items-center justify-center gap-2.5 text-xs text-[#A0A098]"
           >
-            <Loader2 className="w-4 h-4 text-[#C8F04B] animate-spin" />
+            <Loader2 className="w-4 h-4 text-[var(--accent-primary)] animate-spin" />
             <span>{t('resolvingCollection')}</span>
           </motion.div>
         ) : null}
@@ -1040,7 +1040,7 @@ export default function SearchPage() {
                 <button
                   type="button"
                   onClick={handleBackToAnimeResults}
-                  className="inline-flex items-center gap-1.5 text-[11px] text-[#999] hover:text-[#C8F04B] transition-colors mb-3"
+                  className="inline-flex items-center gap-1.5 text-[11px] text-[#999] hover:text-[var(--accent-primary)] transition-colors mb-3"
                 >
                   <ArrowLeft className="w-3 h-3" />
                   {t('search')}
@@ -1091,7 +1091,7 @@ export default function SearchPage() {
                           onClick={() => setSelectedSeasonNumber(season.seasonNumber)}
                           className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium whitespace-nowrap transition-colors flex-shrink-0 ${
                             isActive
-                              ? 'bg-[#C8F04B] text-[#080808] font-semibold'
+                              ? 'bg-[var(--accent-primary)] text-[#080808] font-semibold'
                               : 'bg-white/[0.04] text-[#A0A098] border border-[rgba(255,255,255,0.06)] hover:text-[#F5F5F0] hover:bg-white/[0.07]'
                           }`}
                         >
@@ -1118,7 +1118,7 @@ export default function SearchPage() {
                       onClick={() => setSelectedSeasonNumber(null)}
                       className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium whitespace-nowrap transition-colors flex-shrink-0 ${
                         selectedSeasonNumber === null
-                          ? 'bg-[#C8F04B] text-[#080808] font-semibold'
+                          ? 'bg-[var(--accent-primary)] text-[#080808] font-semibold'
                           : 'bg-white/[0.04] text-[#A0A098] border border-[rgba(255,255,255,0.06)] hover:text-[#F5F5F0] hover:bg-white/[0.07]'
                       }`}
                     >
@@ -1152,7 +1152,7 @@ export default function SearchPage() {
                           activeSeasonCover,
                         )
                       }
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#C8F04B] text-[#080808] hover:bg-[#d4f56a] active:scale-[0.98] text-[11px] font-semibold transition-all"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--accent-primary)] text-[#080808] hover:opacity-90 active:scale-[0.98] text-[11px] font-semibold transition-all"
                     >
                       <Download className="w-3.5 h-3.5" />
                       <span>{t('animeDownloadSeason', { n: displayedAnimeThemes.length })}</span>
@@ -1202,7 +1202,7 @@ export default function SearchPage() {
 
                   {isLoadingThemes && (
                     <div className="flex justify-center py-4">
-                      <Loader2 className="w-5 h-5 text-[#C8F04B] animate-spin" />
+                      <Loader2 className="w-5 h-5 text-[var(--accent-primary)] animate-spin" />
                     </div>
                   )}
 
@@ -1280,14 +1280,14 @@ export default function SearchPage() {
                           className="w-full h-full object-cover"
                         />
                       ) : (
-                        <div className="w-full h-full bg-gradient-to-br from-[#C8F04B]/20 to-[#8BC34A]/10 flex items-center justify-center">
+                        <div className="w-full h-full bg-gradient-to-br from-[var(--accent-primary)]/20 to-[var(--accent-secondary)]/10 flex items-center justify-center">
                           <Music className={`text-[#666660] ${isFeatured ? 'w-12 h-12' : 'w-8 h-8'}`} />
                         </div>
                       )}
                       <div className={`absolute inset-0 bg-black/50 flex items-center justify-center transition-opacity ${
                         isCurrent ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
                       }`}>
-                        <div className="w-10 h-10 rounded-full bg-[#C8F04B] flex items-center justify-center">
+                        <div className="w-10 h-10 rounded-full bg-[var(--accent-primary)] flex items-center justify-center">
                           {isCurrent && isPlaying ? (
                             <Pause className="w-5 h-5 text-[#080808] fill-current" />
                           ) : (
@@ -1302,7 +1302,7 @@ export default function SearchPage() {
                                 e.stopPropagation();
                                 void handleOpenAlbum(track.albumId!);
                               }}
-                              className="p-2 rounded-lg bg-black/60 text-[#A0A098] hover:text-[#C8F04B] hover:bg-black/80 transition-colors shadow-md flex items-center justify-center"
+                              className="p-2 rounded-lg bg-black/60 text-[#A0A098] hover:text-[var(--accent-primary)] hover:bg-black/80 transition-colors shadow-md flex items-center justify-center"
                               aria-label={t('viewAlbum')}
                               title={t('viewAlbum')}
                             >
@@ -1327,11 +1327,11 @@ export default function SearchPage() {
                             disabled={downloading || bestResolving}
                             className={`p-2 rounded-lg transition-all shadow-md flex items-center justify-center ${
                               downloading
-                                ? 'bg-black/60 text-[#C8F04B]'
+                                ? 'bg-black/60 text-[var(--accent-primary)]'
                                 : downloaded
-                                  ? 'bg-[#C8F04B]/20 text-[#C8F04B]'
+                                  ? 'bg-[var(--accent-primary)]/20 text-[var(--accent-primary)]'
                                   : isNativeProduct && bestCandidate
-                                    ? 'bg-[#C8F04B] text-[#18181A] hover:bg-[#d4f56a] hover:scale-105'
+                                    ? 'bg-[var(--accent-primary)] text-[#18181A] hover:opacity-90 hover:scale-105'
                                     : 'bg-black/60 text-white hover:bg-black/80'
                             }`}
                             title={downloaded ? t('downloadComplete') : isNativeProduct && bestCandidate ? t('downloadBestMatch') : t('downloadMp3')}
@@ -1339,7 +1339,7 @@ export default function SearchPage() {
                             {downloading || bestResolving ? (
                               <Loader2 className="w-4 h-4 animate-spin" />
                             ) : downloaded ? (
-                              <CheckCircle className="w-4 h-4 text-[#C8F04B]" />
+                              <CheckCircle className="w-4 h-4 text-[var(--accent-primary)]" />
                             ) : isNativeProduct && bestCandidate ? (
                               <Zap className="w-4 h-4 fill-current" />
                             ) : (
@@ -1367,12 +1367,12 @@ export default function SearchPage() {
                       )}
                     </div>
                     <div className="p-2.5">
-                      <p className={`text-sm font-medium truncate ${isCurrent ? 'text-[#C8F04B]' : 'text-[#F5F5F0]'}`}>
+                      <p className={`text-sm font-medium truncate ${isCurrent ? 'text-[var(--accent-primary)]' : 'text-[#F5F5F0]'}`}>
                         {track.title}
                       </p>
                       <p className="text-xs text-[#666660] truncate">{track.artist}</p>
                       {resolutionState && (
-                        <p className={`text-[10px] mt-1 ${resolutionState === 'verified' ? 'text-[#C8F04B]' : 'text-[#777]'}`}>
+                        <p className={`text-[10px] mt-1 ${resolutionState === 'verified' ? 'text-[var(--accent-primary)]' : 'text-[#777]'}`}>
                           {t(`candidateState${resolutionState[0].toUpperCase()}${resolutionState.slice(1)}`)}
                         </p>
                       )}
@@ -1405,7 +1405,7 @@ export default function SearchPage() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: reduceResultMotion ? 0 : Math.min(i, 6) * 0.02 }}
                     className={`flex items-center gap-2.5 px-2 py-2 rounded-lg transition-colors group ${
-                      isCurrent ? 'bg-[rgba(200,240,75,0.08)]' : 'hover:bg-[rgba(255,255,255,0.04)] active:bg-[rgba(255,255,255,0.06)]'
+                      isCurrent ? 'bg-[var(--accent-primary)]/[0.08]' : 'hover:bg-[rgba(255,255,255,0.04)] active:bg-[rgba(255,255,255,0.06)]'
                     }`}
                     onClick={() => playTrack(track)}
                   >
@@ -1419,7 +1419,7 @@ export default function SearchPage() {
                           className="w-full h-full object-cover"
                         />
                       ) : (
-                        <div className="w-full h-full bg-gradient-to-br from-[#C8F04B]/20 to-[#8BC34A]/10 flex items-center justify-center">
+                        <div className="w-full h-full bg-gradient-to-br from-[var(--accent-primary)]/20 to-[var(--accent-secondary)]/10 flex items-center justify-center">
                           <Music className="w-5 h-5 text-[#666660]" />
                         </div>
                       )}
@@ -1439,12 +1439,12 @@ export default function SearchPage() {
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className={`text-[13px] font-medium truncate ${isCurrent ? 'text-[#C8F04B]' : 'text-[#F5F5F0]'}`}>
+                      <p className={`text-[13px] font-medium truncate ${isCurrent ? 'text-[var(--accent-primary)]' : 'text-[#F5F5F0]'}`}>
                         {track.title}
                       </p>
                       <p className="text-[11px] text-[#666660] truncate">{track.artist}</p>
                       {resolutionState && (
-                        <p className={`text-[9px] ${resolutionState === 'verified' ? 'text-[#C8F04B]' : 'text-[#777]'}`}>
+                        <p className={`text-[9px] ${resolutionState === 'verified' ? 'text-[var(--accent-primary)]' : 'text-[#777]'}`}>
                           {t(`candidateState${resolutionState[0].toUpperCase()}${resolutionState.slice(1)}`)}
                         </p>
                       )}
@@ -1460,7 +1460,7 @@ export default function SearchPage() {
                             e.stopPropagation();
                             void handleOpenAlbum(track.albumId!);
                           }}
-                          className="p-2 rounded-xl text-[#8E8E88] hover:text-[#C8F04B] active:text-[#C8F04B] bg-white/[0.04] transition-colors flex items-center justify-center min-w-[38px] min-h-[38px]"
+                          className="p-2 rounded-xl text-[#8E8E88] hover:text-[var(--accent-primary)] active:text-[var(--accent-primary)] bg-white/[0.04] transition-colors flex items-center justify-center min-w-[38px] min-h-[38px]"
                           aria-label={t('viewAlbum')}
                           title={t('viewAlbum')}
                         >
@@ -1485,12 +1485,12 @@ export default function SearchPage() {
                         disabled={downloading || bestResolving}
                         className={`p-2.5 rounded-xl transition-all min-w-[44px] min-h-[44px] flex items-center justify-center shadow-sm active:scale-95 ${
                           downloading
-                            ? 'text-[#C8F04B] cursor-wait bg-white/[0.04]'
+                            ? 'text-[var(--accent-primary)] cursor-wait bg-white/[0.04]'
                             : downloaded
-                              ? 'text-[#C8F04B] bg-[#C8F04B]/10'
+                              ? 'text-[var(--accent-primary)] bg-[var(--accent-primary)]/10'
                               : isNativeProduct && bestCandidate
-                                ? 'bg-[#C8F04B] text-[#18181A] active:bg-[#d4f56a]'
-                                : 'text-[#8E8E88] hover:text-[#C8F04B] active:text-[#C8F04B] bg-white/[0.04]'
+                                ? 'bg-[var(--accent-primary)] text-[#18181A] active:opacity-90'
+                                : 'text-[#8E8E88] hover:text-[var(--accent-primary)] active:text-[var(--accent-primary)] bg-white/[0.04]'
                         }`}
                         title={downloaded ? t('downloadComplete') : isNativeProduct && bestCandidate ? t('downloadBestMatch') : t('downloadMp3')}
                       >

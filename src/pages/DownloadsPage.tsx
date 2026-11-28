@@ -39,18 +39,18 @@ function ActiveDownloadCard({ dl, t }: { dl: Download; t: (key: string) => strin
     <motion.div
       initial={{ opacity: 0, y: -6 }}
       animate={{ opacity: 1, y: 0 }}
-      className="p-4 rounded-xl bg-[rgba(200,240,75,0.04)] border border-[rgba(200,240,75,0.15)] shadow-sm"
+      className="p-4 rounded-xl bg-[var(--accent-primary)]/[0.04] border border-[var(--accent-primary)]/20 shadow-sm theme-card"
     >
       <div className="flex items-start gap-3 mb-3">
         <div className="relative flex-shrink-0">
           {dl.track.cover ? (
             <img src={dl.track.cover} alt="" className="w-11 h-11 rounded-lg object-cover" />
           ) : (
-            <div className="w-11 h-11 rounded-lg bg-[rgba(200,240,75,0.1)] flex items-center justify-center">
-              <Music className="w-5 h-5 text-[#C8F04B]" />
+            <div className="w-11 h-11 rounded-lg bg-[var(--accent-primary)]/10 flex items-center justify-center">
+              <Music className="w-5 h-5 text-[var(--accent-primary)]" />
             </div>
           )}
-          <span className="absolute -inset-0.5 rounded-lg border border-[#C8F04B]/30 animate-pulse" />
+          <span className="absolute -inset-0.5 rounded-lg border border-[var(--accent-primary)]/30 animate-pulse" />
         </div>
 
         <div className="flex-1 min-w-0">
@@ -68,7 +68,7 @@ function ActiveDownloadCard({ dl, t }: { dl: Download; t: (key: string) => strin
         <div className="flex-shrink-0 text-right min-w-[64px]">
           {showSpeedInfo && dl.speed ? (
             <>
-              <p className="text-xs font-mono text-[#C8F04B] flex items-center justify-end gap-1">
+              <p className="text-xs font-mono text-[var(--accent-primary)] flex items-center justify-end gap-1">
                 <Zap className="w-3 h-3" />
                 {dl.speed}
               </p>
@@ -77,7 +77,7 @@ function ActiveDownloadCard({ dl, t }: { dl: Download; t: (key: string) => strin
               ) : null}
             </>
           ) : (
-            <Loader2 className="w-4 h-4 text-[#C8F04B] animate-spin ml-auto" />
+            <Loader2 className="w-4 h-4 text-[var(--accent-primary)] animate-spin ml-auto" />
           )}
         </div>
       </div>
@@ -87,9 +87,7 @@ function ActiveDownloadCard({ dl, t }: { dl: Download; t: (key: string) => strin
           <motion.div
             className="absolute inset-y-0 left-0 rounded-full"
             style={{
-              background: dl.progress >= 80
-                ? 'linear-gradient(90deg, #C8F04B, #a8d930)'
-                : 'linear-gradient(90deg, #C8F04B, #e8ff7b)',
+              background: 'linear-gradient(90deg, var(--accent-primary), var(--accent-secondary))',
             }}
             animate={{ width: `${dl.progress}%` }}
             transition={{ duration: 0.4, ease: 'easeOut' }}
@@ -117,14 +115,14 @@ function ActiveDownloadCard({ dl, t }: { dl: Download; t: (key: string) => strin
                 className="w-1.5 h-1.5 rounded-full transition-colors duration-300"
                 style={{
                   backgroundColor: dl.progress >= step.threshold
-                    ? '#C8F04B'
+                    ? 'var(--accent-primary)'
                     : 'rgba(255,255,255,0.12)',
                 }}
                 title={step.label}
               />
             ))}
           </div>
-          <span className="text-xs font-mono tabular-nums text-[#C8F04B]">{dl.progress}%</span>
+          <span className="text-xs font-mono tabular-nums text-[var(--accent-primary)]">{dl.progress}%</span>
         </div>
       </div>
     </motion.div>
@@ -204,7 +202,7 @@ export default function DownloadsPage() {
                 </div>
                 <button
                   onClick={() => startDownload(dl.track)}
-                  className="text-xs font-semibold text-[#C8F04B] hover:underline px-2.5 py-1.5 min-h-[44px] flex items-center"
+                  className="text-xs font-semibold text-[var(--accent-primary)] hover:underline px-2.5 py-1.5 min-h-[44px] flex items-center"
                 >
                   {t('retry')}
                 </button>
@@ -229,12 +227,12 @@ export default function DownloadsPage() {
                 key={dl.id}
                 className="flex items-center gap-2.5 sm:gap-3 px-3 py-2.5 rounded-xl bg-white/[0.02] border border-white/[0.05] hover:bg-white/[0.04] hover:border-white/[0.1] active:bg-white/[0.06] transition-colors group"
               >
-                <CheckCircle className="w-4 h-4 text-[#C8F04B] shrink-0" />
+                <CheckCircle className="w-4 h-4 text-[var(--accent-primary)] shrink-0" />
                 <div className="w-9 h-9 sm:w-8 sm:h-8 rounded-lg overflow-hidden shrink-0 border border-white/10">
                   {dl.track.cover ? (
                     <img src={dl.track.cover} alt="" className="w-full h-full object-cover" />
                   ) : (
-                    <div className="w-full h-full bg-[rgba(200,240,75,0.1)] flex items-center justify-center">
+                    <div className="w-full h-full bg-[var(--accent-primary)]/10 flex items-center justify-center">
                       <Music className="w-3 h-3 text-[#9E9E98]" />
                     </div>
                   )}
@@ -247,7 +245,7 @@ export default function DownloadsPage() {
                 
                 <button
                   onClick={() => startDownload(dl.track)}
-                  className="p-2 text-[#666660] hover:text-[#C8F04B] active:text-[#C8F04B] transition-colors sm:opacity-0 sm:group-hover:opacity-100 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                  className="p-2 text-[#666660] hover:text-[var(--accent-primary)] active:text-[var(--accent-primary)] transition-colors sm:opacity-0 sm:group-hover:opacity-100 min-h-[44px] min-w-[44px] flex items-center justify-center"
                   title={t('retry')}
                 >
                   <RefreshCw className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
@@ -256,7 +254,7 @@ export default function DownloadsPage() {
                 {(dl.mediaUri || dl.fileName) && (
                   <button
                     onClick={() => void openDownloadedFile(dl.fileName, dl.mediaUri, preferredPlayerPackage ?? undefined)}
-                    className="px-2.5 py-2 text-[#C8F04B] hover:text-[#e6ff8a] transition-colors min-h-[44px] flex items-center gap-1.5"
+                    className="px-2.5 py-2 text-[var(--accent-primary)] hover:opacity-80 transition-opacity min-h-[44px] flex items-center gap-1.5"
                     title={t('openInPlayer')}
                   >
                     <ExternalLink className="w-4 h-4" />
@@ -290,7 +288,7 @@ export default function DownloadsPage() {
           transition={{ duration: 1.2, repeat: Infinity, repeatType: 'reverse', ease: 'easeInOut' }}
           className="text-center py-12 sm:py-16 space-y-3"
         >
-          <Music className="w-20 h-20 text-[#C8F04B]/60 mx-auto" />
+          <Music className="w-20 h-20 text-[var(--accent-primary)]/60 mx-auto" />
           <p className="text-sm text-[#B0B0B0]">{t('noDownloadsYet')}</p>
         </motion.div>
       )}

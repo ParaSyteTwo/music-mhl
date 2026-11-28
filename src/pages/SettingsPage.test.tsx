@@ -37,12 +37,12 @@ describe('SettingsPage', () => {
     expect(screen.getAllByText(/Settings|Ajustes/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Language|Idioma/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Appearance & Themes|Apariencia & Temas/i)).toBeDefined();
-    expect(screen.getByText(/Downloads & audio|Descargas y audio/i)).toBeDefined();
+    expect(screen.getAllByText(/Downloads & audio|Descargas y audio/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/^Lyrics$|^Letras$/i)).toBeDefined();
     expect(screen.getByText(/Backup & restore|Backup y restaurar/i)).toBeDefined();
     expect(screen.getByText(/App updates|Actualizaciones de la aplicación/i)).toBeDefined();
     expect(screen.getByText(/Advanced options|Opciones avanzadas/i)).toBeDefined();
-    expect(screen.getByText(/MHL Music ·/i)).toBeDefined();
+    expect(screen.getByText(/Developed by Paul|Desarrollado por Paul/i)).toBeDefined();
   });
 
   it('can open appearance accordion and show themes', () => {
@@ -57,7 +57,8 @@ describe('SettingsPage', () => {
 
   it('can open downloads accordion to configure format, player on Android, and anime mode', async () => {
     render(<SettingsPage />);
-    const downloadsBtn = screen.getByText(/Downloads & audio|Descargas y audio/i).closest('button');
+    const downloadNodes = screen.getAllByText(/Downloads & audio|Descargas y audio/i);
+    const downloadsBtn = downloadNodes.map((n) => n.closest('button')).find(Boolean) ?? null;
     expect(downloadsBtn).not.toBeNull();
     fireEvent.click(downloadsBtn!);
 

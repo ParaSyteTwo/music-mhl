@@ -98,8 +98,8 @@ export function BottomPlayer() {
           WebkitBackdropFilter: 'blur(32px) saturate(180%)',
           height: 'var(--player-height)',
           background: dominantColor
-            ? `linear-gradient(90deg, rgba(${dominantColor}, 0.18), rgba(12, 12, 14, 0.92))`
-            : 'rgba(12, 12, 14, 0.92)',
+            ? `linear-gradient(90deg, rgba(${dominantColor}, 0.18), color-mix(in srgb, var(--bg-surface) 92%, transparent))`
+            : 'color-mix(in srgb, var(--bg-surface) 92%, transparent)',
           transition: 'background 800ms ease',
         }}
       >

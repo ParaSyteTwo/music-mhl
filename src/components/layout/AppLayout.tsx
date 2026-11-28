@@ -5,6 +5,7 @@ import { useI18n } from '@/lib/useI18n';
 import { useMusicStore } from '@/store/musicStore';
 import { getTheme } from '@/lib/themes/themeCatalog';
 import { AppUpdateNotice } from '@/components/updates/AppUpdateNotice';
+import { ThemeBackdrop } from './ThemeBackdrop';
 
 export function AppLayout() {
   const { t } = useI18n();
@@ -17,6 +18,7 @@ export function AppLayout() {
   return (
     <div className="relative isolate flex flex-col h-[100dvh] bg-background overflow-hidden">
       <div className="app-ambient fixed inset-0 z-0 pointer-events-none" aria-hidden="true" />
+      <ThemeBackdrop themeId={theme.id} />
 
       {/* Theme ambient atmospheric aura */}
       <div
@@ -42,8 +44,10 @@ export function AppLayout() {
 
       {/* Desktop top nav */}
       <nav
-        className="hidden sm:flex sticky top-0 z-30 items-center gap-6 px-8 bg-[rgba(8,8,8,0.9)] border-b border-[rgba(255,255,255,0.06)] flex-shrink-0"
+        className="hidden sm:flex sticky top-0 z-30 items-center gap-6 px-8 border-b flex-shrink-0 transition-colors duration-300"
         style={{
+          backgroundColor: 'color-mix(in srgb, var(--bg-surface) 86%, transparent)',
+          borderColor: 'var(--border-subtle)',
           backdropFilter: 'blur(12px)',
           paddingTop: 'calc(var(--sat) + 8px)',
           paddingBottom: '8px',
@@ -84,8 +88,10 @@ export function AppLayout() {
 
       {/* Mobile bottom tab bar */}
       <nav
-        className="sm:hidden fixed bottom-0 left-0 right-0 z-50 bg-[rgba(8,8,8,0.97)] border-t border-[rgba(255,255,255,0.06)] flex flex-shrink-0"
+        className="sm:hidden fixed bottom-0 left-0 right-0 z-50 border-t flex flex-shrink-0 transition-colors duration-300"
         style={{
+          backgroundColor: 'color-mix(in srgb, var(--bg-surface) 94%, transparent)',
+          borderColor: 'var(--border-subtle)',
           backdropFilter: 'blur(12px)',
           paddingBottom: 'var(--sab)',
           height: 'calc(var(--nav-height) + var(--sab))',
