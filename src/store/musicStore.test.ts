@@ -24,6 +24,7 @@ vi.mock('@/lib/audioEngine', () => ({
     load: vi.fn(),
     play: vi.fn(() => Promise.resolve()),
     pause: vi.fn(),
+    clear: vi.fn(),
     seek: vi.fn(),
     setVolume: vi.fn(),
     updateMediaSession: vi.fn(),

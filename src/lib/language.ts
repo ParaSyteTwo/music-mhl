@@ -1,6 +1,8 @@
-export type Lang = 'es' | 'en';
+export type Lang = 'es' | 'en' | 'pt' | 'fr' | 'de' | 'it' | 'ja';
 export type UiLanguageMode = 'system' | Lang;
 export type LyricsTargetLanguage = 'system' | Lang;
+
+export const SUPPORTED_LANGUAGES: readonly Lang[] = ['es', 'en', 'pt', 'fr', 'de', 'it', 'ja'];
 
 let nativeLocale: string | null = null;
 
@@ -19,8 +21,9 @@ export function getBrowserLanguages(): readonly string[] {
 
 export function resolveSystemLanguage(languages: readonly string[] = getBrowserLanguages()): Lang {
   const primary = languages.find(Boolean)?.toLowerCase() ?? '';
-  if (primary.startsWith('es')) return 'es';
-  if (primary.startsWith('en')) return 'en';
+  for (const lang of SUPPORTED_LANGUAGES) {
+    if (primary.startsWith(lang)) return lang;
+  }
   return 'en';
 }
 
@@ -32,7 +35,7 @@ export function resolveEffectiveLanguage(
 }
 
 export function isUiLanguageMode(value: unknown): value is UiLanguageMode {
-  return value === 'system' || value === 'es' || value === 'en';
+  return value === 'system' || (typeof value === 'string' && (SUPPORTED_LANGUAGES as readonly string[]).includes(value));
 }
 
 export function isLyricsTargetLanguage(value: unknown): value is LyricsTargetLanguage {

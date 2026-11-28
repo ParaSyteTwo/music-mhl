@@ -79,6 +79,7 @@ def test_apply_desktop_update_downloads_and_spawns_helper(monkeypatch):
 
 def test_open_file_blocks_dangerous_executables(tmp_path, monkeypatch):
     bridge = Bridge()
+    monkeypatch.setattr('bridge.settings', {'download_folder': str(tmp_path)})
     fake_exe = tmp_path / 'payload.exe'
     fake_exe.write_text('MZ dummy executable', encoding='utf-8')
 
@@ -89,6 +90,7 @@ def test_open_file_blocks_dangerous_executables(tmp_path, monkeypatch):
 
 def test_open_file_allows_safe_media_files(tmp_path, monkeypatch):
     bridge = Bridge()
+    monkeypatch.setattr('bridge.settings', {'download_folder': str(tmp_path)})
     fake_mp3 = tmp_path / 'song.mp3'
     fake_mp3.write_text('ID3 dummy audio', encoding='utf-8')
 

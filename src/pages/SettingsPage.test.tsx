@@ -66,6 +66,20 @@ describe('SettingsPage', () => {
     expect(screen.getByText(/MP3 320k/i)).toBeDefined();
     expect(await screen.findByText(/Ask every time|Preguntar siempre/i)).toBeDefined();
     expect(screen.getByRole('switch', { name: /anime/i })).toBeDefined();
+    const videoclipsSwitch = screen.getByRole('switch', { name: /Videoclips|Videoclipes/i });
+    expect(videoclipsSwitch).toBeDefined();
+    fireEvent.click(videoclipsSwitch);
+    expect(screen.getByText('720p')).toBeDefined();
+  });
+
+  it('allows selecting among the 7 supported languages via dropdown', () => {
+    render(<SettingsPage />);
+    const langSelect = screen.getByLabelText(/Language|Idioma/i) as HTMLSelectElement;
+    expect(langSelect.tagName).toBe('SELECT');
+    expect(langSelect.options.length).toBe(8);
+    fireEvent.change(langSelect, { target: { value: 'ja' } });
+    expect(langSelect.value).toBe('ja');
+    fireEvent.change(langSelect, { target: { value: 'es' } });
   });
 
   it('can open lyrics accordion with all lyric toggles and translation target language', () => {

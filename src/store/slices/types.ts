@@ -1,4 +1,11 @@
 import { Track, Download, DownloadAudioFormat } from '@/types/music';
+import type {
+  VideoCodecPreference,
+  VideoDownloadItem,
+  VideoQuality,
+  VideoSearchResult,
+} from '@/types/video';
+import type { ParsedLyrics } from '@/lib/lyricsParser';
 import { UiLanguageMode, LyricsTargetLanguage } from '@/lib/language';
 import { EditionPreference } from '@/lib/download/candidateResolver';
 import { AppThemeId } from '@/lib/themes/themeCatalog';
@@ -8,6 +15,8 @@ export type CellularResolutionPolicy = 'off' | 'light' | 'full';
 
 export interface PlayerSlice {
   currentTrack: Track | null;
+  currentLyrics: ParsedLyrics | null;
+  isLocalPlayback: boolean;
   isPlaying: boolean;
   isLoading: boolean;
   volume: number;
@@ -16,6 +25,7 @@ export interface PlayerSlice {
   dominantColor: string | null;
 
   playTrack: (track: Track) => void;
+  playDownloadedTrack: (dl: Download) => Promise<void>;
   togglePlay: () => void;
   setVolume: (v: number) => void;
   seekTo: (time: number) => void;
@@ -74,6 +84,7 @@ export interface SettingsSlice {
   lyricLatinOnly: boolean;
   lyricsTargetLanguage: LyricsTargetLanguage;
   animeSearchEnabled: boolean;
+  videoclipsEnabled: boolean;
   autoCandidateResolution: boolean;
   resolutionProfile: ResolutionProfile;
   cellularResolutionPolicy: CellularResolutionPolicy;
@@ -94,6 +105,7 @@ export interface SettingsSlice {
   setLyricLatinOnly: (v: boolean) => void;
   setLyricsTargetLanguage: (v: LyricsTargetLanguage) => void;
   setAnimeSearchEnabled: (v: boolean) => void;
+  setVideoclipsEnabled: (v: boolean) => void;
   setAutoCandidateResolution: (v: boolean) => void;
   setResolutionProfile: (v: ResolutionProfile) => void;
   setCellularResolutionPolicy: (v: CellularResolutionPolicy) => void;
@@ -106,4 +118,24 @@ export interface SettingsSlice {
   setYtDlpUpdating: (v: boolean) => void;
 }
 
-export interface MusicStore extends PlayerSlice, SearchSlice, DownloadSlice, SettingsSlice {}
+export interface VideoSlice {
+  videoQuality: VideoQuality;
+  videoCodec: VideoCodecPreference;
+  videoDownloads: VideoDownloadItem[];
+  videoDownloadQueue: string[];
+  activeVideoDownloads: number;
+
+  setVideoQuality: (quality: VideoQuality) => void;
+  setVideoCodec: (codec: VideoCodecPreference) => void;
+  startVideoDownload: (video: VideoSearchResult) => void;
+  removeVideoDownload: (id: string) => void;
+  clearCompletedVideoDownloads: () => void;
+  processVideoDownloadQueue: () => void;
+}
+
+export interface MusicStore
+  extends PlayerSlice,
+    SearchSlice,
+    DownloadSlice,
+    SettingsSlice,
+    VideoSlice {}

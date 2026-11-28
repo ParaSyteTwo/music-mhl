@@ -1,5 +1,6 @@
 import { registerPlugin, Capacitor } from '@capacitor/core';
 import type { PluginListenerHandle } from '@capacitor/core';
+import type { Lang } from '@/lib/language';
 
 export interface YtDlpSearchResult {
   videoId: string;
@@ -59,9 +60,10 @@ interface YtDlpPluginInterface {
   initialize(): Promise<{ success: boolean }>;
   update(): Promise<{ success: boolean; status: string }>;
   getVersion(): Promise<{ success: boolean; version: string }>;
-  search(options: { query: string; limit?: number; source?: 'youtube_music' | 'youtube'; enrich?: boolean }): Promise<{ success: boolean; results: YtDlpSearchResult[] }>;
+  search(options: { query: string; limit?: number; source?: 'youtube_music' | 'youtube'; enrich?: boolean; lang?: Lang }): Promise<{ success: boolean; results: YtDlpSearchResult[] }>;
   getPlaylistItems(options: { url: string; limit?: number }): Promise<{ success: boolean; title?: string; items: YtDlpPlaylistItem[] }>;
   downloadAudio(options: { videoId?: string; sourceUrl?: string; expectedDuration?: number; format?: 'm4a' | 'mp3'; skipBase64?: boolean; downloadId?: string }): Promise<{ success: boolean; data?: string; tempPath?: string; size: number; fileName?: string }>;
+  downloadVideo(options: { videoId: string; quality?: '720p' | '1080p' | 'best'; codec?: 'av1' | 'h264'; fileName?: string; downloadId?: string }): Promise<{ success: boolean; uri: string; fileName: string; size: number }>;
   cleanupTempAudio(options: { tempPath: string }): Promise<{ success: boolean }>;
   saveTaggedAudioToMusic(options: { fileName: string; data: string }): Promise<{ success: boolean; uri: string }>;
   tagAndSaveM4A(options: TagAndSaveOptions): Promise<{ success: boolean; uri: string }>;
@@ -96,7 +98,7 @@ export async function initYtDlp(): Promise<boolean> {
 export async function searchYouTubeNative(
   query: string,
   limit = 5,
-  options?: { source?: 'youtube_music' | 'youtube'; enrich?: boolean },
+  options?: { source?: 'youtube_music' | 'youtube'; enrich?: boolean; lang?: Lang },
 ): Promise<YtDlpSearchResult[]> {
   if (!initialized) await initYtDlp();
   try {
@@ -193,6 +195,38 @@ export async function downloadAudioToTempNative(
   };
 }
 
+export async function downloadVideoNative(
+  videoId: string,
+  opts?: {
+    quality?: '720p' | '1080p' | 'best';
+    codec?: 'av1' | 'h264';
+    fileName?: string;
+    downloadId?: string;
+  },
+): Promise<{ uri: string; fileName: string; size: number }> {
+  if (!Capacitor.isNativePlatform()) {
+    throw new Error('Not on native platform');
+  }
+  if (!initialized) await initYtDlp();
+
+  const result = await YtDlp.downloadVideo({
+    videoId,
+    ...(opts?.quality ? { quality: opts.quality } : {}),
+    ...(opts?.codec ? { codec: opts.codec } : {}),
+    ...(opts?.fileName ? { fileName: opts.fileName } : {}),
+    ...(opts?.downloadId ? { downloadId: opts.downloadId } : {}),
+  });
+
+  if (!result || !result.uri) {
+    throw new Error('Video download failed');
+  }
+  return {
+    uri: result.uri,
+    fileName: result.fileName,
+    size: result.size,
+  };
+}
+
 export async function cleanupTempAudioNative(tempPath: string): Promise<void> {
   if (!tempPath || !Capacitor.isNativePlatform()) return;
   if (!initialized) await initYtDlp();
@@ -216,9 +250,7 @@ export async function getYtDlpVersion(): Promise<string> {
       const api = (window as any).pywebview?.api;
       if (api?.ytdlp_get_version) {
         const res = await api.ytdlp_get_version();
-        if (res?.success && res.version) {
-          return res.version;
-        }
+        return res?.success && res.version ? res.version : 'unknown';
       }
     } catch {
       return 'unknown';
@@ -250,7 +282,7 @@ export async function updateYtDlp(): Promise<string> {
   return r.status;
 }
 
-export function isYtDlpVersionOutdated(versionStr: string, thresholdDays = 30): boolean {
+export function isYtDlpVersionOutdated(versionStr: string, thresholdDays = 14): boolean {
   if (!versionStr || versionStr === 'unknown') return false;
   const match = versionStr.match(/(\d{4})\.(\d{2})\.(\d{2})/);
   if (!match) return false;
@@ -263,7 +295,7 @@ export function isYtDlpVersionOutdated(versionStr: string, thresholdDays = 30): 
 export async function checkAndAutoUpdateYtDlpIfOutdated(): Promise<boolean> {
   try {
     const version = await getYtDlpVersion();
-    if (isYtDlpVersionOutdated(version, 30)) {
+    if (isYtDlpVersionOutdated(version, 14)) {
       if (import.meta.env.DEV) console.log(`[yt-dlp] Outdated version detected (${version}). Starting auto-update...`);
       const status = await updateYtDlp();
       if (import.meta.env.DEV) console.log(`[yt-dlp] Auto-update finished with status: ${status}`);

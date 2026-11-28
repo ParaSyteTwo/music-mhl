@@ -99,6 +99,12 @@ class AudioEngine {
     this.audio.pause();
   }
 
+  clear() {
+    this.audio.pause();
+    this.audio.removeAttribute('src');
+    this.audio.load();
+  }
+
   seek(time: number) {
     if (typeof time === 'number' && !isNaN(time) && isFinite(time) && time >= 0) {
       this.audio.currentTime = time;

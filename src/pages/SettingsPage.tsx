@@ -19,8 +19,9 @@ import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { useMusicStore } from '@/store/musicStore';
 import { useI18n } from '@/lib/useI18n';
-import type { LyricsTargetLanguage, UiLanguageMode } from '@/lib/language';
+import { SUPPORTED_LANGUAGES, type LyricsTargetLanguage, type UiLanguageMode } from '@/lib/language';
 import { APP_THEMES, getTheme } from '@/lib/themes/themeCatalog';
+import { VideoSettingsCard } from '@/components/settings/VideoSettingsCard';
 import { Capacitor } from '@capacitor/core';
 import { isPyWebView } from '@/lib/platform';
 import type { AudioPlayer } from '@/lib/openFileBridge';
@@ -33,6 +34,17 @@ import {
 } from '@/lib/backupBridge';
 
 const isAndroid = Capacitor.getPlatform() === 'android';
+
+const LANGUAGE_OPTION_KEYS: Record<UiLanguageMode, string> = {
+  system: 'languageSystem',
+  es: 'languageSpanish',
+  en: 'languageEnglish',
+  pt: 'languagePortuguese',
+  fr: 'languageFrench',
+  de: 'languageGerman',
+  it: 'languageItalian',
+  ja: 'languageJapanese',
+};
 
 function ToggleSwitch({
   checked,
@@ -149,6 +161,7 @@ export default function SettingsPage() {
     lyricLatinOnly, setLyricLatinOnly,
     uiLanguageMode, setUiLanguageMode,
     animeSearchEnabled, setAnimeSearchEnabled,
+    videoclipsEnabled, setVideoclipsEnabled,
     lyricsTargetLanguage, setLyricsTargetLanguage,
     autoCandidateResolution, setAutoCandidateResolution,
     resolutionProfile, setResolutionProfile,
@@ -196,7 +209,7 @@ export default function SettingsPage() {
         const { getYtDlpVersion, isYtDlpVersionOutdated } = await import('@/lib/ytdlpBridge');
         const version = await getYtDlpVersion();
         setYtDlpVersion(version);
-        setYtDlpUpdateAvailable(isYtDlpVersionOutdated(version, 30));
+        setYtDlpUpdateAvailable(isYtDlpVersionOutdated(version, 14));
       } catch { /* silencioso */ }
     })();
   }, [setYtDlpVersion, setYtDlpUpdateAvailable]);
@@ -233,8 +246,12 @@ export default function SettingsPage() {
       const status = await updateYtDlp();
       const newVersion = await getYtDlpVersion();
       setYtDlpVersion(newVersion);
-      setYtDlpUpdateAvailable(false);
-      setUpdateStatus(status === 'DONE' ? 'done' : 'skipped');
+      if (status === 'FAILED') {
+        setUpdateStatus('error');
+      } else {
+        setYtDlpUpdateAvailable(false);
+        setUpdateStatus(status === 'DONE' ? 'done' : 'skipped');
+      }
     } catch {
       setUpdateStatus('error');
     } finally {
@@ -332,26 +349,18 @@ export default function SettingsPage() {
               <p className="text-xs text-[#8E8E88] truncate">{t('languageHelp')}</p>
             </div>
           </div>
-          <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-white/[0.04] border border-white/[0.06] self-start sm:self-center flex-shrink-0">
-            {([
-              ['system', t('languageSystem')],
-              ['es', t('languageSpanish')],
-              ['en', t('languageEnglish')],
-            ] as Array<[UiLanguageMode, string]>).map(([mode, label]) => (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => setUiLanguageMode(mode)}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                  uiLanguageMode === mode
-                    ? 'bg-[var(--accent-primary)] text-[#18181A]'
-                    : 'text-[#A0A098] hover:text-[#F5F5F0]'
-                }`}
-              >
-                {label}
-              </button>
+          <select
+            aria-label={t('language')}
+            value={uiLanguageMode}
+            onChange={(e) => setUiLanguageMode(e.target.value as UiLanguageMode)}
+            className="px-3 py-2 rounded-xl bg-[#1A1A1F] text-[#F5F5F0] border border-white/[0.08] text-xs font-semibold outline-none focus:border-[var(--accent-primary)] transition-colors self-start sm:self-center flex-shrink-0 cursor-pointer"
+          >
+            {(['system', ...SUPPORTED_LANGUAGES] as UiLanguageMode[]).map((mode) => (
+              <option key={mode} value={mode} className="bg-[#141418] text-[#F5F5F0]">
+                {t(LANGUAGE_OPTION_KEYS[mode])}
+              </option>
             ))}
-          </div>
+          </select>
         </section>
 
         {/* Apariencia & Temas con Galería Viva */}
@@ -654,6 +663,25 @@ export default function SettingsPage() {
                 label={t('animeToggleTitle')}
               />
             </div>
+
+            {/* Modo Videoclips MP4 (opt-in explícito) */}
+            <div className="flex items-center justify-between gap-3 pt-2.5 border-t border-white/[0.06]">
+              <div className="min-w-0">
+                <p className="text-xs sm:text-sm font-semibold text-[#F5F5F0]">{t('videoclipsToggleTitle')}</p>
+                <p className="text-xs text-[#8E8E88] mt-0.5">{t('videoclipsToggleDesc')}</p>
+              </div>
+              <ToggleSwitch
+                checked={videoclipsEnabled}
+                onChange={setVideoclipsEnabled}
+                label={t('videoclipsToggleTitle')}
+              />
+            </div>
+
+            {videoclipsEnabled && (
+              <div className="pt-2.5 border-t border-white/[0.06]">
+                <VideoSettingsCard />
+              </div>
+            )}
           </div>
         </AccordionCard>
 
@@ -703,27 +731,19 @@ export default function SettingsPage() {
 
               <div className={`transition-opacity ${lyricTranslation ? 'opacity-100' : 'opacity-45 pointer-events-none'}`}>
                 <p className="text-xs text-[#8E8E88] mb-1.5">{t('lyricsTargetLanguage')}</p>
-                <div className="grid grid-cols-3 gap-2">
-                  {([
-                    ['system', t('languageSystem')],
-                    ['es', t('languageSpanish')],
-                    ['en', t('languageEnglish')],
-                  ] as Array<[LyricsTargetLanguage, string]>).map(([mode, label]) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      disabled={!lyricTranslation}
-                      onClick={() => setLyricsTargetLanguage(mode)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                        lyricsTargetLanguage === mode
-                          ? 'bg-[var(--accent-primary)] text-[#18181A]'
-                          : 'bg-[rgba(255,255,255,0.04)] text-[#B0B0B0] hover:text-[#F5F5F0]'
-                      }`}
-                    >
-                      {label}
-                    </button>
+                <select
+                  aria-label={t('lyricsTargetLanguage')}
+                  disabled={!lyricTranslation}
+                  value={lyricsTargetLanguage}
+                  onChange={(e) => setLyricsTargetLanguage(e.target.value as LyricsTargetLanguage)}
+                  className="w-full sm:w-auto px-3 py-2 rounded-xl bg-[#1A1A1F] text-[#F5F5F0] border border-white/[0.08] text-xs font-semibold outline-none focus:border-[var(--accent-primary)] transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  {(['system', ...SUPPORTED_LANGUAGES] as LyricsTargetLanguage[]).map((mode) => (
+                    <option key={mode} value={mode} className="bg-[#141418] text-[#F5F5F0]">
+                      {t(LANGUAGE_OPTION_KEYS[mode])}
+                    </option>
                   ))}
-                </div>
+                </select>
               </div>
             </div>
           </div>

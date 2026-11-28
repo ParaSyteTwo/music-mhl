@@ -1,8 +1,12 @@
 import { useState } from 'react';
 import { useMusicStore } from '@/store/musicStore';
-import { CheckCircle, Loader2, XCircle, Music, Trash2, Clock, ExternalLink, Zap, RefreshCw } from 'lucide-react';
+import { CheckCircle, Loader2, XCircle, Music, Trash2, Clock, ExternalLink, Zap, RefreshCw, Play } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { toast } from 'sonner';
+import { Capacitor } from '@capacitor/core';
+import { isPyWebView } from '@/lib/platform';
 import { openDownloadedFile } from '@/lib/openFileBridge';
+import { checkMissingLocalDownloads } from '@/lib/localAudioBridge';
 import type { Download } from '@/types/music';
 import { useI18n } from '@/lib/useI18n';
 
@@ -131,10 +135,38 @@ function ActiveDownloadCard({ dl, t }: { dl: Download; t: (key: string) => strin
 
 export default function DownloadsPage() {
   const { t } = useI18n();
-  const { downloads, startDownload, removeDownload, preferredPlayerPackage } = useMusicStore();
+  const {
+    downloads,
+    startDownload,
+    startBatchDownload,
+    removeDownload,
+    preferredPlayerPackage,
+    playDownloadedTrack,
+    currentTrack,
+    isLoading,
+  } = useMusicStore();
 
   const completed = [...downloads].filter((d) => d.status === 'completed').reverse();
   const [showAllCompleted, setShowAllCompleted] = useState(false);
+  const [checkingMissing, setCheckingMissing] = useState(false);
+
+  const canCheckLocal = isPyWebView || Capacitor.isNativePlatform();
+
+  const handleCheckMissing = async () => {
+    if (checkingMissing || completed.length === 0) return;
+    setCheckingMissing(true);
+    try {
+      const missing = await checkMissingLocalDownloads(completed);
+      if (missing.length === 0) {
+        toast.success(t('allDownloadsPresent'));
+      } else {
+        const res = startBatchDownload(missing.map((d) => d.track));
+        toast.success(t('redownloadingMissing', { count: res.queued || missing.length }));
+      }
+    } finally {
+      setCheckingMissing(false);
+    }
+  };
   const active = downloads.filter((d) => d.status === 'downloading');
   const queued = downloads.filter((d) => d.status === 'queued');
   const failed = downloads.filter((d) => d.status === 'error');
@@ -220,7 +252,20 @@ export default function DownloadsPage() {
 
       {completed.length > 0 && (
         <section className="mb-8">
-          <h2 className="text-xs font-mono uppercase tracking-widest text-[#9E9E98] mb-3">{t('completed')}</h2>
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <h2 className="text-xs font-mono uppercase tracking-widest text-[#9E9E98]">{t('completed')}</h2>
+            {canCheckLocal && (
+              <button
+                type="button"
+                onClick={() => void handleCheckMissing()}
+                disabled={checkingMissing}
+                className="text-xs font-medium px-2.5 py-1.5 rounded-lg bg-[rgba(255,255,255,0.04)] hover:bg-[rgba(255,255,255,0.08)] border border-[rgba(255,255,255,0.08)] text-[#D5D5CE] flex items-center gap-1.5 transition-colors disabled:opacity-50"
+              >
+                {checkingMissing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                <span>{checkingMissing ? t('checkingMissingDownloads') : t('checkMissingDownloads')}</span>
+              </button>
+            )}
+          </div>
           <div className="space-y-1.5">
             {(showAllCompleted ? completed : completed.slice(0, 2)).map((dl) => (
               <div
@@ -250,6 +295,19 @@ export default function DownloadsPage() {
                 >
                   <RefreshCw className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                 </button>
+
+                {(dl.mediaUri || dl.fileName) && (
+                  <button
+                    type="button"
+                    disabled={isLoading && currentTrack?.id === dl.track.id}
+                    onClick={() => void playDownloadedTrack(dl)}
+                    className="px-2.5 py-2 text-[#F5F5F0] hover:text-[var(--accent-primary)] disabled:opacity-40 transition-colors min-h-[44px] flex items-center gap-1.5"
+                    title={t('playLocal')}
+                    aria-label={t('playLocal')}
+                  >
+                    <Play className="w-4 h-4 fill-current" />
+                  </button>
+                )}
 
                 {(dl.mediaUri || dl.fileName) && (
                   <button

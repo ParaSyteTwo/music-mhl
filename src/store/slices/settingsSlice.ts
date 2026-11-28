@@ -31,6 +31,8 @@ export const createSettingsSlice: StateCreator<
 
   animeSearchEnabled: false,
   setAnimeSearchEnabled: (v) => set({ animeSearchEnabled: v }),
+  videoclipsEnabled: false,
+  setVideoclipsEnabled: (v) => set({ videoclipsEnabled: v }),
   autoCandidateResolution: true,
   resolutionProfile: 'adaptive',
   cellularResolutionPolicy: 'light',

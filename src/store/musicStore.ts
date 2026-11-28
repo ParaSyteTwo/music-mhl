@@ -5,6 +5,7 @@ import { createPlayerSlice } from './slices/playerSlice';
 import { createSearchSlice } from './slices/searchSlice';
 import { createDownloadSlice } from './slices/downloadSlice';
 import { createSettingsSlice } from './slices/settingsSlice';
+import { createVideoSlice } from './slices/videoSlice';
 import { audioEngine } from '@/lib/audioEngine';
 import { isUiLanguageMode, isLyricsTargetLanguage, Lang } from '@/lib/language';
 import { applyThemeToDOM } from '@/lib/themes/themeCatalog';
@@ -61,6 +62,7 @@ export const useMusicStore = create<MusicStore>()(
         ...createSearchSlice(set, get, api),
         ...createDownloadSlice(set, get, api),
         ...createSettingsSlice(set, get, api),
+        ...createVideoSlice(set, get, api),
       };
     },
     {
@@ -79,6 +81,7 @@ export const useMusicStore = create<MusicStore>()(
         lyricLatinOnly: state.lyricLatinOnly,
         lyricsTargetLanguage: state.lyricsTargetLanguage,
         animeSearchEnabled: state.animeSearchEnabled,
+        videoclipsEnabled: state.videoclipsEnabled,
         autoCandidateResolution: state.autoCandidateResolution,
         resolutionProfile: state.resolutionProfile,
         cellularResolutionPolicy: state.cellularResolutionPolicy,
@@ -86,7 +89,14 @@ export const useMusicStore = create<MusicStore>()(
         mostDownloadedArtists: state.mostDownloadedArtists,
         preferredPlayerPackage: state.preferredPlayerPackage,
         autoDownload: state.autoDownload,
+        downloadAudioFormat: state.downloadAudioFormat,
+        allowLongAudioDownloads: state.allowLongAudioDownloads,
         appTheme: state.appTheme,
+        videoQuality: state.videoQuality,
+        videoCodec: state.videoCodec,
+        videoDownloads: state.videoDownloads
+          .filter((d) => d.status === 'completed' || d.status === 'error')
+          .slice(0, 40),
       }),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       merge: (persisted: any, current) => {
@@ -111,6 +121,7 @@ export const useMusicStore = create<MusicStore>()(
             ? persisted.lyricsTargetLanguage
             : 'system',
           animeSearchEnabled: persisted?.animeSearchEnabled ?? false,
+          videoclipsEnabled: persisted?.videoclipsEnabled ?? false,
           autoCandidateResolution: persisted?.autoCandidateResolution ?? true,
           resolutionProfile: persisted?.resolutionProfile === 'economy' || persisted?.resolutionProfile === 'adaptive'
             ? persisted.resolutionProfile
@@ -124,6 +135,24 @@ export const useMusicStore = create<MusicStore>()(
           mostDownloadedArtists: persisted?.mostDownloadedArtists ?? [],
           preferredPlayerPackage: persisted?.preferredPlayerPackage ?? null,
           autoDownload: persisted?.autoDownload ?? true,
+          downloadAudioFormat:
+            persisted?.downloadAudioFormat === 'mp3' || persisted?.downloadAudioFormat === 'm4a'
+              ? persisted.downloadAudioFormat
+              : 'm4a',
+          allowLongAudioDownloads: Boolean(persisted?.allowLongAudioDownloads ?? false),
+          videoQuality:
+            persisted?.videoQuality === '720p' ||
+            persisted?.videoQuality === '1080p' ||
+            persisted?.videoQuality === 'best'
+              ? persisted.videoQuality
+              : '1080p',
+          videoCodec:
+            persisted?.videoCodec === 'av1' || persisted?.videoCodec === 'h264'
+              ? persisted.videoCodec
+              : 'av1',
+          videoDownloads: Array.isArray(persisted?.videoDownloads)
+            ? persisted.videoDownloads
+            : [],
           _hasHydrated: true,
         };
       },

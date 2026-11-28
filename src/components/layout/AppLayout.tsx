@@ -1,6 +1,6 @@
 import { Outlet, NavLink } from 'react-router-dom';
 import { BottomPlayer } from './BottomPlayer';
-import { Search, Download, Settings } from 'lucide-react';
+import { Search, Download, Settings, Film } from 'lucide-react';
 import { useI18n } from '@/lib/useI18n';
 import { useMusicStore } from '@/store/musicStore';
 import { getTheme } from '@/lib/themes/themeCatalog';
@@ -13,6 +13,7 @@ export function AppLayout() {
   const dominantColor = useMusicStore((s) => s.dominantColor);
   const currentTrack = useMusicStore((s) => s.currentTrack);
   const appTheme = useMusicStore((s) => s.appTheme);
+  const videoclipsEnabled = useMusicStore((s) => s.videoclipsEnabled);
   const theme = getTheme(appTheme);
 
   return (
@@ -65,6 +66,11 @@ export function AppLayout() {
         <NavLink to="/downloads" className={({ isActive }) => `flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors ${isActive ? 'text-[var(--accent-primary)] bg-[var(--accent-primary)]/10' : 'text-[#999] hover:text-[#F5F5F0]'}`}>
           <Download className="w-4 h-4" /> {t('downloads')}
         </NavLink>
+        {videoclipsEnabled && (
+          <NavLink to="/videos" className={({ isActive }) => `flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors ${isActive ? 'text-[var(--accent-primary)] bg-[var(--accent-primary)]/10' : 'text-[#999] hover:text-[#F5F5F0]'}`}>
+            <Film className="w-4 h-4" /> {t('videos')}
+          </NavLink>
+        )}
         <NavLink to="/settings" className={({ isActive }) => `flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors ${isActive ? 'text-[var(--accent-primary)] bg-[var(--accent-primary)]/10' : 'text-[#999] hover:text-[#F5F5F0]'}`}>
           <Settings className="w-4 h-4" /> {t('settings')}
         </NavLink>
@@ -110,6 +116,12 @@ export function AppLayout() {
             </span>
           )}
         </NavLink>
+        {videoclipsEnabled && (
+          <NavLink to="/videos" className={({ isActive }) => `flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors min-h-[44px] ${isActive ? 'text-[var(--accent-primary)] bg-[var(--accent-primary)]/10' : 'text-[#666]'}`}>
+            <Film className="w-5 h-5" />
+            <span className="text-[10px] font-medium">{t('videos')}</span>
+          </NavLink>
+        )}
         <NavLink to="/settings" className={({ isActive }) => `flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors min-h-[44px] ${isActive ? 'text-[var(--accent-primary)] bg-[var(--accent-primary)]/10' : 'text-[#666]'}`}>
           <Settings className="w-5 h-5" />
           <span className="text-[10px] font-medium">{t('settings')}</span>

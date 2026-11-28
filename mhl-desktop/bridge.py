@@ -24,7 +24,7 @@ from urllib.parse import parse_qs, quote_plus, urljoin, urlparse
 # CREATE_NO_WINDOW para evitar popup de consola en Windows
 CREATE_NO_WINDOW = 0x08000000 if sys.platform == 'win32' else 0
 
-APP_VERSION = '1.5.7-beta.3'
+APP_VERSION = '1.5.7-beta.4'
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -2174,6 +2174,432 @@ class Bridge:
 
     # ── Filesystem helpers ────────────────────────────────────────────────────
 
+    def read_local_audio(self, file_name: str) -> dict:
+        """Lee un archivo de audio local dentro de download_folder para reproducción + letras."""
+        if not isinstance(file_name, str) or not file_name.strip():
+            return {'success': False, 'error': 'Invalid file name'}
+        clean_name = file_name.strip()
+        try:
+            root = Path(settings.get(
+                'download_folder',
+                str(Path.home() / 'Music' / 'MHL Music'),
+            )).resolve()
+            candidate = Path(clean_name)
+            target = (candidate.resolve() if candidate.is_absolute() else (root / clean_name).resolve())
+            try:
+                target.relative_to(root)
+            except ValueError:
+                return {'success': False, 'error': 'Path outside download folder'}
+
+            if not target.exists() or not target.is_file():
+                return {'success': False, 'error': 'File not found'}
+
+            allowed_audio_exts = {'.m4a', '.mp3', '.aac', '.ogg', '.opus', '.flac', '.wav'}
+            ext = target.suffix.lower()
+            if ext not in allowed_audio_exts:
+                return {'success': False, 'error': 'Unsupported audio extension'}
+
+            max_bytes = 64 * 1024 * 1024
+            size = target.stat().st_size
+            if size <= 0 or size > max_bytes:
+                return {'success': False, 'error': 'Audio file size out of safe bounds'}
+
+            raw_bytes = target.read_bytes()
+            mime_map = {
+                '.m4a': 'audio/mp4',
+                '.mp3': 'audio/mpeg',
+                '.aac': 'audio/aac',
+                '.ogg': 'audio/ogg',
+                '.opus': 'audio/opus',
+                '.flac': 'audio/flac',
+                '.wav': 'audio/wav',
+            }
+            lyrics_text = ''
+            try:
+                import mutagen
+                audio_file = mutagen.File(str(target))
+                if audio_file is not None and audio_file.tags is not None:
+                    lyr = audio_file.tags.get('\xa9lyr')
+                    if isinstance(lyr, list) and lyr:
+                        lyrics_text = str(lyr[0] or '')
+                    elif lyr:
+                        lyrics_text = str(lyr)
+                    if not lyrics_text:
+                        for tag_key, tag_val in audio_file.tags.items():
+                            if str(tag_key).startswith('USLT'):
+                                text_val = getattr(tag_val, 'text', None)
+                                if text_val:
+                                    lyrics_text = str(text_val)
+                                    break
+            except Exception:
+                lyrics_text = ''
+
+            if not lyrics_text:
+                lrc_path = target.with_suffix('.lrc')
+                if lrc_path.exists() and lrc_path.is_file():
+                    try:
+                        lyrics_text = lrc_path.read_text(encoding='utf-8', errors='replace')
+                    except Exception:
+                        pass
+
+            return {
+                'success': True,
+                'mime': mime_map.get(ext, 'audio/mp4'),
+                'data_b64': base64.b64encode(raw_bytes).decode('ascii'),
+                'lyrics': lyrics_text,
+            }
+        except Exception as exc:
+            return {'success': False, 'error': str(exc)}
+
+    def check_local_files(self, file_names: list) -> dict:
+        """Comprueba cuáles nombres de archivo ya no existen en download_folder."""
+        if not isinstance(file_names, list):
+            return {'success': False, 'error': 'Invalid file list'}
+        root = Path(settings.get(
+            'download_folder',
+            str(Path.home() / 'Music' / 'MHL Music'),
+        )).resolve()
+        missing: list[str] = []
+        for entry in file_names[:500]:
+            if not isinstance(entry, str) or not entry.strip():
+                continue
+            clean_name = entry.strip()
+            try:
+                candidate = Path(clean_name)
+                target = candidate.resolve() if candidate.is_absolute() else (root / clean_name).resolve()
+                target.relative_to(root)
+                if not target.exists() or not target.is_file():
+                    missing.append(entry)
+            except Exception:
+                missing.append(entry)
+        return {'success': True, 'missing': missing}
+
+    @staticmethod
+    def _build_video_format_selector(quality: str = '1080p', codec: str = 'av1') -> str:
+        norm_quality = str(quality or '1080p').strip().lower()
+        norm_codec = str(codec or 'av1').strip().lower()
+        h = (
+            '[height<=720]'
+            if norm_quality == '720p'
+            else '[height<=1080]'
+            if norm_quality == '1080p'
+            else ''
+        )
+        if norm_codec == 'av1':
+            return (
+                f'bestvideo[vcodec^=av01]{h}+bestaudio[ext=m4a]/'
+                f'bestvideo[vcodec^=avc1]{h}+bestaudio[ext=m4a]/'
+                f'bestvideo[ext=mp4]{h}+bestaudio[ext=m4a]/'
+                f'best[ext=mp4]{h}/best{h}'
+            )
+        return (
+            f'bestvideo[vcodec^=avc1]{h}+bestaudio[ext=m4a]/'
+            f'bestvideo[ext=mp4]{h}+bestaudio[ext=m4a]/'
+            f'best[ext=mp4]{h}/best{h}'
+        )
+
+    def search_videos(self, query: str, limit: int = 12, lang: str = 'es') -> dict:
+        """Busca videoclips en YouTube devolviendo miniatura 16:9, canal, duración y vistas."""
+        if not isinstance(query, str) or not query.strip():
+            return {'success': False, 'error': 'Empty query'}
+        try:
+            clamped_limit = 12 if isinstance(limit, bool) else min(max(1, int(limit)), 20)
+        except (TypeError, ValueError):
+            clamped_limit = 12
+
+        allowed_langs = {'es', 'en', 'pt', 'fr', 'de', 'it', 'ja'}
+        norm_lang = lang.strip().lower() if isinstance(lang, str) else ''
+        safe_lang = norm_lang if norm_lang in allowed_langs else 'es'
+        clean_query = query.strip()
+        args = [
+            _bin('yt-dlp.exe'),
+            f'ytsearch{clamped_limit}:{clean_query}',
+            '--flat-playlist',
+            '--dump-json',
+            '--skip-download',
+            '--extractor-args', f'youtube:lang={safe_lang}',
+            '--socket-timeout', '12',
+            '--retries', '2',
+            '--quiet',
+            '--no-warnings',
+        ]
+        try:
+            r = subprocess.run(
+                args,
+                capture_output=True,
+                text=True,
+                creationflags=CREATE_NO_WINDOW,
+                timeout=25,
+                encoding='utf-8',
+                errors='replace',
+            )
+            if r.returncode != 0:
+                err_text = (r.stderr or '').strip()
+                if _is_outdated_ytdlp_error(err_text) and self._try_reactive_ytdlp_update():
+                    args[0] = _bin('yt-dlp.exe')
+                    r = subprocess.run(
+                        args,
+                        capture_output=True,
+                        text=True,
+                        creationflags=CREATE_NO_WINDOW,
+                        timeout=25,
+                        encoding='utf-8',
+                        errors='replace',
+                    )
+                if r.returncode != 0:
+                    return {'success': False, 'error': (r.stderr or 'yt-dlp video search failed').strip()}
+
+            results: list[dict] = []
+            for line in (r.stdout or '').splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    d = json.loads(line)
+                except Exception:
+                    continue
+                if not isinstance(d, dict):
+                    continue
+                video_id = str(d.get('id') or d.get('url') or '').strip()
+                if not re.fullmatch(r'[a-zA-Z0-9_-]{11}', video_id):
+                    continue
+                channel = _metadata_text(
+                    d, 'channel', 'uploader', 'artist', 'artists', 'creator',
+                )
+                thumbnail = ''
+                raw_thumb = d.get('thumbnail')
+                if isinstance(raw_thumb, str) and raw_thumb.strip():
+                    thumbnail = raw_thumb.strip()
+                else:
+                    thumbs = d.get('thumbnails')
+                    if isinstance(thumbs, list):
+                        for thumb in reversed(thumbs):
+                            if isinstance(thumb, dict) and isinstance(thumb.get('url'), str) and thumb['url'].strip():
+                                thumbnail = thumb['url'].strip()
+                                break
+                if not thumbnail:
+                    thumbnail = f'https://i.ytimg.com/vi/{video_id}/hqdefault.jpg'
+
+                view_count = d.get('view_count')
+                safe_views = (
+                    int(view_count)
+                    if isinstance(view_count, (int, float)) and not isinstance(view_count, bool) and view_count >= 0
+                    else None
+                )
+                raw_duration = d.get('duration')
+                safe_duration = (
+                    int(round(raw_duration))
+                    if isinstance(raw_duration, (int, float)) and not isinstance(raw_duration, bool) and raw_duration > 0
+                    else 0
+                )
+                results.append({
+                    'videoId': video_id,
+                    'title': str(d.get('title') or '').strip() or video_id,
+                    'channel': channel or 'YouTube',
+                    'duration': safe_duration,
+                    'thumbnail': thumbnail,
+                    'viewCount': safe_views,
+                })
+                if len(results) >= clamped_limit:
+                    break
+            return {'success': True, 'results': results}
+        except subprocess.TimeoutExpired:
+            return {'success': False, 'error': 'Video search timeout'}
+        except Exception as exc:
+            return {'success': False, 'error': str(exc)}
+
+    def get_video_info(self, video_id: str, lang: str = 'es') -> dict:
+        """Obtiene metadatos de un video concreto por video_id validado."""
+        vid = str(video_id or '').strip()
+        if not re.fullmatch(r'[a-zA-Z0-9_-]{11}', vid):
+            return {'success': False, 'error': 'Invalid video_id'}
+
+        allowed_langs = {'es', 'en', 'pt', 'fr', 'de', 'it', 'ja'}
+        norm_lang = lang.strip().lower() if isinstance(lang, str) else ''
+        safe_lang = norm_lang if norm_lang in allowed_langs else 'es'
+        args = [
+            _bin('yt-dlp.exe'),
+            f'https://www.youtube.com/watch?v={vid}',
+            '--dump-single-json',
+            '--skip-download',
+            '--no-playlist',
+            '--extractor-args', f'youtube:lang={safe_lang}',
+            '--socket-timeout', '12',
+            '--retries', '1',
+            '--quiet',
+            '--no-warnings',
+        ]
+        try:
+            r = subprocess.run(
+                args,
+                capture_output=True,
+                text=True,
+                creationflags=CREATE_NO_WINDOW,
+                timeout=20,
+                encoding='utf-8',
+                errors='replace',
+            )
+            if r.returncode != 0:
+                err_text = (r.stderr or '').strip()
+                if _is_outdated_ytdlp_error(err_text) and self._try_reactive_ytdlp_update():
+                    args[0] = _bin('yt-dlp.exe')
+                    r = subprocess.run(
+                        args,
+                        capture_output=True,
+                        text=True,
+                        creationflags=CREATE_NO_WINDOW,
+                        timeout=20,
+                        encoding='utf-8',
+                        errors='replace',
+                    )
+                if r.returncode != 0:
+                    return {'success': False, 'error': (r.stderr or 'yt-dlp info failed').strip()}
+
+            lines = [ln.strip() for ln in (r.stdout or '').splitlines() if ln.strip()]
+            if not lines:
+                return {'success': False, 'error': 'Empty video metadata response'}
+            d = json.loads(lines[-1])
+            channel = _metadata_text(
+                d, 'channel', 'uploader', 'artist', 'artists', 'creator',
+            ) or 'YouTube'
+            thumbnail = str(d.get('thumbnail') or '').strip() or f'https://i.ytimg.com/vi/{vid}/hqdefault.jpg'
+            raw_duration = d.get('duration')
+            safe_duration = (
+                int(round(raw_duration))
+                if isinstance(raw_duration, (int, float)) and not isinstance(raw_duration, bool) and raw_duration > 0
+                else 0
+            )
+            view_count = d.get('view_count')
+            safe_views = (
+                int(view_count)
+                if isinstance(view_count, (int, float)) and not isinstance(view_count, bool) and view_count >= 0
+                else None
+            )
+            return {
+                'success': True,
+                'video': {
+                    'videoId': vid,
+                    'title': str(d.get('title') or '').strip() or vid,
+                    'channel': channel,
+                    'duration': safe_duration,
+                    'thumbnail': thumbnail,
+                    'viewCount': safe_views,
+                },
+            }
+        except subprocess.TimeoutExpired:
+            return {'success': False, 'error': 'Video info timeout'}
+        except Exception as exc:
+            return {'success': False, 'error': str(exc)}
+
+    def download_video(
+        self,
+        video_id: str,
+        quality: str = '1080p',
+        codec: str = 'av1',
+        title: str = '',
+        channel: str = '',
+    ) -> dict:
+        """Descarga un videoclip en MP4 (remux sin recodificar) a ~/Videos/MHL Music."""
+        vid = str(video_id or '').strip()
+        if not re.fullmatch(r'[a-zA-Z0-9_-]{11}', vid):
+            return {'success': False, 'error': 'Invalid video_id'}
+
+        norm_quality = quality.strip().lower() if isinstance(quality, str) else '1080p'
+        if norm_quality not in {'720p', '1080p', 'best'}:
+            norm_quality = '1080p'
+        norm_codec = codec.strip().lower() if isinstance(codec, str) else 'av1'
+        if norm_codec not in {'av1', 'h264'}:
+            norm_codec = 'av1'
+
+        video_root = Path(
+            settings.get('video_download_folder', str(Path.home() / 'Videos' / 'MHL Music')),
+        ).resolve()
+        video_root.mkdir(parents=True, exist_ok=True)
+
+        safe_channel = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', str(channel or '').strip()).strip(' .')
+        safe_title = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', str(title or '').strip()).strip(' .')
+        base_label = f'{safe_channel} - {safe_title}' if safe_channel and safe_title else (safe_title or vid)
+        base_label = base_label[:100].strip(' .-_') or vid
+        stem = f'{base_label} [{norm_quality}]'
+        target_path = (video_root / f'{stem}.mp4').resolve()
+        target_path.relative_to(video_root)
+
+        suffix_idx = 2
+        while target_path.exists():
+            target_path = (video_root / f'{stem} ({suffix_idx}).mp4').resolve()
+            suffix_idx += 1
+
+        temp_path = (video_root / f'.tmp_{uuid.uuid4().hex}.mp4').resolve()
+        format_selector = self._build_video_format_selector(norm_quality, norm_codec)
+        ffmpeg_bin = _bin('ffmpeg.exe')
+        args = [
+            _bin('yt-dlp.exe'),
+            f'https://www.youtube.com/watch?v={vid}',
+            '-f', format_selector,
+            '--merge-output-format', 'mp4',
+            '--ffmpeg-location', ffmpeg_bin,
+            '--no-playlist',
+            '--no-part',
+            '--concurrent-fragments', '4',
+            '--socket-timeout', '20',
+            '--retries', '2',
+            '--fragment-retries', '2',
+            '--add-metadata',
+            '-o', str(temp_path),
+        ]
+        try:
+            r = subprocess.run(
+                args,
+                capture_output=True,
+                text=True,
+                creationflags=CREATE_NO_WINDOW,
+                timeout=300,
+                encoding='utf-8',
+                errors='replace',
+            )
+            if r.returncode != 0:
+                err_text = (r.stderr or '').strip()
+                if _is_outdated_ytdlp_error(err_text) and self._try_reactive_ytdlp_update():
+                    args[0] = _bin('yt-dlp.exe')
+                    r = subprocess.run(
+                        args,
+                        capture_output=True,
+                        text=True,
+                        creationflags=CREATE_NO_WINDOW,
+                        timeout=300,
+                        encoding='utf-8',
+                        errors='replace',
+                    )
+                if r.returncode != 0:
+                    return {'success': False, 'error': (r.stderr or 'yt-dlp video download failed').strip()}
+
+            if not temp_path.exists() or temp_path.stat().st_size == 0:
+                return {'success': False, 'error': 'Downloaded MP4 file not found on disk'}
+
+            final_path = target_path
+            suffix_idx = 2
+            while final_path.exists():
+                final_path = (video_root / f'{stem} ({suffix_idx}).mp4').resolve()
+                suffix_idx += 1
+            temp_path.replace(final_path)
+
+            return {
+                'success': True,
+                'filePath': str(final_path),
+                'fileName': final_path.name,
+                'size': final_path.stat().st_size,
+            }
+        except subprocess.TimeoutExpired:
+            return {'success': False, 'error': 'Video download timeout'}
+        except Exception as exc:
+            return {'success': False, 'error': str(exc)}
+        finally:
+            try:
+                if temp_path.exists():
+                    temp_path.unlink()
+            except Exception:
+                pass
+
     def pick_folder(self) -> str:
         """Abre un diálogo nativo para elegir carpeta (wrapper de webview.windows[0].create_file_dialog)."""
         import webview
@@ -2187,26 +2613,52 @@ class Bridge:
         return ""
 
     def open_file(self, file_path: str) -> dict:
-        """Abre un archivo de audio/carpeta descargada usando la aplicación por defecto del sistema."""
+        """Abre un archivo multimedia descargado usando la aplicación por defecto del sistema."""
+        if not isinstance(file_path, str):
+            return {'success': False, 'error': 'Invalid file path'}
+        clean_input = file_path.strip()
+        if not clean_input or '\x00' in clean_input or clean_input.startswith('\\\\') or clean_input.startswith('//'):
+            return {'success': False, 'error': 'Invalid or unsafe path'}
         try:
             import os
-            target_path = Path(file_path).resolve()
-            if not target_path.exists():
-                root = Path(settings.get('download_folder', str(Path.home() / 'Music' / 'MHL Music'))).resolve()
-                alt_path = (root / file_path).resolve()
-                if alt_path.exists():
-                    target_path = alt_path
-                else:
-                    return {'success': False, 'error': 'File not found'}
+            root = Path(settings.get('download_folder', str(Path.home() / 'Music' / 'MHL Music'))).resolve()
+            video_root = Path(settings.get('video_download_folder', str(Path.home() / 'Videos' / 'MHL Music'))).resolve()
+            allowed_roots = (root, video_root)
 
-            # Validar que no sea un ejecutable o script malicioso
-            if target_path.is_file():
-                allowed_extensions = {
-                    '.mp3', '.m4a', '.wav', '.flac', '.ogg', '.opus', '.aac',
-                    '.lrc', '.txt', '.json', '.jpg', '.jpeg', '.png', '.webp', '.svg',
-                }
-                if target_path.suffix.lower() not in allowed_extensions:
-                    return {'success': False, 'error': 'Security check: File extension not allowed'}
+            def _is_inside_allowed_roots(path_obj: Path) -> bool:
+                for allowed in allowed_roots:
+                    try:
+                        path_obj.relative_to(allowed)
+                        return True
+                    except ValueError:
+                        continue
+                return False
+
+            candidate_raw = Path(clean_input)
+            candidates = (
+                [candidate_raw.resolve()]
+                if candidate_raw.is_absolute()
+                else [(root / clean_input).resolve(), (video_root / clean_input).resolve()]
+            )
+
+            target_path = None
+            for cand in candidates:
+                if _is_inside_allowed_roots(cand) and cand.exists() and cand.is_file():
+                    target_path = cand
+                    break
+
+            if target_path is None:
+                if any(cand.exists() for cand in candidates):
+                    return {'success': False, 'error': 'Path outside download folders or not a file'}
+                return {'success': False, 'error': 'File not found'}
+
+            allowed_extensions = {
+                '.mp3', '.m4a', '.wav', '.flac', '.ogg', '.opus', '.aac',
+                '.mp4', '.mkv', '.webm',
+                '.lrc', '.jpg', '.jpeg', '.png', '.webp',
+            }
+            if target_path.suffix.lower() not in allowed_extensions:
+                return {'success': False, 'error': 'Security check: File extension not allowed'}
 
             # Solo para Windows
             os.startfile(str(target_path))

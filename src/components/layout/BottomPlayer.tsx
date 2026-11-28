@@ -1,9 +1,10 @@
 import { useShallow } from 'zustand/react/shallow';
-import { Play, Pause, Volume2, VolumeX, Loader2 } from 'lucide-react';
+import { Play, Pause, Volume2, VolumeX, Loader2, FileText } from 'lucide-react';
 import { useMusicStore } from '@/store/musicStore';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useState } from 'react';
 import { useI18n } from '@/lib/useI18n';
+import { LyricsDrawer } from '@/components/ui/LyricsDrawer';
 
 function formatTime(seconds: number): string {
   if (!isFinite(seconds) || seconds < 0) return '0:00';
@@ -14,11 +15,39 @@ function formatTime(seconds: number): string {
 
 export function BottomPlayer() {
   const { t } = useI18n();
-  const { currentTrack, isPlaying, isLoading, volume, progress, duration, togglePlay, setVolume, seekTo, dominantColor } = useMusicStore(useShallow(s => ({ currentTrack: s.currentTrack, isPlaying: s.isPlaying, isLoading: s.isLoading, volume: s.volume, progress: s.progress, duration: s.duration, togglePlay: s.togglePlay, setVolume: s.setVolume, seekTo: s.seekTo, dominantColor: s.dominantColor })));
+  const {
+    currentTrack,
+    isPlaying,
+    isLoading,
+    volume,
+    progress,
+    duration,
+    togglePlay,
+    setVolume,
+    seekTo,
+    dominantColor,
+    currentLyrics,
+    isLocalPlayback,
+  } = useMusicStore(useShallow((s) => ({
+    currentTrack: s.currentTrack,
+    isPlaying: s.isPlaying,
+    isLoading: s.isLoading,
+    volume: s.volume,
+    progress: s.progress,
+    duration: s.duration,
+    togglePlay: s.togglePlay,
+    setVolume: s.setVolume,
+    seekTo: s.seekTo,
+    dominantColor: s.dominantColor,
+    currentLyrics: s.currentLyrics,
+    isLocalPlayback: s.isLocalPlayback,
+  })));
   const [hoverProgress, setHoverProgress] = useState(false);
+  const [lyricsOpen, setLyricsOpen] = useState(false);
 
   const progressPercent = duration > 0 ? (progress / duration) * 100 : 0;
   const bottomStyle = 'calc(var(--nav-height) + var(--sab))';
+  const hasLyrics = Boolean(currentLyrics && currentLyrics.lines.length > 0);
 
   if (!currentTrack) return null;
 
@@ -117,14 +146,33 @@ export function BottomPlayer() {
               )}
             </motion.div>
             <div className="min-w-0 flex-1 flex flex-col justify-center">
-              <p className="text-sm sm:text-[15px] font-bold text-[#F5F5F0] truncate tracking-tight">
-                {currentTrack.title}
-              </p>
+              <div className="flex items-center gap-1.5 min-w-0">
+                <p className="text-sm sm:text-[15px] font-bold text-[#F5F5F0] truncate tracking-tight">
+                  {currentTrack.title}
+                </p>
+                {isLocalPlayback && (
+                  <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded bg-[var(--accent-primary)]/15 text-[var(--accent-primary)] flex-shrink-0">
+                    {t('playingLocal')}
+                  </span>
+                )}
+              </div>
               <p className="text-xs sm:text-[13px] text-[#A0A098] truncate font-medium mt-0.5">
                 {currentTrack.artist}
               </p>
             </div>
           </div>
+
+          {hasLyrics && (
+            <button
+              type="button"
+              onClick={() => setLyricsOpen(true)}
+              aria-label={t('syncedLyrics')}
+              title={t('syncedLyrics')}
+              className="p-2 rounded-xl bg-white/[0.06] hover:bg-[var(--accent-primary)]/15 text-[#C8C8C0] hover:text-[var(--accent-primary)] transition-colors flex-shrink-0"
+            >
+              <FileText className="w-4 h-4" />
+            </button>
+          )}
 
           {/* Play/Pause - Micro-interacciones Spring */}
           <motion.button
@@ -189,6 +237,8 @@ export function BottomPlayer() {
           </div>
         </div>
       </div>
+
+      <LyricsDrawer open={lyricsOpen} onClose={() => setLyricsOpen(false)} />
     </>
   );
 }

@@ -12,6 +12,7 @@ import { resolveEffectiveLanguage, setNativeLocale } from "@/lib/language";
 
 const SearchPage = lazy(() => import("./pages/SearchPage"));
 const DownloadsPage = lazy(() => import("./pages/DownloadsPage"));
+const VideosPage = lazy(() => import("./pages/VideosPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 
 function RouteFallback() {
@@ -99,6 +100,7 @@ const App = () => {
           <Route element={<AppLayout />}>
             <Route path="/" element={<SearchPage />} />
             <Route path="/downloads" element={<DownloadsPage />} />
+            <Route path="/videos" element={<VideosPage />} />
             <Route path="/playlists" element={<Navigate to="/downloads" replace />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>

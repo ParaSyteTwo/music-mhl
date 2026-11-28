@@ -1,26 +1,27 @@
 import { describe, expect, it } from 'vitest';
 import { resolveEffectiveLanguage, resolveSystemLanguage, translate } from './i18n';
-import { getBrowserLanguages, setNativeLocale } from './language';
+import { getBrowserLanguages, setNativeLocale, SUPPORTED_LANGUAGES } from './language';
 
 describe('i18n language resolution', () => {
-  it('resolves Spanish system languages to es', () => {
+  it('resolves all 7 supported system languages and falls back others to en', () => {
+    expect(SUPPORTED_LANGUAGES).toEqual(['es', 'en', 'pt', 'fr', 'de', 'it', 'ja']);
     expect(resolveSystemLanguage(['es-ES'])).toBe('es');
     expect(resolveEffectiveLanguage('system', ['es-MX'])).toBe('es');
-  });
-
-  it('resolves English system languages to en', () => {
     expect(resolveSystemLanguage(['en-US'])).toBe('en');
     expect(resolveEffectiveLanguage('system', ['en-GB'])).toBe('en');
+    expect(resolveSystemLanguage(['pt-BR'])).toBe('pt');
+    expect(resolveSystemLanguage(['fr-FR'])).toBe('fr');
+    expect(resolveSystemLanguage(['de-DE'])).toBe('de');
+    expect(resolveSystemLanguage(['it-IT'])).toBe('it');
+    expect(resolveSystemLanguage(['ja-JP'])).toBe('ja');
+    expect(resolveSystemLanguage(['ko-KR'])).toBe('en');
   });
 
-  it('falls back unsupported system languages to en', () => {
-    expect(resolveSystemLanguage(['fr-FR'])).toBe('en');
-    expect(resolveEffectiveLanguage('system', ['ja-JP'])).toBe('en');
-  });
-
-  it('manual override wins over system language', () => {
+  it('manual override wins over system language for any supported locale', () => {
     expect(resolveEffectiveLanguage('es', ['en-US'])).toBe('es');
     expect(resolveEffectiveLanguage('en', ['es-ES'])).toBe('en');
+    expect(resolveEffectiveLanguage('fr', ['es-ES'])).toBe('fr');
+    expect(resolveEffectiveLanguage('ja', ['en-US'])).toBe('ja');
   });
 
   it('prefers the native bridge locale over WebView navigator language', () => {
@@ -41,12 +42,20 @@ describe('i18n language resolution', () => {
     })).toBe('Downloaded: Song - Artist');
   });
 
-  it('translates showMore correctly in English and Spanish', () => {
+  it('translates core keys across all 7 languages', () => {
+    for (const lang of SUPPORTED_LANGUAGES) {
+      expect(translate(lang, 'search')).not.toBe('search');
+      expect(translate(lang, 'downloads')).not.toBe('downloads');
+      expect(translate(lang, 'settings')).not.toBe('settings');
+      expect(translate(lang, 'playLocal')).not.toBe('playLocal');
+      expect(translate(lang, 'checkMissingDownloads')).not.toBe('checkMissingDownloads');
+    }
     expect(translate('es', 'showMore', { count: 4 })).toBe('Ver 4 más');
     expect(translate('en', 'showMore', { count: 4 })).toBe('Show 4 more');
+    expect(translate('ja', 'settings')).toBe('設定');
   });
 
-  it('translates newly added notification and popup keys in both languages', () => {
+  it('translates newly added notification and popup keys in es and en', () => {
     const keys = [
       'searchFallbackCatalog',
       'searchUnstableFallback',
