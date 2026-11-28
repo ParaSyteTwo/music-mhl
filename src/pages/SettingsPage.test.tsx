@@ -32,22 +32,20 @@ vi.mock('@/lib/ytdlpBridge', () => ({
 }));
 
 describe('SettingsPage', () => {
-  it('renders without throwing errors and displays the four main groups plus promoted essentials', () => {
+  it('renders the 7 compact rows and 1-line footer cleanly', () => {
     render(<SettingsPage />);
     expect(screen.getAllByText(/Settings|Ajustes/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Personalization|Personalización/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Downloads & audio|Descargas y audio/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Lyrics|Letras/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/System & advanced|Sistema y avanzado/i).length).toBeGreaterThan(0);
-
-    // Promoted out of Advanced options
-    expect(screen.getByText(/M4A \/ AAC/i)).toBeDefined();
-    expect(screen.getByText(/MP3 320k/i)).toBeDefined();
-    expect(screen.getAllByText(/Anime/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/Backup|Backup y restaurar/i)).toBeDefined();
+    expect(screen.getAllByText(/Language|Idioma/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Appearance & Themes|Apariencia & Temas/i)).toBeDefined();
+    expect(screen.getByText(/Downloads & audio|Descargas y audio/i)).toBeDefined();
+    expect(screen.getByText(/^Lyrics$|^Letras$/i)).toBeDefined();
+    expect(screen.getByText(/Backup & restore|Backup y restaurar/i)).toBeDefined();
+    expect(screen.getByText(/App updates|Actualizaciones de la aplicación/i)).toBeDefined();
+    expect(screen.getByText(/Advanced options|Opciones avanzadas/i)).toBeDefined();
+    expect(screen.getByText(/MHL Music ·/i)).toBeDefined();
   });
 
-  it('can open and close theme accordion and shows themes', () => {
+  it('can open appearance accordion and show themes', () => {
     render(<SettingsPage />);
     const appearanceBtn = screen.getByText(/Appearance & Themes|Apariencia/i).closest('button');
     expect(appearanceBtn).not.toBeNull();
@@ -57,9 +55,21 @@ describe('SettingsPage', () => {
     expect(screen.getByText(/Matrix Terminal/i)).toBeDefined();
   });
 
-  it('can open unified lyrics accordion with all lyric toggles and translation target selector', () => {
+  it('can open downloads accordion to configure format, player on Android, and anime mode', async () => {
     render(<SettingsPage />);
-    const lyricsBtn = screen.getByText(/Original, romanization|Original, romanización/i).closest('button');
+    const downloadsBtn = screen.getByText(/Downloads & audio|Descargas y audio/i).closest('button');
+    expect(downloadsBtn).not.toBeNull();
+    fireEvent.click(downloadsBtn!);
+
+    expect(screen.getByText(/M4A \/ AAC/i)).toBeDefined();
+    expect(screen.getByText(/MP3 320k/i)).toBeDefined();
+    expect(await screen.findByText(/Ask every time|Preguntar siempre/i)).toBeDefined();
+    expect(screen.getByRole('switch', { name: /anime/i })).toBeDefined();
+  });
+
+  it('can open lyrics accordion with all lyric toggles and translation target language', () => {
+    render(<SettingsPage />);
+    const lyricsBtn = screen.getByText(/^Lyrics$|^Letras$/i).closest('button');
     expect(lyricsBtn).not.toBeNull();
     fireEvent.click(lyricsBtn!);
 
@@ -69,24 +79,26 @@ describe('SettingsPage', () => {
     expect(screen.getByText(/Lyrics translation language|Idioma de traducción de letras/i)).toBeDefined();
   });
 
-  it('can open and close advanced options accordion with technical controls and mobile data policy on Android', () => {
+  it('can open backup accordion and show export/import controls', () => {
+    render(<SettingsPage />);
+    const backupBtn = screen.getByText(/Backup & restore|Backup y restaurar/i).closest('button');
+    expect(backupBtn).not.toBeNull();
+    fireEvent.click(backupBtn!);
+
+    expect(screen.getByText(/Export JSON|Exportar JSON/i)).toBeDefined();
+    expect(screen.getByText(/Import JSON|Importar JSON/i)).toBeDefined();
+  });
+
+  it('can open advanced accordion with simplified data saver switch and no mobile data sub-buttons', () => {
     render(<SettingsPage />);
     const advancedBtn = screen.getByText(/Advanced options|Opciones avanzadas/i).closest('button');
     expect(advancedBtn).not.toBeNull();
     fireEvent.click(advancedBtn!);
 
-    expect(screen.getByText(/Auto-download|Descarga automática/i)).toBeDefined();
-    expect(screen.getByText(/Pre-resolve versions while searching|Pre-cargar versiones al buscar/i)).toBeDefined();
-    expect(screen.getByText(/Download podcasts|Descargar podcasts/i)).toBeDefined();
-    expect(screen.getByText(/On mobile data|En datos móviles/i)).toBeDefined();
-  });
-
-  it('can open and close default audio player accordion on Android', () => {
-    render(<SettingsPage />);
-    const playerBtn = screen.getByText(/Default player|Reproductor predeterminado/i).closest('button');
-    expect(playerBtn).not.toBeNull();
-    fireEvent.click(playerBtn!);
-
-    expect(screen.getAllByText(/Ask every time|Preguntar/i).length).toBeGreaterThan(0);
+    expect(screen.getByRole('switch', { name: /Auto-download|Descarga automática/i })).toBeDefined();
+    expect(screen.getByRole('switch', { name: /Data saver on searches|Ahorro de datos en búsquedas/i })).toBeDefined();
+    expect(screen.getByRole('switch', { name: /podcasts/i })).toBeDefined();
+    expect(screen.queryByText(/On mobile data|En datos móviles/i)).toBeNull();
+    expect(screen.getByText(/^yt-dlp$/i)).toBeDefined();
   });
 });
