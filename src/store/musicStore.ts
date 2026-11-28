@@ -5,6 +5,7 @@ import { createPlayerSlice } from './slices/playerSlice';
 import { createSearchSlice } from './slices/searchSlice';
 import { createDownloadSlice } from './slices/downloadSlice';
 import { createSettingsSlice } from './slices/settingsSlice';
+import { createVideoSlice } from './slices/videoSlice';
 import { audioEngine } from '@/lib/audioEngine';
 import { isUiLanguageMode, isLyricsTargetLanguage, Lang } from '@/lib/language';
 import { applyThemeToDOM } from '@/lib/themes/themeCatalog';
@@ -61,6 +62,7 @@ export const useMusicStore = create<MusicStore>()(
         ...createSearchSlice(set, get, api),
         ...createDownloadSlice(set, get, api),
         ...createSettingsSlice(set, get, api),
+        ...createVideoSlice(set, get, api),
       };
     },
     {
@@ -70,6 +72,11 @@ export const useMusicStore = create<MusicStore>()(
         downloads: state.downloads
           .filter((d) => d.status === 'completed' || d.status === 'error')
           .slice(-100),
+        videoQuality: state.videoQuality,
+        videoCodec: state.videoCodec,
+        videoDownloads: state.videoDownloads
+          .filter((d) => d.status === 'completed' || d.status === 'error')
+          .slice(-50),
         volume: state.volume,
         downloadFolderName: state.downloadFolderName,
         uiLanguageMode: state.uiLanguageMode,
@@ -95,6 +102,13 @@ export const useMusicStore = create<MusicStore>()(
         return {
           ...current,
           downloads: Array.isArray(persisted?.downloads) ? persisted.downloads : [],
+          videoQuality: ['720p', '1080p', 'best'].includes(persisted?.videoQuality)
+            ? persisted.videoQuality
+            : '1080p',
+          videoCodec: ['av1', 'h264'].includes(persisted?.videoCodec)
+            ? persisted.videoCodec
+            : 'av1',
+          videoDownloads: Array.isArray(persisted?.videoDownloads) ? persisted.videoDownloads : [],
           volume: persisted?.volume ?? 0.8,
           downloadFolderName: persisted?.downloadFolderName || '',
           uiLanguageMode: isUiLanguageMode(persisted?.uiLanguageMode)

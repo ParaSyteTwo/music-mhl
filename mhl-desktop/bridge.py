@@ -1841,6 +1841,313 @@ class Bridge:
         except Exception as exc:
             return {'success': False, 'error': str(exc)}
 
+    # ── Videoclips (Experimental) ─────────────────────────────────────────────
+
+    @staticmethod
+    def _build_video_format_selector(quality: str = '1080p', codec: str = 'av1') -> str:
+        norm_quality = str(quality or '1080p').strip().lower()
+        norm_codec = str(codec or 'av1').strip().lower()
+        h = (
+            '[height<=720]'
+            if norm_quality == '720p'
+            else '[height<=1080]'
+            if norm_quality == '1080p'
+            else ''
+        )
+        if norm_codec == 'av1':
+            return (
+                f'bestvideo[vcodec^=av01]{h}+bestaudio[ext=m4a]/'
+                f'bestvideo[vcodec^=avc1]{h}+bestaudio[ext=m4a]/'
+                f'bestvideo[ext=mp4]{h}+bestaudio[ext=m4a]/'
+                f'best[ext=mp4]{h}/best{h}'
+            )
+        return (
+            f'bestvideo[vcodec^=avc1]{h}+bestaudio[ext=m4a]/'
+            f'bestvideo[ext=mp4]{h}+bestaudio[ext=m4a]/'
+            f'best[ext=mp4]{h}/best{h}'
+        )
+
+    def search_videos(self, query: str, limit: int = 12) -> dict:
+        """Busca videoclips en YouTube devolviendo miniatura 16:9, canal, duración y vistas."""
+        if not isinstance(query, str) or not query.strip():
+            return {'success': False, 'error': 'Empty query'}
+        try:
+            clamped_limit = 12 if isinstance(limit, bool) else min(max(1, int(limit)), 20)
+        except (TypeError, ValueError):
+            clamped_limit = 12
+
+        clean_query = query.strip()
+        args = [
+            _bin('yt-dlp.exe'),
+            f'ytsearch{clamped_limit}:{clean_query}',
+            '--flat-playlist',
+            '--dump-json',
+            '--skip-download',
+            '--socket-timeout', '12',
+            '--retries', '2',
+            '--quiet',
+            '--no-warnings',
+        ]
+        try:
+            r = subprocess.run(
+                args,
+                capture_output=True,
+                text=True,
+                creationflags=CREATE_NO_WINDOW,
+                timeout=25,
+                encoding='utf-8',
+                errors='replace',
+            )
+            if r.returncode != 0:
+                err_text = (r.stderr or '').strip()
+                if _is_outdated_ytdlp_error(err_text) and self._try_reactive_ytdlp_update():
+                    args[0] = _bin('yt-dlp.exe')
+                    r = subprocess.run(
+                        args,
+                        capture_output=True,
+                        text=True,
+                        creationflags=CREATE_NO_WINDOW,
+                        timeout=25,
+                        encoding='utf-8',
+                        errors='replace',
+                    )
+                if r.returncode != 0:
+                    return {'success': False, 'error': (r.stderr or 'yt-dlp video search failed').strip()}
+
+            results: list[dict] = []
+            for line in (r.stdout or '').splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    d = json.loads(line)
+                except Exception:
+                    continue
+                if not isinstance(d, dict):
+                    continue
+                video_id = str(d.get('id') or d.get('url') or '').strip()
+                if not re.fullmatch(r'[a-zA-Z0-9_-]{11}', video_id):
+                    continue
+                channel = _metadata_text(
+                    d, 'channel', 'uploader', 'artist', 'artists', 'creator',
+                )
+                thumbnail = ''
+                raw_thumb = d.get('thumbnail')
+                if isinstance(raw_thumb, str) and raw_thumb.strip():
+                    thumbnail = raw_thumb.strip()
+                else:
+                    thumbs = d.get('thumbnails')
+                    if isinstance(thumbs, list):
+                        for thumb in reversed(thumbs):
+                            if isinstance(thumb, dict) and isinstance(thumb.get('url'), str) and thumb['url'].strip():
+                                thumbnail = thumb['url'].strip()
+                                break
+                if not thumbnail:
+                    thumbnail = f'https://i.ytimg.com/vi/{video_id}/hqdefault.jpg'
+
+                view_count = d.get('view_count')
+                safe_views = (
+                    int(view_count)
+                    if isinstance(view_count, (int, float)) and not isinstance(view_count, bool) and view_count >= 0
+                    else None
+                )
+                raw_duration = d.get('duration')
+                safe_duration = (
+                    int(round(raw_duration))
+                    if isinstance(raw_duration, (int, float)) and not isinstance(raw_duration, bool) and raw_duration > 0
+                    else 0
+                )
+                results.append({
+                    'videoId': video_id,
+                    'title': str(d.get('title') or '').strip() or video_id,
+                    'channel': channel or 'YouTube',
+                    'duration': safe_duration,
+                    'thumbnail': thumbnail,
+                    'viewCount': safe_views,
+                })
+                if len(results) >= clamped_limit:
+                    break
+            return {'success': True, 'results': results}
+        except subprocess.TimeoutExpired:
+            return {'success': False, 'error': 'Video search timeout'}
+        except Exception as exc:
+            return {'success': False, 'error': str(exc)}
+
+    def get_video_info(self, video_id: str) -> dict:
+        """Obtiene metadatos de un video concreto por video_id validado."""
+        vid = str(video_id or '').strip()
+        if not re.fullmatch(r'[a-zA-Z0-9_-]{11}', vid):
+            return {'success': False, 'error': 'Invalid video_id'}
+
+        args = [
+            _bin('yt-dlp.exe'),
+            f'https://www.youtube.com/watch?v={vid}',
+            '--dump-single-json',
+            '--skip-download',
+            '--no-playlist',
+            '--socket-timeout', '12',
+            '--retries', '1',
+            '--quiet',
+            '--no-warnings',
+        ]
+        try:
+            r = subprocess.run(
+                args,
+                capture_output=True,
+                text=True,
+                creationflags=CREATE_NO_WINDOW,
+                timeout=20,
+                encoding='utf-8',
+                errors='replace',
+            )
+            if r.returncode != 0:
+                err_text = (r.stderr or '').strip()
+                if _is_outdated_ytdlp_error(err_text) and self._try_reactive_ytdlp_update():
+                    args[0] = _bin('yt-dlp.exe')
+                    r = subprocess.run(
+                        args,
+                        capture_output=True,
+                        text=True,
+                        creationflags=CREATE_NO_WINDOW,
+                        timeout=20,
+                        encoding='utf-8',
+                        errors='replace',
+                    )
+                if r.returncode != 0:
+                    return {'success': False, 'error': (r.stderr or 'yt-dlp info failed').strip()}
+
+            lines = [ln.strip() for ln in (r.stdout or '').splitlines() if ln.strip()]
+            if not lines:
+                return {'success': False, 'error': 'Empty video metadata response'}
+            d = json.loads(lines[-1])
+            channel = _metadata_text(
+                d, 'channel', 'uploader', 'artist', 'artists', 'creator',
+            ) or 'YouTube'
+            thumbnail = str(d.get('thumbnail') or '').strip() or f'https://i.ytimg.com/vi/{vid}/hqdefault.jpg'
+            raw_duration = d.get('duration')
+            safe_duration = (
+                int(round(raw_duration))
+                if isinstance(raw_duration, (int, float)) and not isinstance(raw_duration, bool) and raw_duration > 0
+                else 0
+            )
+            view_count = d.get('view_count')
+            safe_views = (
+                int(view_count)
+                if isinstance(view_count, (int, float)) and not isinstance(view_count, bool) and view_count >= 0
+                else None
+            )
+            return {
+                'success': True,
+                'video': {
+                    'videoId': vid,
+                    'title': str(d.get('title') or '').strip() or vid,
+                    'channel': channel,
+                    'duration': safe_duration,
+                    'thumbnail': thumbnail,
+                    'viewCount': safe_views,
+                },
+            }
+        except subprocess.TimeoutExpired:
+            return {'success': False, 'error': 'Video info timeout'}
+        except Exception as exc:
+            return {'success': False, 'error': str(exc)}
+
+    def download_video(
+        self,
+        video_id: str,
+        quality: str = '1080p',
+        codec: str = 'av1',
+        title: str = '',
+        channel: str = '',
+    ) -> dict:
+        """Descarga un videoclip en MP4 (remux sin recodificar) a ~/Videos/MHL Music."""
+        vid = str(video_id or '').strip()
+        if not re.fullmatch(r'[a-zA-Z0-9_-]{11}', vid):
+            return {'success': False, 'error': 'Invalid video_id'}
+
+        norm_quality = quality.strip().lower() if isinstance(quality, str) else '1080p'
+        if norm_quality not in {'720p', '1080p', 'best'}:
+            norm_quality = '1080p'
+        norm_codec = codec.strip().lower() if isinstance(codec, str) else 'av1'
+        if norm_codec not in {'av1', 'h264'}:
+            norm_codec = 'av1'
+
+        video_root = Path(
+            settings.get('video_download_folder', str(Path.home() / 'Videos' / 'MHL Music')),
+        ).resolve()
+        video_root.mkdir(parents=True, exist_ok=True)
+
+        safe_channel = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', str(channel or '').strip()).strip(' .')
+        safe_title = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', str(title or '').strip()).strip(' .')
+        base_label = f'{safe_channel} - {safe_title}' if safe_channel and safe_title else (safe_title or vid)
+        base_label = base_label[:100].strip(' .-_') or vid
+        stem = f'{base_label} [{norm_quality}]'
+        target_path = (video_root / f'{stem}.mp4').resolve()
+        target_path.relative_to(video_root)
+
+        suffix_idx = 2
+        while target_path.exists():
+            target_path = (video_root / f'{stem} ({suffix_idx}).mp4').resolve()
+            suffix_idx += 1
+
+        format_selector = self._build_video_format_selector(norm_quality, norm_codec)
+        ffmpeg_bin = _bin('ffmpeg.exe')
+        args = [
+            _bin('yt-dlp.exe'),
+            f'https://www.youtube.com/watch?v={vid}',
+            '-f', format_selector,
+            '--merge-output-format', 'mp4',
+            '--ffmpeg-location', ffmpeg_bin,
+            '--no-playlist',
+            '--no-part',
+            '--concurrent-fragments', '4',
+            '--socket-timeout', '20',
+            '--retries', '2',
+            '--fragment-retries', '2',
+            '--add-metadata',
+            '-o', str(target_path),
+        ]
+        try:
+            r = subprocess.run(
+                args,
+                capture_output=True,
+                text=True,
+                creationflags=CREATE_NO_WINDOW,
+                timeout=300,
+                encoding='utf-8',
+                errors='replace',
+            )
+            if r.returncode != 0:
+                err_text = (r.stderr or '').strip()
+                if _is_outdated_ytdlp_error(err_text) and self._try_reactive_ytdlp_update():
+                    args[0] = _bin('yt-dlp.exe')
+                    r = subprocess.run(
+                        args,
+                        capture_output=True,
+                        text=True,
+                        creationflags=CREATE_NO_WINDOW,
+                        timeout=300,
+                        encoding='utf-8',
+                        errors='replace',
+                    )
+                if r.returncode != 0:
+                    return {'success': False, 'error': (r.stderr or 'yt-dlp video download failed').strip()}
+
+            final_path = target_path
+            if not final_path.exists():
+                return {'success': False, 'error': 'Downloaded MP4 file not found on disk'}
+
+            return {
+                'success': True,
+                'filePath': str(final_path),
+                'fileName': final_path.name,
+                'size': final_path.stat().st_size,
+            }
+        except subprocess.TimeoutExpired:
+            return {'success': False, 'error': 'Video download timeout'}
+        except Exception as exc:
+            return {'success': False, 'error': str(exc)}
+
     def letras_fetch(self, url: str) -> dict:
         parsed = urlparse(url or '')
         if parsed.scheme != 'https' or parsed.netloc not in {
@@ -2194,8 +2501,12 @@ class Bridge:
             if not target_path.exists():
                 root = Path(settings.get('download_folder', str(Path.home() / 'Music' / 'MHL Music'))).resolve()
                 alt_path = (root / file_path).resolve()
+                video_root = Path(settings.get('video_download_folder', str(Path.home() / 'Videos' / 'MHL Music'))).resolve()
+                video_alt_path = (video_root / file_path).resolve()
                 if alt_path.exists():
                     target_path = alt_path
+                elif video_alt_path.exists():
+                    target_path = video_alt_path
                 else:
                     return {'success': False, 'error': 'File not found'}
 
@@ -2203,6 +2514,7 @@ class Bridge:
             if target_path.is_file():
                 allowed_extensions = {
                     '.mp3', '.m4a', '.wav', '.flac', '.ogg', '.opus', '.aac',
+                    '.mp4', '.mkv', '.webm',
                     '.lrc', '.txt', '.json', '.jpg', '.jpeg', '.png', '.webp', '.svg',
                 }
                 if target_path.suffix.lower() not in allowed_extensions:

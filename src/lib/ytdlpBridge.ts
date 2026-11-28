@@ -62,6 +62,7 @@ interface YtDlpPluginInterface {
   search(options: { query: string; limit?: number; source?: 'youtube_music' | 'youtube'; enrich?: boolean }): Promise<{ success: boolean; results: YtDlpSearchResult[] }>;
   getPlaylistItems(options: { url: string; limit?: number }): Promise<{ success: boolean; title?: string; items: YtDlpPlaylistItem[] }>;
   downloadAudio(options: { videoId?: string; sourceUrl?: string; expectedDuration?: number; format?: 'm4a' | 'mp3'; skipBase64?: boolean; downloadId?: string }): Promise<{ success: boolean; data?: string; tempPath?: string; size: number; fileName?: string }>;
+  downloadVideo(options: { videoId: string; quality?: '720p' | '1080p' | 'best'; codec?: 'av1' | 'h264'; fileName?: string; downloadId?: string }): Promise<{ success: boolean; uri: string; fileName: string; size: number }>;
   cleanupTempAudio(options: { tempPath: string }): Promise<{ success: boolean }>;
   saveTaggedAudioToMusic(options: { fileName: string; data: string }): Promise<{ success: boolean; uri: string }>;
   tagAndSaveM4A(options: TagAndSaveOptions): Promise<{ success: boolean; uri: string }>;
@@ -190,6 +191,38 @@ export async function downloadAudioToTempNative(
     tempPath: result.tempPath,
     size: result.size,
     ...(result.fileName ? { fileName: result.fileName } : {}),
+  };
+}
+
+export async function downloadVideoNative(
+  videoId: string,
+  opts?: {
+    quality?: '720p' | '1080p' | 'best';
+    codec?: 'av1' | 'h264';
+    fileName?: string;
+    downloadId?: string;
+  },
+): Promise<{ uri: string; fileName: string; size: number }> {
+  if (!Capacitor.isNativePlatform()) {
+    throw new Error('Not on native platform');
+  }
+  if (!initialized) await initYtDlp();
+
+  const result = await YtDlp.downloadVideo({
+    videoId,
+    ...(opts?.quality ? { quality: opts.quality } : {}),
+    ...(opts?.codec ? { codec: opts.codec } : {}),
+    ...(opts?.fileName ? { fileName: opts.fileName } : {}),
+    ...(opts?.downloadId ? { downloadId: opts.downloadId } : {}),
+  });
+
+  if (!result || !result.success || !result.uri) {
+    throw new Error('Video download failed');
+  }
+  return {
+    uri: result.uri,
+    fileName: result.fileName,
+    size: result.size,
   };
 }
 

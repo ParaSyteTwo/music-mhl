@@ -22,6 +22,8 @@ import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
+import android.os.Build;
+import android.os.Environment;
 import android.provider.MediaStore;
 import android.media.MediaMetadataRetriever;
 import java.io.ByteArrayOutputStream;
@@ -67,6 +69,7 @@ public class YtDlpPlugin extends Plugin {
 
     private boolean isInitialized = false;
     private final ExecutorService executor = Executors.newFixedThreadPool(4);
+    private final ExecutorService videoExecutor = Executors.newSingleThreadExecutor();
     private final ExecutorService searchExecutor = Executors.newFixedThreadPool(3);
     private final ExecutorService enrichExecutor = Executors.newFixedThreadPool(2);
     private final ExecutorService playlistExecutor = Executors.newFixedThreadPool(2);
@@ -83,6 +86,7 @@ public class YtDlpPlugin extends Plugin {
     );
     private static final Pattern PLAYLIST_ID_PATTERN = Pattern.compile("\\A[a-zA-Z0-9_-]{8,128}\\z");
     private static final Pattern VIDEO_ID_PATTERN = Pattern.compile("\\A[a-zA-Z0-9_-]+\\z");
+    private static final Pattern STRICT_VIDEO_ID_PATTERN = Pattern.compile("\\A[a-zA-Z0-9_-]{11}\\z");
 
     private static boolean isOutdatedYtDlpError(String errorMsg) {
         if (errorMsg == null || errorMsg.isEmpty()) return false;
@@ -1278,6 +1282,198 @@ public class YtDlpPlugin extends Plugin {
             } catch (Exception e) {
                 Log.e(TAG, "saveTaggedAudioToMusic failed", e);
                 bridge.getActivity().runOnUiThread(() -> call.reject(e.getMessage()));
+            }
+        });
+    }
+
+    private static String buildVideoFormatSelector(String quality, String codec) {
+        String h = "720p".equals(quality)
+            ? "[height<=720]"
+            : "1080p".equals(quality)
+                ? "[height<=1080]"
+                : "";
+        if ("av1".equals(codec)) {
+            return "bestvideo[vcodec^=av01]" + h + "+bestaudio[ext=m4a]/"
+                + "bestvideo[vcodec^=avc1]" + h + "+bestaudio[ext=m4a]/"
+                + "bestvideo[ext=mp4]" + h + "+bestaudio[ext=m4a]/"
+                + "best[ext=mp4]" + h + "/best" + h;
+        }
+        return "bestvideo[vcodec^=avc1]" + h + "+bestaudio[ext=m4a]/"
+            + "bestvideo[ext=mp4]" + h + "+bestaudio[ext=m4a]/"
+            + "best[ext=mp4]" + h + "/best" + h;
+    }
+
+    private static String sanitizeVideoFileName(String rawName, String fallbackId) {
+        String cleaned = rawName == null ? "" : rawName.replaceAll("[<>:\"/\\\\|?*\\x00-\\x1f]", "_").trim();
+        while (cleaned.startsWith(".") || cleaned.endsWith(".")) {
+            cleaned = cleaned.replaceAll("^\\.+|\\.+$", "").trim();
+        }
+        if (cleaned.isEmpty()) {
+            cleaned = fallbackId + ".mp4";
+        } else if (!cleaned.toLowerCase(Locale.ROOT).endsWith(".mp4")) {
+            cleaned = cleaned + ".mp4";
+        }
+        if (cleaned.length() > 120) {
+            cleaned = cleaned.substring(0, 116) + ".mp4";
+        }
+        return cleaned;
+    }
+
+    @PluginMethod
+    public void downloadVideo(PluginCall call) {
+        String rawVideoId = call.getString("videoId");
+        String videoId = rawVideoId != null ? rawVideoId.trim() : "";
+        if (!STRICT_VIDEO_ID_PATTERN.matcher(videoId).matches()) {
+            call.reject("Invalid videoId format");
+            return;
+        }
+
+        String rawQuality = call.getString("quality", "1080p");
+        String quality = rawQuality != null ? rawQuality.trim().toLowerCase(Locale.ROOT) : "1080p";
+        if (!"720p".equals(quality) && !"1080p".equals(quality) && !"best".equals(quality)) {
+            quality = "1080p";
+        }
+
+        String rawCodec = call.getString("codec", "av1");
+        String codec = rawCodec != null ? rawCodec.trim().toLowerCase(Locale.ROOT) : "av1";
+        if (!"av1".equals(codec) && !"h264".equals(codec)) {
+            codec = "av1";
+        }
+
+        String finalFileName = sanitizeVideoFileName(call.getString("fileName"), videoId);
+        String downloadId = call.getString("downloadId");
+
+        final String selectedQuality = quality;
+        final String selectedCodec = codec;
+        videoExecutor.execute(() -> {
+            File taskDir = null;
+            try {
+                ensureInitialized();
+
+                File cacheDir = new File(getContext().getCacheDir(), "ytdlp_video");
+                cacheDir.mkdirs();
+                taskDir = new File(cacheDir, UUID.randomUUID().toString());
+                taskDir.mkdirs();
+
+                File tempVideo = new File(taskDir, "video_" + System.currentTimeMillis() + ".mp4");
+                String url = "https://www.youtube.com/watch?v=" + videoId;
+                YoutubeDLRequest request = new YoutubeDLRequest(url);
+                request.addOption("-f", buildVideoFormatSelector(selectedQuality, selectedCodec));
+                request.addOption("--merge-output-format", "mp4");
+                request.addOption("--no-playlist");
+                request.addOption("--no-part");
+                request.addOption("--concurrent-fragments", "4");
+                request.addOption("--socket-timeout", "20");
+                request.addOption("--retries", "2");
+                request.addOption("--fragment-retries", "2");
+                request.addOption("--extractor-args", "youtube:player_client=android,web");
+                request.addOption("-o", tempVideo.getAbsolutePath());
+
+                kotlin.jvm.functions.Function3<Float, Long, String, kotlin.Unit> progressCallback =
+                    new kotlin.jvm.functions.Function3<Float, Long, String, kotlin.Unit>() {
+                        @Override
+                        public kotlin.Unit invoke(Float progress, Long etaInSeconds, String line) {
+                            try {
+                                if (progress == null || progress < 0f) {
+                                    return kotlin.Unit.INSTANCE;
+                                }
+                                int clampedProgress = Math.max(0, Math.min(100, Math.round(progress)));
+                                JSObject data = new JSObject();
+                                data.put("progress", clampedProgress);
+                                data.put("eta", etaInSeconds);
+                                data.put("speed", parseSpeed(line));
+                                if (downloadId != null && !downloadId.isEmpty()) {
+                                    data.put("downloadId", downloadId);
+                                }
+                                notifyListeners("downloadProgress", data);
+                            } catch (Exception ignored) {}
+                            return kotlin.Unit.INSTANCE;
+                        }
+                    };
+
+                try {
+                    YoutubeDL.getInstance().execute(request, (String) null, progressCallback);
+                } catch (Exception e) {
+                    if (isOutdatedYtDlpError(e.getMessage()) && tryReactiveAutoUpdate()) {
+                        YoutubeDL.getInstance().execute(request, (String) null, progressCallback);
+                    } else {
+                        throw e;
+                    }
+                }
+
+                if (!tempVideo.exists() || tempVideo.length() == 0) {
+                    bridge.getActivity().runOnUiThread(() -> call.reject("Downloaded video file not found"));
+                    return;
+                }
+
+                long fileSize = tempVideo.length();
+                String resultUriStr;
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    ContentValues values = new ContentValues();
+                    values.put(MediaStore.Video.Media.DISPLAY_NAME, finalFileName);
+                    values.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4");
+                    values.put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/MHL Music");
+                    values.put(MediaStore.Video.Media.IS_PENDING, 1);
+
+                    ContentResolver resolver = getContext().getContentResolver();
+                    Uri itemUri = resolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values);
+                    if (itemUri == null) {
+                        bridge.getActivity().runOnUiThread(() -> call.reject("MediaStore Video insert failed"));
+                        return;
+                    }
+                    try {
+                        try (OutputStream os = resolver.openOutputStream(itemUri);
+                             FileInputStream in = new FileInputStream(tempVideo)) {
+                            if (os == null) {
+                                throw new IOException("Cannot open MediaStore Video OutputStream");
+                            }
+                            byte[] buffer = new byte[16384];
+                            int len;
+                            while ((len = in.read(buffer)) > 0) {
+                                os.write(buffer, 0, len);
+                            }
+                        }
+                        values.clear();
+                        values.put(MediaStore.Video.Media.IS_PENDING, 0);
+                        resolver.update(itemUri, values, null, null);
+                        resultUriStr = itemUri.toString();
+                    } catch (Throwable writeErr) {
+                        try {
+                            resolver.delete(itemUri, null, null);
+                        } catch (Exception ignored) {}
+                        throw writeErr;
+                    }
+                } else {
+                    File moviesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES);
+                    File targetDir = new File(moviesDir, "MHL Music");
+                    targetDir.mkdirs();
+                    File destFile = new File(targetDir, finalFileName);
+                    try (FileInputStream in = new FileInputStream(tempVideo);
+                         FileOutputStream os = new FileOutputStream(destFile)) {
+                        byte[] buffer = new byte[16384];
+                        int len;
+                        while ((len = in.read(buffer)) > 0) {
+                            os.write(buffer, 0, len);
+                        }
+                    }
+                    resultUriStr = Uri.fromFile(destFile).toString();
+                }
+
+                JSObject result = new JSObject();
+                result.put("success", true);
+                result.put("uri", resultUriStr);
+                result.put("fileName", finalFileName);
+                result.put("size", fileSize);
+                bridge.getActivity().runOnUiThread(() -> call.resolve(result));
+            } catch (Throwable e) {
+                Log.e(TAG, "downloadVideo failed", e);
+                String msg = e.getMessage() != null ? e.getMessage() : "Video download failed";
+                bridge.getActivity().runOnUiThread(() -> call.reject(msg));
+            } finally {
+                if (taskDir != null) {
+                    deleteRecursively(taskDir);
+                }
             }
         });
     }

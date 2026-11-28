@@ -157,24 +157,29 @@ public class OpenFilePlugin extends Plugin {
         }
     }
 
-    /** Busca un audio en MediaStore por nombre de display. Devuelve content URI o null. */
+    /** Busca un archivo en MediaStore por nombre de display. Devuelve content URI o null. */
     private Uri queryMediaStoreByName(String displayName) {
-        String[] projection    = { MediaStore.Audio.Media._ID };
-        String selection       = MediaStore.Audio.Media.DISPLAY_NAME + " = ?";
+        String lower = displayName.toLowerCase(java.util.Locale.ROOT);
+        boolean isVideo = lower.endsWith(".mp4") || lower.endsWith(".webm") || lower.endsWith(".mkv");
+        Uri collectionUri = isVideo
+            ? MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+            : MediaStore.Audio.Media.EXTERNAL_CONTENT_URI;
+        String idCol = isVideo ? MediaStore.Video.Media._ID : MediaStore.Audio.Media._ID;
+        String nameCol = isVideo ? MediaStore.Video.Media.DISPLAY_NAME : MediaStore.Audio.Media.DISPLAY_NAME;
+        String sortCol = isVideo ? MediaStore.Video.Media.DATE_ADDED : MediaStore.Audio.Media.DATE_ADDED;
+
+        String[] projection    = { idCol };
+        String selection       = nameCol + " = ?";
         String[] selectionArgs = { displayName };
 
         try (Cursor cursor = getContext().getContentResolver().query(
-                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                collectionUri,
                 projection, selection, selectionArgs,
-                MediaStore.Audio.Media.DATE_ADDED + " DESC"
+                sortCol + " DESC"
         )) {
             if (cursor != null && cursor.moveToFirst()) {
-                long id = cursor.getLong(
-                    cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
-                );
-                return ContentUris.withAppendedId(
-                    MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id
-                );
+                long id = cursor.getLong(cursor.getColumnIndexOrThrow(idCol));
+                return ContentUris.withAppendedId(collectionUri, id);
             }
         } catch (Exception e) {
             Log.w(TAG, "MediaStore query failed: " + e.getMessage());
@@ -183,11 +188,15 @@ public class OpenFilePlugin extends Plugin {
     }
 
     private String resolveMimeType(String fileName) {
-        if (fileName.endsWith(".mp3"))  return "audio/mpeg";
-        if (fileName.endsWith(".m4a"))  return "audio/mp4";
-        if (fileName.endsWith(".aac"))  return "audio/aac";
-        if (fileName.endsWith(".ogg"))  return "audio/ogg";
-        if (fileName.endsWith(".flac")) return "audio/flac";
+        String lower = fileName.toLowerCase(java.util.Locale.ROOT);
+        if (lower.endsWith(".mp4"))  return "video/mp4";
+        if (lower.endsWith(".webm")) return "video/webm";
+        if (lower.endsWith(".mkv"))  return "video/x-matroska";
+        if (lower.endsWith(".mp3"))  return "audio/mpeg";
+        if (lower.endsWith(".m4a"))  return "audio/mp4";
+        if (lower.endsWith(".aac"))  return "audio/aac";
+        if (lower.endsWith(".ogg"))  return "audio/ogg";
+        if (lower.endsWith(".flac")) return "audio/flac";
         String ext = MimeTypeMap.getFileExtensionFromUrl(
             Uri.encode(fileName, "/:@!$&'()*+,;= ")
         );

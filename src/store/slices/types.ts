@@ -1,4 +1,10 @@
 import { Track, Download, DownloadAudioFormat } from '@/types/music';
+import type {
+  VideoCodecPreference,
+  VideoDownloadItem,
+  VideoQuality,
+  VideoSearchResult,
+} from '@/types/video';
 import { UiLanguageMode, LyricsTargetLanguage } from '@/lib/language';
 import { EditionPreference } from '@/lib/download/candidateResolver';
 import { AppThemeId } from '@/lib/themes/themeCatalog';
@@ -106,4 +112,19 @@ export interface SettingsSlice {
   setYtDlpUpdating: (v: boolean) => void;
 }
 
-export interface MusicStore extends PlayerSlice, SearchSlice, DownloadSlice, SettingsSlice {}
+export interface VideoSlice {
+  videoQuality: VideoQuality;
+  videoCodec: VideoCodecPreference;
+  videoDownloads: VideoDownloadItem[];
+  videoDownloadQueue: string[];
+  activeVideoDownloads: number;
+
+  setVideoQuality: (quality: VideoQuality) => void;
+  setVideoCodec: (codec: VideoCodecPreference) => void;
+  startVideoDownload: (video: VideoSearchResult) => void;
+  removeVideoDownload: (id: string) => void;
+  clearCompletedVideoDownloads: () => void;
+  processVideoDownloadQueue: () => Promise<void>;
+}
+
+export interface MusicStore extends PlayerSlice, SearchSlice, DownloadSlice, SettingsSlice, VideoSlice {}

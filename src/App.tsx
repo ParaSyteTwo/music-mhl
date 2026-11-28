@@ -11,6 +11,7 @@ import { getDeviceContext } from "@/lib/deviceContext";
 import { resolveEffectiveLanguage, setNativeLocale } from "@/lib/language";
 
 const SearchPage = lazy(() => import("./pages/SearchPage"));
+const VideosPage = lazy(() => import("./pages/VideosPage"));
 const DownloadsPage = lazy(() => import("./pages/DownloadsPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 
@@ -95,6 +96,7 @@ const App = () => {
         <Routes>
           <Route element={<AppLayout />}>
             <Route path="/" element={<SearchPage />} />
+            <Route path="/videos" element={<VideosPage />} />
             <Route path="/downloads" element={<DownloadsPage />} />
             <Route path="/playlists" element={<Navigate to="/downloads" replace />} />
             <Route path="/settings" element={<SettingsPage />} />
