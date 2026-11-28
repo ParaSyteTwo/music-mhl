@@ -27,16 +27,24 @@ vi.mock('@/lib/openFileBridge', () => ({
 
 vi.mock('@/lib/ytdlpBridge', () => ({
   getYtDlpVersion: vi.fn().mockResolvedValue('2026.01.01'),
-  updateYtDlp: vi.fn().mockResolvedValue(true),
+  isYtDlpVersionOutdated: vi.fn().mockReturnValue(false),
+  updateYtDlp: vi.fn().mockResolvedValue('DONE'),
 }));
 
 describe('SettingsPage', () => {
-  it('renders without throwing errors and displays essential headers', () => {
+  it('renders without throwing errors and displays the four main groups plus promoted essentials', () => {
     render(<SettingsPage />);
     expect(screen.getAllByText(/Settings|Ajustes/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Appearance|Apariencia/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Language|Idioma/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Advanced|Avanzadas/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Personalization|Personalización/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Downloads & audio|Descargas y audio/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Lyrics|Letras/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/System & advanced|Sistema y avanzado/i).length).toBeGreaterThan(0);
+
+    // Promoted out of Advanced options
+    expect(screen.getByText(/M4A \/ AAC/i)).toBeDefined();
+    expect(screen.getByText(/MP3 320k/i)).toBeDefined();
+    expect(screen.getAllByText(/Anime/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Backup|Backup y restaurar/i)).toBeDefined();
   });
 
   it('can open and close theme accordion and shows themes', () => {
@@ -49,13 +57,28 @@ describe('SettingsPage', () => {
     expect(screen.getByText(/Matrix Terminal/i)).toBeDefined();
   });
 
-  it('can open and close advanced options accordion', () => {
+  it('can open unified lyrics accordion with all lyric toggles and translation target selector', () => {
+    render(<SettingsPage />);
+    const lyricsBtn = screen.getByText(/Original, romanization|Original, romanización/i).closest('button');
+    expect(lyricsBtn).not.toBeNull();
+    fireEvent.click(lyricsBtn!);
+
+    expect(screen.getByRole('switch', { name: /Original/i })).toBeDefined();
+    expect(screen.getByRole('switch', { name: /Romanization|Romanización/i })).toBeDefined();
+    expect(screen.getByRole('switch', { name: /Translation|Traducción/i })).toBeDefined();
+    expect(screen.getByText(/Lyrics translation language|Idioma de traducción de letras/i)).toBeDefined();
+  });
+
+  it('can open and close advanced options accordion with technical controls and mobile data policy on Android', () => {
     render(<SettingsPage />);
     const advancedBtn = screen.getByText(/Advanced options|Opciones avanzadas/i).closest('button');
     expect(advancedBtn).not.toBeNull();
     fireEvent.click(advancedBtn!);
 
-    expect(screen.getAllByText(/Anime|Buscar/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Auto-download|Descarga automática/i)).toBeDefined();
+    expect(screen.getByText(/Pre-resolve versions while searching|Pre-cargar versiones al buscar/i)).toBeDefined();
+    expect(screen.getByText(/Download podcasts|Descargar podcasts/i)).toBeDefined();
+    expect(screen.getByText(/On mobile data|En datos móviles/i)).toBeDefined();
   });
 
   it('can open and close default audio player accordion on Android', () => {
