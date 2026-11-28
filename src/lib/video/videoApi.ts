@@ -21,9 +21,11 @@ interface DesktopVideoApi {
   search_videos?: (
     query: string,
     limit: number,
+    lang?: string,
   ) => Promise<{ success: boolean; results?: DesktopRawVideo[]; error?: string }>;
   get_video_info?: (
     videoId: string,
+    lang?: string,
   ) => Promise<{ success: boolean; video?: DesktopRawVideo; error?: string }>;
   download_video?: (
     videoId: string,
@@ -93,6 +95,7 @@ function buildSafeVideoFileName(video: VideoSearchResult, quality: VideoQuality)
 export async function searchVideos(
   query: string,
   limit = 12,
+  lang: 'es' | 'en' = 'es',
 ): Promise<VideoSearchResult[]> {
   const trimmed = query.trim();
   if (!trimmed) return [];
@@ -102,7 +105,7 @@ export async function searchVideos(
 
   if (isPyWebView() && desktopApi) {
     if (directVideoId && desktopApi.get_video_info) {
-      const res = await desktopApi.get_video_info(directVideoId);
+      const res = await desktopApi.get_video_info(directVideoId, lang);
       if (!res?.success || !res.video) {
         throw new Error(res?.error || 'Could not resolve YouTube video');
       }
@@ -111,7 +114,7 @@ export async function searchVideos(
     }
 
     if (desktopApi.search_videos) {
-      const res = await desktopApi.search_videos(trimmed, limit);
+      const res = await desktopApi.search_videos(trimmed, limit, lang);
       if (!res?.success) {
         throw new Error(res?.error || 'Video search failed');
       }
@@ -125,7 +128,7 @@ export async function searchVideos(
   if (Capacitor.isNativePlatform()) {
     if (directVideoId) {
       try {
-        const ytResults = await searchYouTubeNative(directVideoId, 3, { source: 'youtube' });
+        const ytResults = await searchYouTubeNative(directVideoId, 3, { source: 'youtube', lang });
         const exact = ytResults.find((r) => r.videoId === directVideoId);
         if (exact) {
           const normalized = normalizeVideoResult({
@@ -148,7 +151,7 @@ export async function searchVideos(
       return fallback ? [fallback] : [];
     }
 
-    const ytResults = await searchYouTubeNative(trimmed, limit, { source: 'youtube' });
+    const ytResults = await searchYouTubeNative(trimmed, limit, { source: 'youtube', lang });
     const items = ytResults
       .map((r) =>
         normalizeVideoResult({

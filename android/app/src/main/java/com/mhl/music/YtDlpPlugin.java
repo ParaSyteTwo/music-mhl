@@ -521,11 +521,13 @@ public class YtDlpPlugin extends Plugin {
         String source = call.getString("source", "youtube_music");
         Boolean requestedEnrich = call.getBoolean("enrich", false);
         boolean enrich = requestedEnrich != null && requestedEnrich;
+        String rawLang = call.getString("lang", "");
+        String lang = rawLang != null ? rawLang.trim().toLowerCase(Locale.ROOT) : "";
 
         searchExecutor.execute(() -> {
             try {
                 ensureInitialized();
-                JSArray results = runSearch(query, limit, source, enrich);
+                JSArray results = runSearch(query, limit, source, enrich, lang);
                 JSObject result = new JSObject();
                 result.put("success", true);
                 result.put("results", results);
@@ -537,7 +539,7 @@ public class YtDlpPlugin extends Plugin {
         });
     }
 
-    private JSArray runSearch(String query, int limit, String source, boolean enrich) throws Exception {
+    private JSArray runSearch(String query, int limit, String source, boolean enrich, String lang) throws Exception {
         boolean youtubeMusic = "youtube_music".equals(source);
         String target = youtubeMusic
             ? "https://music.youtube.com/search?q=" + URLEncoder.encode(query, StandardCharsets.UTF_8.toString()) + "#songs"
@@ -549,6 +551,9 @@ public class YtDlpPlugin extends Plugin {
         request.addOption("--no-download");
         request.addOption("--socket-timeout", "12");
         request.addOption("--retries", "2");
+        if ("es".equals(lang) || "en".equals(lang)) {
+            request.addOption("--extractor-args", "youtube:lang=" + lang);
+        }
 
         Log.i(TAG, "Searching: " + query + " limit=" + limit);
         YoutubeDLResponse response;

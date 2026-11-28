@@ -26,7 +26,7 @@ describe('VideosPage (2-column experimental videoclips)', () => {
     });
   });
 
-  it('renders rectangular 16:9 cards in a 2-column grid with classification badges and audio shortcut', async () => {
+  it('renders unified SearchPage hero aesthetic and rectangular 16:9 cards in a 2-column grid', async () => {
     vi.mocked(videoApi.searchVideos).mockResolvedValue([
       {
         videoId: 'abc123DEF45',
@@ -48,11 +48,16 @@ describe('VideosPage (2-column experimental videoclips)', () => {
       },
     ]);
 
-    render(
+    const { container } = render(
       <MemoryRouter>
         <VideosPage />
       </MemoryRouter>,
     );
+
+    expect(container.querySelector('.home-hero')).not.toBeNull();
+    expect(container.querySelectorAll('.home-hero-orb').length).toBe(2);
+    expect(screen.queryByRole('button', { name: '720p' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /H\.264/i })).toBeNull();
 
     const input = screen.getByPlaceholderText(/Buscar videoclip/i);
     fireEvent.change(input, { target: { value: 'Daft Punk' } });
@@ -60,12 +65,19 @@ describe('VideosPage (2-column experimental videoclips)', () => {
 
     const grid = await screen.findByTestId('videoclips-grid');
     expect(grid.className).toContain('grid-cols-2');
+    expect(videoApi.searchVideos).toHaveBeenCalledWith('Daft Punk', 12, 'es');
     expect(screen.getByText('Oficial')).toBeInTheDocument();
     expect(screen.getByText('Portada fija')).toBeInTheDocument();
     expect(screen.getByText('Solo audio (M4A)')).toBeInTheDocument();
   });
 
-  it('updates quality and codec preferences and starts MP4 download', async () => {
+  it('passes effective UI language to searchVideos and uses stored video settings on MP4 download', async () => {
+    useMusicStore.setState({
+      uiLanguageMode: 'en',
+      videoQuality: '720p',
+      videoCodec: 'h264',
+    });
+
     vi.mocked(videoApi.searchVideos).mockResolvedValue([
       {
         videoId: 'abc123DEF45',
@@ -89,15 +101,18 @@ describe('VideosPage (2-column experimental videoclips)', () => {
       </MemoryRouter>,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: '720p' }));
-    fireEvent.click(screen.getByRole('button', { name: 'H.264 · compatible' }));
-    expect(useMusicStore.getState().videoQuality).toBe('720p');
-    expect(useMusicStore.getState().videoCodec).toBe('h264');
-
-    const input = screen.getByPlaceholderText(/Buscar videoclip/i);
+    const input = screen.getByPlaceholderText(/Search music video/i);
     fireEvent.change(input, { target: { value: 'https://www.youtube.com/watch?v=abc123DEF45' } });
 
-    const downloadBtn = await screen.findByRole('button', { name: /Descargar MP4/i });
+    await waitFor(() => {
+      expect(videoApi.searchVideos).toHaveBeenCalledWith(
+        'https://www.youtube.com/watch?v=abc123DEF45',
+        12,
+        'en',
+      );
+    });
+
+    const downloadBtn = await screen.findByRole('button', { name: /Download MP4/i });
     fireEvent.click(downloadBtn);
 
     await waitFor(() => {

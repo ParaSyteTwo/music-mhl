@@ -59,7 +59,7 @@ interface YtDlpPluginInterface {
   initialize(): Promise<{ success: boolean }>;
   update(): Promise<{ success: boolean; status: string }>;
   getVersion(): Promise<{ success: boolean; version: string }>;
-  search(options: { query: string; limit?: number; source?: 'youtube_music' | 'youtube'; enrich?: boolean }): Promise<{ success: boolean; results: YtDlpSearchResult[] }>;
+  search(options: { query: string; limit?: number; source?: 'youtube_music' | 'youtube'; enrich?: boolean; lang?: 'es' | 'en' }): Promise<{ success: boolean; results: YtDlpSearchResult[] }>;
   getPlaylistItems(options: { url: string; limit?: number }): Promise<{ success: boolean; title?: string; items: YtDlpPlaylistItem[] }>;
   downloadAudio(options: { videoId?: string; sourceUrl?: string; expectedDuration?: number; format?: 'm4a' | 'mp3'; skipBase64?: boolean; downloadId?: string }): Promise<{ success: boolean; data?: string; tempPath?: string; size: number; fileName?: string }>;
   downloadVideo(options: { videoId: string; quality?: '720p' | '1080p' | 'best'; codec?: 'av1' | 'h264'; fileName?: string; downloadId?: string }): Promise<{ success: boolean; uri: string; fileName: string; size: number }>;
@@ -97,7 +97,7 @@ export async function initYtDlp(): Promise<boolean> {
 export async function searchYouTubeNative(
   query: string,
   limit = 5,
-  options?: { source?: 'youtube_music' | 'youtube'; enrich?: boolean },
+  options?: { source?: 'youtube_music' | 'youtube'; enrich?: boolean; lang?: 'es' | 'en' },
 ): Promise<YtDlpSearchResult[]> {
   if (!initialized) await initYtDlp();
   try {

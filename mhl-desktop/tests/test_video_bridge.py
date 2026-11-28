@@ -61,7 +61,7 @@ def test_search_videos_parses_results_and_respects_limit():
     ])
     proc = MagicMock(returncode=0, stdout=lines, stderr="")
     with patch("bridge.subprocess.run", return_value=proc) as mock_run:
-        res = Bridge().search_videos("daft punk", limit=8)
+        res = Bridge().search_videos("daft punk", limit=8, lang="es")
 
     assert res["success"] is True
     assert len(res["results"]) == 2
@@ -71,6 +71,26 @@ def test_search_videos_parses_results_and_respects_limit():
     assert res["results"][1]["thumbnail"] == "https://img.example.com/custom.jpg"
     called_args = mock_run.call_args[0][0]
     assert "ytsearch8:daft punk" in called_args
+    assert "--extractor-args" in called_args
+    assert "youtube:lang=es" in called_args
+
+
+def test_get_video_info_passes_language_extractor_arg():
+    payload = json.dumps({
+        "id": "dQw4w9WgXcQ",
+        "title": "Titulo en Espanol",
+        "channel": "Artist",
+        "duration": 200,
+    })
+    proc = MagicMock(returncode=0, stdout=payload, stderr="")
+    with patch("bridge.subprocess.run", return_value=proc) as mock_run:
+        res = Bridge().get_video_info("dQw4w9WgXcQ", lang="es")
+
+    assert res["success"] is True
+    assert res["video"]["title"] == "Titulo en Espanol"
+    called_args = mock_run.call_args[0][0]
+    assert "--extractor-args" in called_args
+    assert "youtube:lang=es" in called_args
 
 
 def test_download_video_writes_mp4_to_videos_folder_zero_base64(tmp_path):

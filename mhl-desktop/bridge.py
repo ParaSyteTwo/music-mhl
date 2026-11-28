@@ -24,7 +24,7 @@ from urllib.parse import parse_qs, quote_plus, urljoin, urlparse
 # CREATE_NO_WINDOW para evitar popup de consola en Windows
 CREATE_NO_WINDOW = 0x08000000 if sys.platform == 'win32' else 0
 
-APP_VERSION = '1.5.7-exp.1'
+APP_VERSION = '1.5.7-exp.2'
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -1867,7 +1867,7 @@ class Bridge:
             f'best[ext=mp4]{h}/best{h}'
         )
 
-    def search_videos(self, query: str, limit: int = 12) -> dict:
+    def search_videos(self, query: str, limit: int = 12, lang: str = 'es') -> dict:
         """Busca videoclips en YouTube devolviendo miniatura 16:9, canal, duración y vistas."""
         if not isinstance(query, str) or not query.strip():
             return {'success': False, 'error': 'Empty query'}
@@ -1876,6 +1876,7 @@ class Bridge:
         except (TypeError, ValueError):
             clamped_limit = 12
 
+        safe_lang = lang.strip().lower() if isinstance(lang, str) and lang.strip().lower() in ('es', 'en') else 'es'
         clean_query = query.strip()
         args = [
             _bin('yt-dlp.exe'),
@@ -1883,6 +1884,7 @@ class Bridge:
             '--flat-playlist',
             '--dump-json',
             '--skip-download',
+            '--extractor-args', f'youtube:lang={safe_lang}',
             '--socket-timeout', '12',
             '--retries', '2',
             '--quiet',
@@ -1973,18 +1975,20 @@ class Bridge:
         except Exception as exc:
             return {'success': False, 'error': str(exc)}
 
-    def get_video_info(self, video_id: str) -> dict:
+    def get_video_info(self, video_id: str, lang: str = 'es') -> dict:
         """Obtiene metadatos de un video concreto por video_id validado."""
         vid = str(video_id or '').strip()
         if not re.fullmatch(r'[a-zA-Z0-9_-]{11}', vid):
             return {'success': False, 'error': 'Invalid video_id'}
 
+        safe_lang = lang.strip().lower() if isinstance(lang, str) and lang.strip().lower() in ('es', 'en') else 'es'
         args = [
             _bin('yt-dlp.exe'),
             f'https://www.youtube.com/watch?v={vid}',
             '--dump-single-json',
             '--skip-download',
             '--no-playlist',
+            '--extractor-args', f'youtube:lang={safe_lang}',
             '--socket-timeout', '12',
             '--retries', '1',
             '--quiet',
